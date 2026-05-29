@@ -1,10 +1,17 @@
 const app = document.getElementById("app");
 
-let chefSections = [];
-let chefs = [];
-let warehouseItems = [];
-let warehouseOrders = [];
+let chefSections = JSON.parse(localStorage.getItem("chefSections")) || [];
+let chefs = JSON.parse(localStorage.getItem("chefs")) || [];
+let warehouseItems = JSON.parse(localStorage.getItem("warehouseItems")) || [];
+let warehouseOrders = JSON.parse(localStorage.getItem("warehouseOrders")) || [];
 let currentChef = null;
+
+function saveData(){
+  localStorage.setItem("chefSections", JSON.stringify(chefSections));
+  localStorage.setItem("chefs", JSON.stringify(chefs));
+  localStorage.setItem("warehouseItems", JSON.stringify(warehouseItems));
+  localStorage.setItem("warehouseOrders", JSON.stringify(warehouseOrders));
+}
 
 function todayDate(){
   return new Date().toLocaleDateString("ar-SA", {
@@ -122,6 +129,8 @@ function addSection(){
     icon: icon || "🍽️"
   });
 
+  saveData();
+
   document.getElementById("sectionName").value = "";
   document.getElementById("sectionIcon").value = "";
 
@@ -168,6 +177,7 @@ function addChef(){
   if(!name || !code || !section) return;
 
   chefs.push({ name, code, section });
+  saveData();
 
   document.getElementById("chefName").value = "";
   document.getElementById("chefCode").value = "";
@@ -202,6 +212,7 @@ function addWarehouseItem(){
   if(!name || !code) return;
 
   warehouseItems.push({ name, code });
+  saveData();
 
   document.getElementById("warehouseItemName").value = "";
   document.getElementById("warehouseItemCode").value = "";
@@ -403,6 +414,7 @@ function sendWarehouseOrder(){
   };
 
   warehouseOrders.push(order);
+  saveData();
   renderMyOrders();
 }
 
@@ -497,6 +509,7 @@ function updateOrderStatus(orderId, status){
   if(!order) return;
 
   order.status = status;
+  saveData();
   renderWarehouse();
 }
 
@@ -505,6 +518,7 @@ function receiveOrder(orderId){
   if(!order) return;
 
   order.status = "تم الاستلام";
+  saveData();
   renderMyOrders();
 }
 
