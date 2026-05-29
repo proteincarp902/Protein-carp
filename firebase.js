@@ -1,7 +1,16 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 
 import {
-  getFirestore
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  addDoc,
+  deleteDoc,
+  onSnapshot,
+  updateDoc,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -14,10 +23,35 @@ const firebaseConfig = {
   measurementId: "G-SHFZR3PSCW"
 };
 
-const appFirebase = initializeApp(firebaseConfig);
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
 
-const db = getFirestore(appFirebase);
+window.firebaseDB = {
+  db,
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  addDoc,
+  deleteDoc,
+  onSnapshot,
+  updateDoc,
+  serverTimestamp
+};
 
-window.db = db;
+async function initSystemSettings(){
+  const settingsRef = doc(db, "settings", "system");
+  const snap = await getDoc(settingsRef);
+
+  if(!snap.exists()){
+    await setDoc(settingsRef, {
+      adminPassword: "0000",
+      warehousePassword: "1111",
+      createdAt: Date.now()
+    });
+  }
+}
+
+initSystemSettings();
 
 console.log("Firebase Connected");
