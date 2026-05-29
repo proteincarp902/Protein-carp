@@ -1,7 +1,7 @@
 const app = document.getElementById("app");
 
 let chefSections = [];
-let chefs = JSON.parse(localStorage.getItem("chefs")) || [];
+let chefs = [];
 let warehouseItems = JSON.parse(localStorage.getItem("warehouseItems")) || [];
 let warehouseOrders = JSON.parse(localStorage.getItem("warehouseOrders")) || [];
 let dismissedAlerts = JSON.parse(localStorage.getItem("dismissedAlerts")) || [];
@@ -11,7 +11,6 @@ let currentChef = null;
 let currentCart = [];
 
 function saveData(){
-  localStorage.setItem("chefs", JSON.stringify(chefs));
   localStorage.setItem("warehouseItems", JSON.stringify(warehouseItems));
   localStorage.setItem("warehouseOrders", JSON.stringify(warehouseOrders));
   localStorage.setItem("dismissedAlerts", JSON.stringify(dismissedAlerts));
@@ -67,7 +66,7 @@ function renderEmpty(title){
   pageLayout(title, `<div class="panel placeholder">${title}</div>`);
 }
 
-/* Firebase - أقسام الشيفات فقط */
+/* Firebase */
 
 function waitForFirebase(){
   return new Promise(resolve => {
@@ -81,11 +80,7 @@ function waitForFirebase(){
 }
 
 async function listenChefSections(){
-  const {
-    db,
-    collection,
-    onSnapshot
-  } = await waitForFirebase();
+  const { db, collection, onSnapshot } = await waitForFirebase();
 
   onSnapshot(collection(db, "chef_sections"), snapshot => {
     chefSections = [];
@@ -103,7 +98,25 @@ async function listenChefSections(){
   });
 }
 
+async function listenChefs(){
+  const { db, collection, onSnapshot } = await waitForFirebase();
+
+  onSnapshot(collection(db, "chefs"), snapshot => {
+    chefs = [];
+
+    snapshot.forEach(doc => {
+      chefs.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+
+    if(document.getElementById("chefsContainer")) drawChefs();
+  });
+}
+
 /* الإعدادات */
+
 function renderSettings(){
   pageLayout("الإعدادات", `
     <div class="panel">
@@ -162,12 +175,7 @@ async function addSection(){
 
   if(!name) return;
 
-  const {
-    db,
-    addDoc,
-    collection,
-    serverTimestamp
-  } = window.firebaseDB;
+  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
 
   await addDoc(collection(db, "chef_sections"), {
     name,
@@ -198,16 +206,9 @@ async function deleteSection(index){
   const section = chefSections[index];
   if(!section || !section.id) return;
 
-  const {
-    db,
-    doc,
-    deleteDoc
-  } = window.firebaseDB;
+  const { db, doc, deleteDoc } = window.firebaseDB;
 
   await deleteDoc(doc(db, "chef_sections", section.id));
-
-  chefs = chefs.filter(chef => chef.section !== section.name);
-  saveData();
 }
 
 function drawChefSectionOptions(){
@@ -219,20 +220,29 @@ function drawChefSectionOptions(){
     : `<option value="">لا توجد أقسام</option>`;
 }
 
-function addChef(){
+async function addChef(){
   const name = document.getElementById("chefName").value.trim();
   const code = document.getElementById("chefCode").value.trim();
   const section = document.getElementById("chefSection").value;
 
   if(!name || !code || !section) return;
+
   if(chefs.some(chef => chef.code === code)){
     alert("الكود مستخدم");
     return;
   }
 
-  chefs.push({ name, code, section });
-  saveData();
-  renderSettings();
+  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
+
+  await addDoc(collection(db, "chefs"), {
+    name,
+    code,
+    section,
+    createdAt: serverTimestamp()
+  });
+
+  document.getElementById("chefName").value = "";
+  document.getElementById("chefCode").value = "";
 }
 
 function drawChefs(){
@@ -251,10 +261,13 @@ function drawChefs(){
     : `<div class="panel placeholder">لا يوجد شيفات</div>`;
 }
 
-function deleteChef(index){
-  chefs.splice(index, 1);
-  saveData();
-  renderSettings();
+async function deleteChef(index){
+  const chef = chefs[index];
+  if(!chef || !chef.id) return;
+
+  const { db, doc, deleteDoc } = window.firebaseDB;
+
+  await deleteDoc(doc(db, "chefs", chef.id));
 }
 
 function addWarehouseItem(){
@@ -310,6 +323,7 @@ function deleteWarehouseItem(code){
 }
 
 /* الشيفات */
+
 function renderChefs(){
   pageLayout("الشيفات", `<div id="chefSectionsView" class="grid"></div>`);
   drawChefSectionsView();
@@ -382,6 +396,7 @@ function renderChefDashboard(chef){
 }
 
 /* طلب مستودع */
+
 function renderWarehouseRequest(){
   if(!currentChef) return renderChefs();
   currentCart = [];
@@ -514,6 +529,7 @@ function renderMyOrders(){
 }
 
 /* المستودع */
+
 function renderWarehouse(){
   pageLayout("المستودع", `
     <div class="grid">
@@ -586,6 +602,7 @@ function receiveOrder(orderId){
 }
 
 /* الإدارة والتنبيهات */
+
 function getAlert(order){
   let text = "";
 
@@ -660,9 +677,7 @@ function renderOrderDetails(orderId){
   const order = warehouseOrders.find(o => o.id === orderId);
   if(!order) return renderAdmin();
 
-  pageLayout(order.id, `
-    ${renderOrderCard(order, false)}
-  `, "renderAdmin()");
+  pageLayout(order.id, `${renderOrderCard(order, false)}`, "renderAdmin()");
 }
 
 function renderAdminSection(title){
@@ -670,8 +685,10 @@ function renderAdminSection(title){
 }
 
 /* التشغيل والنظافة */
+
 function renderOperations(){ renderEmpty("متابعة التشغيل"); }
 function renderCleaning(){ renderEmpty("النظافة"); }
 
 listenChefSections();
+listenChefs();
 renderHome();
