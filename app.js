@@ -1,21 +1,20 @@
+/* Protein & Carb Operations - Cloud Core */
+
 const app = document.getElementById("app");
 
 let chefSections = [];
 let chefs = [];
-let warehouseItems = JSON.parse(localStorage.getItem("warehouseItems")) || [];
-let warehouseOrders = JSON.parse(localStorage.getItem("warehouseOrders")) || [];
-let dismissedAlerts = JSON.parse(localStorage.getItem("dismissedAlerts")) || [];
-let orderCounter = Number(localStorage.getItem("orderCounter")) || 1001;
+let warehouseItems = [];
+let warehouseOrders = [];
+let dismissedAlerts = [];
+let systemSettings = {
+  adminPassword: "0000",
+  warehousePassword: "1111",
+  orderCounter: 1001
+};
 
 let currentChef = null;
 let currentCart = [];
-
-function saveData(){
-  localStorage.setItem("warehouseItems", JSON.stringify(warehouseItems));
-  localStorage.setItem("warehouseOrders", JSON.stringify(warehouseOrders));
-  localStorage.setItem("dismissedAlerts", JSON.stringify(dismissedAlerts));
-  localStorage.setItem("orderCounter", String(orderCounter));
-}
 
 function todayDate(){
   return new Date().toLocaleDateString("ar-SA", {
@@ -38,12 +37,23 @@ function pageLayout(title, content, backFn = "renderHome()"){
   `;
 }
 
+function waitForFirebase(){
+  return new Promise(resolve => {
+    const timer = setInterval(() => {
+      if(window.firebaseDB){
+        clearInterval(timer);
+        resolve(window.firebaseDB);
+      }
+    }, 100);
+  });
+}
+
 function renderHome(){
   app.innerHTML = `
     <main class="app">
       <div class="topbar">
         <button class="btn btn-light" onclick="renderSettings()">الإعدادات</button>
-        <button class="btn btn-main" onclick="renderAdmin()">الإدارة</button>
+        <button class="btn btn-main" onclick="renderAdminGate()">الإدارة</button>
       </div>
 
       <section class="hero">
@@ -56,7 +66,7 @@ function renderHome(){
         <div class="card" onclick="renderOperations()"><div class="icon">🏭</div><div class="card-title">متابعة التشغيل</div></div>
         <div class="card" onclick="renderCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
         <div class="card" onclick="renderChefs()"><div class="icon">👨‍🍳</div><div class="card-title">الشيفات</div></div>
-        <div class="card" onclick="renderWarehouse()"><div class="icon">📦</div><div class="card-title">المستودع</div></div>
+        <div class="card" onclick="renderWarehouseGate()"><div class="icon">📦</div><div class="card-title">المستودع</div></div>
       </section>
     </main>
   `;
@@ -66,56 +76,69 @@ function renderEmpty(title){
   pageLayout(title, `<div class="panel placeholder">${title}</div>`);
 }
 
-/* Firebase */
+/* Firebase listeners */
 
-function waitForFirebase(){
-  return new Promise(resolve => {
-    const timer = setInterval(() => {
-      if(window.firebaseDB){
-        clearInterval(timer);
-        resolve(window.firebaseDB);
-      }
-    }, 100);
+async function initCloud(){
+  const { db, doc, getDoc, setDoc, collection, onSnapshot } = await waitForFirebase();
+
+  const settingsRef = doc(db, "settings", "system");
+  const settingsSnap = await getDoc(settingsRef);
+
+  if(!settingsSnap.exists()){
+    await setDoc(settingsRef, systemSettings);
+  }
+
+  onSnapshot(settingsRef, snap => {
+    if(snap.exists()){
+      systemSettings = {
+        ...systemSettings,
+        ...snap.data()
+      };
+    }
   });
-}
 
-async function listenChefSections(){
-  const { db, collection, onSnapshot } = await waitForFirebase();
-
-  onSnapshot(collection(db, "chef_sections"), snapshot => {
+  onSnapshot(collection(db, "chef_sections"), snap => {
     chefSections = [];
-
-    snapshot.forEach(doc => {
-      chefSections.push({
-        id: doc.id,
-        ...doc.data()
-      });
-    });
-
-    if(document.getElementById("sectionsContainer")) drawSections();
-    if(document.getElementById("chefSection")) drawChefSectionOptions();
-    if(document.getElementById("chefSectionsView")) drawChefSectionsView();
+    snap.forEach(d => chefSections.push({ id:d.id, ...d.data() }));
+    refreshVisibleViews();
   });
-}
 
-async function listenChefs(){
-  const { db, collection, onSnapshot } = await waitForFirebase();
-
-  onSnapshot(collection(db, "chefs"), snapshot => {
+  onSnapshot(collection(db, "chefs"), snap => {
     chefs = [];
+    snap.forEach(d => chefs.push({ id:d.id, ...d.data() }));
+    refreshVisibleViews();
+  });
 
-    snapshot.forEach(doc => {
-      chefs.push({
-        id: doc.id,
-        ...doc.data()
-      });
-    });
+  onSnapshot(collection(db, "warehouse_items"), snap => {
+    warehouseItems = [];
+    snap.forEach(d => warehouseItems.push({ id:d.id, ...d.data() }));
+    refreshVisibleViews();
+  });
 
-    if(document.getElementById("chefsContainer")) drawChefs();
+  onSnapshot(collection(db, "warehouse_orders"), snap => {
+    warehouseOrders = [];
+    snap.forEach(d => warehouseOrders.push({ id:d.id, ...d.data() }));
+    refreshVisibleViews();
+  });
+
+  onSnapshot(collection(db, "dismissed_alerts"), snap => {
+    dismissedAlerts = [];
+    snap.forEach(d => dismissedAlerts.push({ id:d.id, ...d.data() }));
+    refreshVisibleViews();
   });
 }
 
-/* الإعدادات */
+function refreshVisibleViews(){
+  if(document.getElementById("sectionsContainer")) drawSections();
+  if(document.getElementById("chefSection")) drawChefSectionOptions();
+  if(document.getElementById("chefsContainer")) drawChefs();
+  if(document.getElementById("warehouseItemsContainer")) drawWarehouseItems();
+  if(document.getElementById("chefSectionsView")) drawChefSectionsView();
+  if(document.getElementById("warehouseOrdersBox")) drawWarehouseOrders();
+  if(document.getElementById("adminAlertsBox")) drawAdminAlerts();
+}
+
+/* Settings */
 
 function renderSettings(){
   pageLayout("الإعدادات", `
@@ -142,24 +165,23 @@ function renderSettings(){
       <h3 style="margin-bottom:15px">أصناف المستودع</h3>
       <input id="warehouseItemName" placeholder="اسم الصنف">
       <input id="warehouseItemCode" placeholder="كود الصنف">
-
       <select id="warehouseItemUnit">
-        <option>كجم</option>
-        <option>جرام</option>
-        <option>لتر</option>
-        <option>مل</option>
-        <option>حبة</option>
-        <option>كرتون</option>
-        <option>صندوق</option>
-        <option>ربطة</option>
+        <option>كجم</option><option>جرام</option><option>لتر</option><option>مل</option>
+        <option>حبة</option><option>كرتون</option><option>صندوق</option><option>ربطة</option>
       </select>
-
       <button class="btn btn-main" onclick="addWarehouseItem()">إضافة صنف</button>
     </div>
 
     <div class="panel" style="margin-top:16px">
       <input id="warehouseSearch" placeholder="بحث باسم الصنف أو الكود" oninput="drawWarehouseItems()">
       <div id="warehouseItemsContainer"></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h3 style="margin-bottom:15px">كلمات المرور</h3>
+      <input id="adminPasswordInput" placeholder="كلمة مرور الإدارة">
+      <input id="warehousePasswordInput" placeholder="كلمة مرور المستودع">
+      <button class="btn btn-main" onclick="savePasswords()">حفظ كلمات المرور</button>
     </div>
   `);
 
@@ -172,7 +194,6 @@ function renderSettings(){
 async function addSection(){
   const name = document.getElementById("sectionName").value.trim();
   const icon = document.getElementById("sectionIcon").value.trim();
-
   if(!name) return;
 
   const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
@@ -192,23 +213,19 @@ function drawSections(){
   if(!box) return;
 
   box.innerHTML = chefSections.length
-    ? chefSections.map((section, index) => `
+    ? chefSections.map(section => `
       <div class="card">
         <div class="icon">${section.icon || "🍽️"}</div>
         <div class="card-title">${section.name}</div>
-        <button class="btn btn-light" style="margin-top:12px" onclick="deleteSection(${index})">حذف</button>
+        <button class="btn btn-light" style="margin-top:12px" onclick="deleteSection('${section.id}')">حذف</button>
       </div>
     `).join("")
     : `<div class="panel placeholder">لا توجد أقسام</div>`;
 }
 
-async function deleteSection(index){
-  const section = chefSections[index];
-  if(!section || !section.id) return;
-
+async function deleteSection(id){
   const { db, doc, deleteDoc } = window.firebaseDB;
-
-  await deleteDoc(doc(db, "chef_sections", section.id));
+  await deleteDoc(doc(db, "chef_sections", id));
 }
 
 function drawChefSectionOptions(){
@@ -216,7 +233,7 @@ function drawChefSectionOptions(){
   if(!select) return;
 
   select.innerHTML = chefSections.length
-    ? chefSections.map(section => `<option value="${section.name}">${section.name}</option>`).join("")
+    ? chefSections.map(s => `<option value="${s.name}">${s.name}</option>`).join("")
     : `<option value="">لا توجد أقسام</option>`;
 }
 
@@ -227,7 +244,7 @@ async function addChef(){
 
   if(!name || !code || !section) return;
 
-  if(chefs.some(chef => chef.code === code)){
+  if(chefs.some(c => c.code === code)){
     alert("الكود مستخدم");
     return;
   }
@@ -250,40 +267,45 @@ function drawChefs(){
   if(!box) return;
 
   box.innerHTML = chefs.length
-    ? chefs.map((chef, index) => `
+    ? chefs.map(chef => `
       <div class="card">
         <div class="icon">👨‍🍳</div>
         <div class="card-title">${chef.name}</div>
         <div style="margin-top:8px;color:#7b8674;font-weight:700">${chef.section} - ${chef.code}</div>
-        <button class="btn btn-light" style="margin-top:12px" onclick="deleteChef(${index})">حذف</button>
+        <button class="btn btn-light" style="margin-top:12px" onclick="deleteChef('${chef.id}')">حذف</button>
       </div>
     `).join("")
     : `<div class="panel placeholder">لا يوجد شيفات</div>`;
 }
 
-async function deleteChef(index){
-  const chef = chefs[index];
-  if(!chef || !chef.id) return;
-
+async function deleteChef(id){
   const { db, doc, deleteDoc } = window.firebaseDB;
-
-  await deleteDoc(doc(db, "chefs", chef.id));
+  await deleteDoc(doc(db, "chefs", id));
 }
 
-function addWarehouseItem(){
+async function addWarehouseItem(){
   const name = document.getElementById("warehouseItemName").value.trim();
   const code = document.getElementById("warehouseItemCode").value.trim();
   const unit = document.getElementById("warehouseItemUnit").value;
 
   if(!name || !code) return;
-  if(warehouseItems.some(item => item.code === code)){
+
+  if(warehouseItems.some(i => i.code === code)){
     alert("كود الصنف مستخدم");
     return;
   }
 
-  warehouseItems.push({ name, code, unit });
-  saveData();
-  renderSettings();
+  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
+
+  await addDoc(collection(db, "warehouse_items"), {
+    name,
+    code,
+    unit,
+    createdAt: serverTimestamp()
+  });
+
+  document.getElementById("warehouseItemName").value = "";
+  document.getElementById("warehouseItemCode").value = "";
 }
 
 function drawWarehouseItems(){
@@ -309,20 +331,34 @@ function drawWarehouseItems(){
           <b>${item.name}</b>
           <span>${item.code}</span>
           <span>${item.unit || ""}</span>
-          <button class="btn btn-light" onclick="deleteWarehouseItem('${item.code}')">حذف</button>
+          <button class="btn btn-light" onclick="deleteWarehouseItem('${item.id}')">حذف</button>
         </div>
       `).join("")}
     </div>
   `;
 }
 
-function deleteWarehouseItem(code){
-  warehouseItems = warehouseItems.filter(item => item.code !== code);
-  saveData();
-  drawWarehouseItems();
+async function deleteWarehouseItem(id){
+  const { db, doc, deleteDoc } = window.firebaseDB;
+  await deleteDoc(doc(db, "warehouse_items", id));
 }
 
-/* الشيفات */
+async function savePasswords(){
+  const adminPassword = document.getElementById("adminPasswordInput").value.trim();
+  const warehousePassword = document.getElementById("warehousePasswordInput").value.trim();
+
+  const { db, doc, setDoc } = window.firebaseDB;
+
+  await setDoc(doc(db, "settings", "system"), {
+    adminPassword: adminPassword || systemSettings.adminPassword,
+    warehousePassword: warehousePassword || systemSettings.warehousePassword,
+    orderCounter: systemSettings.orderCounter || 1001
+  }, { merge:true });
+
+  alert("تم حفظ كلمات المرور");
+}
+
+/* Chefs */
 
 function renderChefs(){
   pageLayout("الشيفات", `<div id="chefSectionsView" class="grid"></div>`);
@@ -377,25 +413,14 @@ function renderChefDashboard(chef){
     </div>
 
     <section class="grid">
-      <div class="card" onclick="renderEmpty('الإنتاج')">
-        <div class="icon">📈</div>
-        <div class="card-title">الإنتاج</div>
-      </div>
-
-      <div class="card" onclick="renderWarehouseRequest()">
-        <div class="icon">📦</div>
-        <div class="card-title">طلب مستودع</div>
-      </div>
-
-      <div class="card" onclick="renderMyOrders()">
-        <div class="icon">📋</div>
-        <div class="card-title">طلباتي</div>
-      </div>
+      <div class="card" onclick="renderEmpty('الإنتاج')"><div class="icon">📈</div><div class="card-title">الإنتاج</div></div>
+      <div class="card" onclick="renderWarehouseRequest()"><div class="icon">📦</div><div class="card-title">طلب مستودع</div></div>
+      <div class="card" onclick="renderMyOrders()"><div class="icon">📋</div><div class="card-title">طلباتي</div></div>
     </section>
   `, "renderChefs()");
 }
 
-/* طلب مستودع */
+/* Warehouse request */
 
 function renderWarehouseRequest(){
   if(!currentChef) return renderChefs();
@@ -445,26 +470,32 @@ function drawRequestSearch(){
             <b>${item.name}</b>
             <div style="color:#7b8674;font-weight:700">${item.code} - ${item.unit || ""}</div>
           </div>
-          <input id="qty_${item.code}" type="number" min="1" placeholder="كمية" style="margin:0">
-          <button class="btn btn-main" onclick="addToCart('${item.code}')">إضافة</button>
+          <input id="qty_${item.id}" type="number" min="1" placeholder="كمية" style="margin:0">
+          <button class="btn btn-main" onclick="addToCart('${item.id}')">إضافة</button>
         </div>
       `).join("")}
     </div>
   `;
 }
 
-function addToCart(code){
-  const item = warehouseItems.find(i => i.code === code);
-  const qty = Number(document.getElementById(`qty_${code}`).value);
+function addToCart(itemId){
+  const item = warehouseItems.find(i => i.id === itemId);
+  const qty = Number(document.getElementById(`qty_${itemId}`).value);
 
   if(!item || qty <= 0) return;
 
-  const existing = currentCart.find(i => i.code === code);
+  const existing = currentCart.find(i => i.itemId === itemId);
 
   if(existing){
     existing.qty += qty;
   }else{
-    currentCart.push({ name:item.name, code:item.code, unit:item.unit, qty });
+    currentCart.push({
+      itemId:item.id,
+      name:item.name,
+      code:item.code,
+      unit:item.unit,
+      qty
+    });
   }
 
   drawCart();
@@ -492,22 +523,39 @@ function removeFromCart(index){
   drawCart();
 }
 
-function sendWarehouseOrder(){
-  if(currentCart.length === 0) return;
+async function getNextOrderId(){
+  const { db, doc, getDoc, setDoc } = window.firebaseDB;
+  const ref = doc(db, "settings", "system");
+  const snap = await getDoc(ref);
 
-  const order = {
-    id:`ORD-${orderCounter++}`,
+  const current = snap.exists() && snap.data().orderCounter
+    ? snap.data().orderCounter
+    : 1001;
+
+  await setDoc(ref, { orderCounter: current + 1 }, { merge:true });
+
+  return `ORD-${current}`;
+}
+
+async function sendWarehouseOrder(){
+  if(currentCart.length === 0 || !currentChef) return;
+
+  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
+
+  const orderId = await getNextOrderId();
+
+  await addDoc(collection(db, "warehouse_orders"), {
+    orderId,
     chefName:currentChef.name,
     chefCode:currentChef.code,
     section:currentChef.section,
     items:[...currentCart],
     note:document.getElementById("requestNote").value.trim(),
     status:"جديد",
-    createdAt:new Date().toLocaleString("ar-SA")
-  };
+    createdAtText:new Date().toLocaleString("ar-SA"),
+    createdAt:serverTimestamp()
+  });
 
-  warehouseOrders.push(order);
-  saveData();
   currentCart = [];
   renderMyOrders();
 }
@@ -528,29 +576,51 @@ function renderMyOrders(){
   `, "renderChefDashboard(currentChef)");
 }
 
-/* المستودع */
+/* Warehouse */
 
-function renderWarehouse(){
-  pageLayout("المستودع", `
-    <div class="grid">
-      ${
-        warehouseOrders.length === 0
-        ? `<div class="panel placeholder">لا توجد طلبات</div>`
-        : warehouseOrders.map(o => renderOrderCard(o, false)).join("")
-      }
+function renderWarehouseGate(){
+  pageLayout("دخول المستودع", `
+    <div class="panel">
+      <input id="warehousePasswordInputGate" type="password" placeholder="كلمة مرور المستودع">
+      <button class="btn btn-main" onclick="checkWarehousePassword()">دخول</button>
     </div>
   `);
+}
+
+function checkWarehousePassword(){
+  const pass = document.getElementById("warehousePasswordInputGate").value.trim();
+
+  if(pass !== String(systemSettings.warehousePassword)){
+    alert("كلمة المرور غير صحيحة");
+    return;
+  }
+
+  renderWarehouse();
+}
+
+function renderWarehouse(){
+  pageLayout("المستودع", `<div id="warehouseOrdersBox" class="grid"></div>`);
+  drawWarehouseOrders();
+}
+
+function drawWarehouseOrders(){
+  const box = document.getElementById("warehouseOrdersBox");
+  if(!box) return;
+
+  box.innerHTML = warehouseOrders.length
+    ? warehouseOrders.map(o => renderOrderCard(o, false)).join("")
+    : `<div class="panel placeholder">لا توجد طلبات</div>`;
 }
 
 function renderOrderCard(order, isChefView){
   return `
     <div class="panel">
-      <h3>${order.id}</h3>
+      <h3>${order.orderId || order.id}</h3>
       <p style="font-weight:800;margin-top:8px">${order.chefName} - ${order.section}</p>
-      <p style="color:#7b8674;margin-top:4px">${order.createdAt}</p>
+      <p style="color:#7b8674;margin-top:4px">${order.createdAtText || ""}</p>
 
       <div style="margin-top:12px">
-        ${order.items.map(item => `
+        ${(order.items || []).map(item => `
           <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0;">
             <span>${item.name}</span>
             <b>${item.qty} ${item.unit || ""}</b>
@@ -583,25 +653,38 @@ function renderOrderCard(order, isChefView){
   `;
 }
 
-function updateOrderStatus(orderId, status){
-  const order = warehouseOrders.find(o => o.id === orderId);
-  if(!order) return;
-
-  order.status = status;
-  saveData();
-  renderWarehouse();
+async function updateOrderStatus(id, status){
+  const { db, doc, updateDoc } = window.firebaseDB;
+  await updateDoc(doc(db, "warehouse_orders", id), { status });
 }
 
-function receiveOrder(orderId){
-  const order = warehouseOrders.find(o => o.id === orderId);
-  if(!order) return;
-
-  order.status = "تم الاستلام";
-  saveData();
+async function receiveOrder(id){
+  const { db, doc, updateDoc } = window.firebaseDB;
+  await updateDoc(doc(db, "warehouse_orders", id), { status:"تم الاستلام" });
   renderMyOrders();
 }
 
-/* الإدارة والتنبيهات */
+/* Admin */
+
+function renderAdminGate(){
+  pageLayout("دخول الإدارة", `
+    <div class="panel">
+      <input id="adminPasswordInputGate" type="password" placeholder="كلمة مرور الإدارة">
+      <button class="btn btn-main" onclick="checkAdminPassword()">دخول</button>
+    </div>
+  `);
+}
+
+function checkAdminPassword(){
+  const pass = document.getElementById("adminPasswordInputGate").value.trim();
+
+  if(pass !== String(systemSettings.adminPassword)){
+    alert("كلمة المرور غير صحيحة");
+    return;
+  }
+
+  renderAdmin();
+}
 
 function getAlert(order){
   let text = "";
@@ -616,50 +699,26 @@ function getAlert(order){
     key:`${order.id}-${order.status}`,
     orderId:order.id,
     text,
-    sub:`${order.chefName} - ${order.id}`
+    sub:`${order.chefName} - ${order.orderId || order.id}`
   };
 }
 
-function dismissAlert(key){
-  if(!dismissedAlerts.includes(key)){
-    dismissedAlerts.push(key);
-    saveData();
-  }
-  renderAdmin();
+async function dismissAlert(key){
+  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
+
+  if(dismissedAlerts.some(a => a.key === key)) return;
+
+  await addDoc(collection(db, "dismissed_alerts"), {
+    key,
+    createdAt:serverTimestamp()
+  });
 }
 
 function renderAdmin(){
-  const alerts = warehouseOrders
-    .map(getAlert)
-    .filter(alert => alert.text && !dismissedAlerts.includes(alert.key));
-
   pageLayout("الإدارة", `
     <div class="panel">
       <h3 style="margin-bottom:15px">🔔 التنبيهات</h3>
-
-      ${
-        alerts.length === 0
-        ? `<div class="placeholder">لا توجد تنبيهات</div>`
-        : alerts.map(alert => `
-          <div style="
-            display:grid;
-            grid-template-columns:1fr auto;
-            gap:10px;
-            align-items:center;
-            background:#f9fbf5;
-            border:1px solid #e5eadb;
-            border-radius:18px;
-            padding:14px;
-            margin-bottom:10px;
-          ">
-            <div onclick="renderOrderDetails('${alert.orderId}')" style="cursor:pointer">
-              <b>${alert.text}</b>
-              <div style="color:#7b8674;font-weight:700;margin-top:4px">${alert.sub}</div>
-            </div>
-            <button class="btn btn-light" onclick="dismissAlert('${alert.key}')">×</button>
-          </div>
-        `).join("")
-      }
+      <div id="adminAlertsBox"></div>
     </div>
 
     <section class="grid" style="margin-top:16px">
@@ -671,24 +730,50 @@ function renderAdmin(){
       <div class="card" onclick="renderAdminSection('PDF')"><div class="icon">📄</div><div class="card-title">PDF</div></div>
     </section>
   `);
+
+  drawAdminAlerts();
 }
 
-function renderOrderDetails(orderId){
-  const order = warehouseOrders.find(o => o.id === orderId);
+function drawAdminAlerts(){
+  const box = document.getElementById("adminAlertsBox");
+  if(!box) return;
+
+  const hiddenKeys = dismissedAlerts.map(a => a.key);
+
+  const alerts = warehouseOrders
+    .map(getAlert)
+    .filter(a => a.text && !hiddenKeys.includes(a.key));
+
+  box.innerHTML = alerts.length
+    ? alerts.map(alert => `
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:#f9fbf5;border:1px solid #e5eadb;border-radius:18px;padding:14px;margin-bottom:10px;">
+        <div onclick="renderOrderDetails('${alert.orderId}')" style="cursor:pointer">
+          <b>${alert.text}</b>
+          <div style="color:#7b8674;font-weight:700;margin-top:4px">${alert.sub}</div>
+        </div>
+        <button class="btn btn-light" onclick="dismissAlert('${alert.key}')">×</button>
+      </div>
+    `).join("")
+    : `<div class="placeholder">لا توجد تنبيهات</div>`;
+}
+
+function renderOrderDetails(id){
+  const order = warehouseOrders.find(o => o.id === id);
   if(!order) return renderAdmin();
 
-  pageLayout(order.id, `${renderOrderCard(order, false)}`, "renderAdmin()");
+  pageLayout(order.orderId || order.id, `${renderOrderCard(order, false)}`, "renderAdmin()");
 }
 
 function renderAdminSection(title){
   pageLayout(title, `<div class="panel placeholder">${title}</div>`, "renderAdmin()");
 }
 
-/* التشغيل والنظافة */
+/* Operations + Cleaning */
 
 function renderOperations(){ renderEmpty("متابعة التشغيل"); }
 function renderCleaning(){ renderEmpty("النظافة"); }
 
-listenChefSections();
-listenChefs();
+/* Start */
+
+initCloud();
 renderHome();
