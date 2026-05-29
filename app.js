@@ -1,4 +1,4 @@
-/* Protein & Carb Operations - Cloud Core */
+/* Protein & Carb Operations - Cloud UI Upgrade */
 
 const app = document.getElementById("app");
 
@@ -7,6 +7,7 @@ let chefs = [];
 let warehouseItems = [];
 let warehouseOrders = [];
 let dismissedAlerts = [];
+
 let systemSettings = {
   adminPassword: "0000",
   warehousePassword: "1111",
@@ -25,6 +26,17 @@ function todayDate(){
   });
 }
 
+function waitForFirebase(){
+  return new Promise(resolve => {
+    const timer = setInterval(() => {
+      if(window.firebaseDB){
+        clearInterval(timer);
+        resolve(window.firebaseDB);
+      }
+    }, 100);
+  });
+}
+
 function pageLayout(title, content, backFn = "renderHome()"){
   app.innerHTML = `
     <main class="app">
@@ -37,22 +49,11 @@ function pageLayout(title, content, backFn = "renderHome()"){
   `;
 }
 
-function waitForFirebase(){
-  return new Promise(resolve => {
-    const timer = setInterval(() => {
-      if(window.firebaseDB){
-        clearInterval(timer);
-        resolve(window.firebaseDB);
-      }
-    }, 100);
-  });
-}
-
 function renderHome(){
   app.innerHTML = `
     <main class="app">
       <div class="topbar">
-        <button class="btn btn-light" onclick="renderSettings()">الإعدادات</button>
+        <button class="btn btn-light" onclick="renderSettingsGate()">الإعدادات</button>
         <button class="btn btn-main" onclick="renderAdminGate()">الإدارة</button>
       </div>
 
@@ -76,59 +77,54 @@ function renderEmpty(title){
   pageLayout(title, `<div class="panel placeholder">${title}</div>`);
 }
 
-/* Firebase listeners */
+/* Firebase */
 
 async function initCloud(){
   const { db, doc, getDoc, setDoc, collection, onSnapshot } = await waitForFirebase();
 
   const settingsRef = doc(db, "settings", "system");
-  const settingsSnap = await getDoc(settingsRef);
+  const snap = await getDoc(settingsRef);
 
-  if(!settingsSnap.exists()){
+  if(!snap.exists()){
     await setDoc(settingsRef, systemSettings);
   }
 
-  onSnapshot(settingsRef, snap => {
-    if(snap.exists()){
-      systemSettings = {
-        ...systemSettings,
-        ...snap.data()
-      };
-    }
+  onSnapshot(settingsRef, s => {
+    if(s.exists()) systemSettings = { ...systemSettings, ...s.data() };
   });
 
   onSnapshot(collection(db, "chef_sections"), snap => {
     chefSections = [];
     snap.forEach(d => chefSections.push({ id:d.id, ...d.data() }));
-    refreshVisibleViews();
+    refreshViews();
   });
 
   onSnapshot(collection(db, "chefs"), snap => {
     chefs = [];
     snap.forEach(d => chefs.push({ id:d.id, ...d.data() }));
-    refreshVisibleViews();
+    refreshViews();
   });
 
   onSnapshot(collection(db, "warehouse_items"), snap => {
     warehouseItems = [];
     snap.forEach(d => warehouseItems.push({ id:d.id, ...d.data() }));
-    refreshVisibleViews();
+    refreshViews();
   });
 
   onSnapshot(collection(db, "warehouse_orders"), snap => {
     warehouseOrders = [];
     snap.forEach(d => warehouseOrders.push({ id:d.id, ...d.data() }));
-    refreshVisibleViews();
+    refreshViews();
   });
 
   onSnapshot(collection(db, "dismissed_alerts"), snap => {
     dismissedAlerts = [];
     snap.forEach(d => dismissedAlerts.push({ id:d.id, ...d.data() }));
-    refreshVisibleViews();
+    refreshViews();
   });
 }
 
-function refreshVisibleViews(){
+function refreshViews(){
   if(document.getElementById("sectionsContainer")) drawSections();
   if(document.getElementById("chefSection")) drawChefSectionOptions();
   if(document.getElementById("chefsContainer")) drawChefs();
@@ -138,57 +134,59 @@ function refreshVisibleViews(){
   if(document.getElementById("adminAlertsBox")) drawAdminAlerts();
 }
 
-/* Settings */
+/* Settings Gate + Menu */
+
+function renderSettingsGate(){
+  pageLayout("دخول الإعدادات", `
+    <div class="panel">
+      <input id="settingsPasswordInput" type="password" placeholder="كلمة مرور الإدارة">
+      <button class="btn btn-main" onclick="checkSettingsPassword()">دخول</button>
+    </div>
+  `);
+}
+
+function checkSettingsPassword(){
+  const pass = document.getElementById("settingsPasswordInput").value.trim();
+  if(pass !== String(systemSettings.adminPassword)){
+    alert("كلمة المرور غير صحيحة");
+    return;
+  }
+  renderSettings();
+}
 
 function renderSettings(){
   pageLayout("الإعدادات", `
+    <section class="grid">
+      <div class="card" onclick="renderSettingsSections()"><div class="icon">👨‍🍳</div><div class="card-title">أقسام الشيفات</div></div>
+      <div class="card" onclick="renderSettingsChefs()"><div class="icon">🧑‍🍳</div><div class="card-title">إدارة الشيفات</div></div>
+      <div class="card" onclick="renderSettingsWarehouseItems()"><div class="icon">📦</div><div class="card-title">أصناف المستودع</div></div>
+      <div class="card" onclick="renderSettingsCleaning()"><div class="icon">🧹</div><div class="card-title">عناصر النظافة</div></div>
+      <div class="card" onclick="renderSettingsOperations()"><div class="icon">🏭</div><div class="card-title">مهام التشغيل</div></div>
+      <div class="card" onclick="renderSettingsPasswords()"><div class="icon">🔐</div><div class="card-title">كلمات المرور</div></div>
+    </section>
+  `);
+}
+
+/* Settings: Sections */
+
+function renderSettingsSections(){
+  pageLayout("أقسام الشيفات", `
     <div class="panel">
-      <h3 style="margin-bottom:15px">أقسام الشيفات</h3>
-      <input id="sectionName" placeholder="اسم القسم">
-      <input id="sectionIcon" placeholder="الأيقونة">
-      <button class="btn btn-main" onclick="addSection()">إضافة قسم</button>
+      <h3 style="margin-bottom:15px">إضافة قسم</h3>
+
+      <label style="font-weight:800">اسم القسم</label>
+      <input id="sectionName" placeholder="مثال: الحلويات">
+
+      <label style="font-weight:800">الأيقونة</label>
+      <input id="sectionIcon" placeholder="مثال: 🍰">
+
+      <button class="btn btn-main" onclick="addSection()">➕ إضافة قسم</button>
     </div>
 
     <div id="sectionsContainer" class="grid" style="margin-top:16px"></div>
-
-    <div class="panel" style="margin-top:16px">
-      <h3 style="margin-bottom:15px">الشيفات</h3>
-      <input id="chefName" placeholder="اسم الشيف">
-      <input id="chefCode" type="number" placeholder="كود الشيف">
-      <select id="chefSection"></select>
-      <button class="btn btn-main" onclick="addChef()">إضافة شيف</button>
-    </div>
-
-    <div id="chefsContainer" class="grid" style="margin-top:16px"></div>
-
-    <div class="panel" style="margin-top:16px">
-      <h3 style="margin-bottom:15px">أصناف المستودع</h3>
-      <input id="warehouseItemName" placeholder="اسم الصنف">
-      <input id="warehouseItemCode" placeholder="كود الصنف">
-      <select id="warehouseItemUnit">
-        <option>كجم</option><option>جرام</option><option>لتر</option><option>مل</option>
-        <option>حبة</option><option>كرتون</option><option>صندوق</option><option>ربطة</option>
-      </select>
-      <button class="btn btn-main" onclick="addWarehouseItem()">إضافة صنف</button>
-    </div>
-
-    <div class="panel" style="margin-top:16px">
-      <input id="warehouseSearch" placeholder="بحث باسم الصنف أو الكود" oninput="drawWarehouseItems()">
-      <div id="warehouseItemsContainer"></div>
-    </div>
-
-    <div class="panel" style="margin-top:16px">
-      <h3 style="margin-bottom:15px">كلمات المرور</h3>
-      <input id="adminPasswordInput" placeholder="كلمة مرور الإدارة">
-      <input id="warehousePasswordInput" placeholder="كلمة مرور المستودع">
-      <button class="btn btn-main" onclick="savePasswords()">حفظ كلمات المرور</button>
-    </div>
-  `);
+  `, "renderSettings()");
 
   drawSections();
-  drawChefSectionOptions();
-  drawChefs();
-  drawWarehouseItems();
 }
 
 async function addSection(){
@@ -217,7 +215,7 @@ function drawSections(){
       <div class="card">
         <div class="icon">${section.icon || "🍽️"}</div>
         <div class="card-title">${section.name}</div>
-        <button class="btn btn-light" style="margin-top:12px" onclick="deleteSection('${section.id}')">حذف</button>
+        <button class="btn btn-light" style="margin-top:12px" onclick="deleteSection('${section.id}')">🗑 حذف</button>
       </div>
     `).join("")
     : `<div class="panel placeholder">لا توجد أقسام</div>`;
@@ -226,6 +224,32 @@ function drawSections(){
 async function deleteSection(id){
   const { db, doc, deleteDoc } = window.firebaseDB;
   await deleteDoc(doc(db, "chef_sections", id));
+}
+
+/* Settings: Chefs */
+
+function renderSettingsChefs(){
+  pageLayout("إدارة الشيفات", `
+    <div class="panel">
+      <h3 style="margin-bottom:15px">إضافة شيف</h3>
+
+      <label style="font-weight:800">اسم الشيف</label>
+      <input id="chefName" placeholder="مثال: أحمد">
+
+      <label style="font-weight:800">كود الشيف</label>
+      <input id="chefCode" type="number" placeholder="مثال: 1001">
+
+      <label style="font-weight:800">القسم</label>
+      <select id="chefSection"></select>
+
+      <button class="btn btn-main" onclick="addChef()">➕ إضافة شيف</button>
+    </div>
+
+    <div id="chefsContainer" class="grid" style="margin-top:16px"></div>
+  `, "renderSettings()");
+
+  drawChefSectionOptions();
+  drawChefs();
 }
 
 function drawChefSectionOptions(){
@@ -272,7 +296,7 @@ function drawChefs(){
         <div class="icon">👨‍🍳</div>
         <div class="card-title">${chef.name}</div>
         <div style="margin-top:8px;color:#7b8674;font-weight:700">${chef.section} - ${chef.code}</div>
-        <button class="btn btn-light" style="margin-top:12px" onclick="deleteChef('${chef.id}')">حذف</button>
+        <button class="btn btn-light" style="margin-top:12px" onclick="deleteChef('${chef.id}')">🗑 حذف</button>
       </div>
     `).join("")
     : `<div class="panel placeholder">لا يوجد شيفات</div>`;
@@ -281,6 +305,37 @@ function drawChefs(){
 async function deleteChef(id){
   const { db, doc, deleteDoc } = window.firebaseDB;
   await deleteDoc(doc(db, "chefs", id));
+}
+
+/* Settings: Warehouse Items */
+
+function renderSettingsWarehouseItems(){
+  pageLayout("أصناف المستودع", `
+    <div class="panel">
+      <h3 style="margin-bottom:15px">إضافة صنف</h3>
+
+      <label style="font-weight:800">اسم الصنف</label>
+      <input id="warehouseItemName" placeholder="مثال: صدر دجاج">
+
+      <label style="font-weight:800">كود الصنف</label>
+      <input id="warehouseItemCode" placeholder="مثال: CH001">
+
+      <label style="font-weight:800">الوحدة</label>
+      <select id="warehouseItemUnit">
+        <option>كجم</option><option>جرام</option><option>لتر</option><option>مل</option>
+        <option>حبة</option><option>كرتون</option><option>صندوق</option><option>ربطة</option>
+      </select>
+
+      <button class="btn btn-main" onclick="addWarehouseItem()">➕ إضافة صنف</button>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <input id="warehouseSearch" placeholder="🔍 بحث باسم الصنف أو الكود" oninput="drawWarehouseItems()">
+      <div id="warehouseItemsContainer"></div>
+    </div>
+  `, "renderSettings()");
+
+  drawWarehouseItems();
 }
 
 async function addWarehouseItem(){
@@ -331,7 +386,7 @@ function drawWarehouseItems(){
           <b>${item.name}</b>
           <span>${item.code}</span>
           <span>${item.unit || ""}</span>
-          <button class="btn btn-light" onclick="deleteWarehouseItem('${item.id}')">حذف</button>
+          <button class="btn btn-light" onclick="deleteWarehouseItem('${item.id}')">🗑</button>
         </div>
       `).join("")}
     </div>
@@ -341,6 +396,22 @@ function drawWarehouseItems(){
 async function deleteWarehouseItem(id){
   const { db, doc, deleteDoc } = window.firebaseDB;
   await deleteDoc(doc(db, "warehouse_items", id));
+}
+
+/* Settings: Passwords */
+
+function renderSettingsPasswords(){
+  pageLayout("كلمات المرور", `
+    <div class="panel">
+      <label style="font-weight:800">كلمة مرور الإدارة</label>
+      <input id="adminPasswordInput" type="password" placeholder="كلمة مرور الإدارة">
+
+      <label style="font-weight:800">كلمة مرور المستودع</label>
+      <input id="warehousePasswordInput" type="password" placeholder="كلمة مرور المستودع">
+
+      <button class="btn btn-main" onclick="savePasswords()">💾 حفظ كلمات المرور</button>
+    </div>
+  `, "renderSettings()");
 }
 
 async function savePasswords(){
@@ -356,6 +427,14 @@ async function savePasswords(){
   }, { merge:true });
 
   alert("تم حفظ كلمات المرور");
+}
+
+function renderSettingsCleaning(){
+  pageLayout("عناصر النظافة", `<div class="panel placeholder">جاهز للمرحلة التالية</div>`, "renderSettings()");
+}
+
+function renderSettingsOperations(){
+  pageLayout("مهام التشغيل", `<div class="panel placeholder">جاهز للمرحلة التالية</div>`, "renderSettings()");
 }
 
 /* Chefs */
@@ -420,15 +499,16 @@ function renderChefDashboard(chef){
   `, "renderChefs()");
 }
 
-/* Warehouse request */
+/* Warehouse Request */
 
 function renderWarehouseRequest(){
   if(!currentChef) return renderChefs();
+
   currentCart = [];
 
   pageLayout("طلب مستودع", `
     <div class="panel">
-      <input id="requestSearch" placeholder="بحث باسم الصنف أو الكود" oninput="drawRequestSearch()">
+      <input id="requestSearch" placeholder="🔍 بحث باسم الصنف أو الكود" oninput="drawRequestSearch()">
       <div id="requestResults"></div>
     </div>
 
@@ -541,7 +621,6 @@ async function sendWarehouseOrder(){
   if(currentCart.length === 0 || !currentChef) return;
 
   const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
-
   const orderId = await getNextOrderId();
 
   await addDoc(collection(db, "warehouse_orders"), {
@@ -615,20 +694,30 @@ function drawWarehouseOrders(){
 function renderOrderCard(order, isChefView){
   return `
     <div class="panel">
-      <h3>${order.orderId || order.id}</h3>
-      <p style="font-weight:800;margin-top:8px">${order.chefName} - ${order.section}</p>
-      <p style="color:#7b8674;margin-top:4px">${order.createdAtText || ""}</p>
+      <h2>📦 طلبية من قسم ${order.section}</h2>
+
+      <p style="font-weight:800;margin-top:8px">
+        👨‍🍳 الشيف: ${order.chefName}
+      </p>
+
+      <p style="color:#7b8674;margin-top:4px">
+        🆔 ${order.orderId || order.id}
+      </p>
+
+      <p style="color:#7b8674;margin-top:4px">
+        🕒 ${order.createdAtText || ""}
+      </p>
 
       <div style="margin-top:12px">
-        ${(order.items || []).map(item => `
+        ${(order.items || []).map((item, i) => `
           <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0;">
-            <span>${item.name}</span>
+            <span>${i + 1}- ${item.name}</span>
             <b>${item.qty} ${item.unit || ""}</b>
           </div>
         `).join("")}
       </div>
 
-      ${order.note ? `<p style="margin-top:12px;color:#7b8674">${order.note}</p>` : ""}
+      ${order.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${order.note}</p>` : ""}
 
       <h3 style="margin-top:12px">الحالة: ${order.status}</h3>
 
