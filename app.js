@@ -4,13 +4,17 @@ let chefSections = JSON.parse(localStorage.getItem("chefSections")) || [];
 let chefs = JSON.parse(localStorage.getItem("chefs")) || [];
 let warehouseItems = JSON.parse(localStorage.getItem("warehouseItems")) || [];
 let warehouseOrders = JSON.parse(localStorage.getItem("warehouseOrders")) || [];
+let orderCounter = Number(localStorage.getItem("orderCounter")) || 1001;
+
 let currentChef = null;
+let currentCart = [];
 
 function saveData(){
   localStorage.setItem("chefSections", JSON.stringify(chefSections));
   localStorage.setItem("chefs", JSON.stringify(chefs));
   localStorage.setItem("warehouseItems", JSON.stringify(warehouseItems));
   localStorage.setItem("warehouseOrders", JSON.stringify(warehouseOrders));
+  localStorage.setItem("orderCounter", String(orderCounter));
 }
 
 function todayDate(){
@@ -105,10 +109,25 @@ function renderSettings(){
         <h3 style="margin-bottom:15px">أصناف المستودع</h3>
         <input id="warehouseItemName" placeholder="اسم الصنف">
         <input id="warehouseItemCode" placeholder="كود الصنف">
+
+        <select id="warehouseItemUnit">
+          <option>كجم</option>
+          <option>جرام</option>
+          <option>لتر</option>
+          <option>مل</option>
+          <option>حبة</option>
+          <option>كرتون</option>
+          <option>صندوق</option>
+          <option>ربطة</option>
+        </select>
+
         <button class="btn btn-main" onclick="addWarehouseItem()">إضافة صنف</button>
       </div>
 
-      <div id="warehouseItemsContainer" class="grid" style="margin-top:16px"></div>
+      <div class="panel" style="margin-top:16px">
+        <input id="warehouseSearch" placeholder="بحث باسم الصنف أو الكود" oninput="drawWarehouseItems()">
+        <div id="warehouseItemsContainer"></div>
+      </div>
     </main>
   `;
 
@@ -121,19 +140,13 @@ function renderSettings(){
 function addSection(){
   const name = document.getElementById("sectionName").value.trim();
   const icon = document.getElementById("sectionIcon").value.trim();
-
   if(!name) return;
 
-  chefSections.push({
-    name,
-    icon: icon || "🍽️"
-  });
-
+  chefSections.push({ name, icon: icon || "🍽️" });
   saveData();
 
   document.getElementById("sectionName").value = "";
   document.getElementById("sectionIcon").value = "";
-
   drawSections();
   drawChefSectionOptions();
 }
@@ -142,38 +155,29 @@ function drawSections(){
   const box = document.getElementById("sectionsContainer");
   if(!box) return;
 
-  if(chefSections.length === 0){
-    box.innerHTML = `<div class="panel placeholder">لا توجد أقسام</div>`;
-    return;
-  }
-
-  box.innerHTML = chefSections.map(section => `
-    <div class="card">
-      <div class="icon">${section.icon}</div>
-      <div class="card-title">${section.name}</div>
-    </div>
-  `).join("");
+  box.innerHTML = chefSections.length
+    ? chefSections.map(s => `
+      <div class="card">
+        <div class="icon">${s.icon}</div>
+        <div class="card-title">${s.name}</div>
+      </div>
+    `).join("")
+    : `<div class="panel placeholder">لا توجد أقسام</div>`;
 }
 
 function drawChefSectionOptions(){
   const select = document.getElementById("chefSection");
   if(!select) return;
 
-  if(chefSections.length === 0){
-    select.innerHTML = `<option value="">لا توجد أقسام</option>`;
-    return;
-  }
-
-  select.innerHTML = chefSections.map(section => `
-    <option value="${section.name}">${section.name}</option>
-  `).join("");
+  select.innerHTML = chefSections.length
+    ? chefSections.map(s => `<option value="${s.name}">${s.name}</option>`).join("")
+    : `<option value="">لا توجد أقسام</option>`;
 }
 
 function addChef(){
   const name = document.getElementById("chefName").value.trim();
   const code = document.getElementById("chefCode").value.trim();
   const section = document.getElementById("chefSection").value;
-
   if(!name || !code || !section) return;
 
   chefs.push({ name, code, section });
@@ -181,7 +185,6 @@ function addChef(){
 
   document.getElementById("chefName").value = "";
   document.getElementById("chefCode").value = "";
-
   drawChefs();
 }
 
@@ -189,34 +192,28 @@ function drawChefs(){
   const box = document.getElementById("chefsContainer");
   if(!box) return;
 
-  if(chefs.length === 0){
-    box.innerHTML = `<div class="panel placeholder">لا يوجد شيفات</div>`;
-    return;
-  }
-
-  box.innerHTML = chefs.map(chef => `
-    <div class="card">
-      <div class="icon">👨‍🍳</div>
-      <div class="card-title">${chef.name}</div>
-      <div style="margin-top:8px;color:#7b8674;font-weight:700">
-        ${chef.section} - ${chef.code}
+  box.innerHTML = chefs.length
+    ? chefs.map(c => `
+      <div class="card">
+        <div class="icon">👨‍🍳</div>
+        <div class="card-title">${c.name}</div>
+        <div style="margin-top:8px;color:#7b8674;font-weight:700">${c.section} - ${c.code}</div>
       </div>
-    </div>
-  `).join("");
+    `).join("")
+    : `<div class="panel placeholder">لا يوجد شيفات</div>`;
 }
 
 function addWarehouseItem(){
   const name = document.getElementById("warehouseItemName").value.trim();
   const code = document.getElementById("warehouseItemCode").value.trim();
-
+  const unit = document.getElementById("warehouseItemUnit").value;
   if(!name || !code) return;
 
-  warehouseItems.push({ name, code });
+  warehouseItems.push({ name, code, unit });
   saveData();
 
   document.getElementById("warehouseItemName").value = "";
   document.getElementById("warehouseItemCode").value = "";
-
   drawWarehouseItems();
 }
 
@@ -224,18 +221,45 @@ function drawWarehouseItems(){
   const box = document.getElementById("warehouseItemsContainer");
   if(!box) return;
 
-  if(warehouseItems.length === 0){
-    box.innerHTML = `<div class="panel placeholder">لا توجد أصناف</div>`;
+  const search = (document.getElementById("warehouseSearch")?.value || "").trim().toLowerCase();
+
+  const list = warehouseItems.filter(item =>
+    item.name.toLowerCase().includes(search) ||
+    item.code.toLowerCase().includes(search)
+  );
+
+  if(list.length === 0){
+    box.innerHTML = `<div class="placeholder">لا توجد أصناف</div>`;
     return;
   }
 
-  box.innerHTML = warehouseItems.map(item => `
-    <div class="card">
-      <div class="icon">📦</div>
-      <div class="card-title">${item.name}</div>
-      <div style="margin-top:8px;color:#7b8674;font-weight:700">${item.code}</div>
+  box.innerHTML = `
+    <div style="display:grid;gap:8px">
+      ${list.map((item, i) => `
+        <div style="
+          display:grid;
+          grid-template-columns:1fr auto auto auto;
+          gap:8px;
+          align-items:center;
+          background:#f9fbf5;
+          border:1px solid #e5eadb;
+          border-radius:16px;
+          padding:12px;
+        ">
+          <b>${item.name}</b>
+          <span>${item.code}</span>
+          <span>${item.unit || ""}</span>
+          <button class="btn btn-light" onclick="deleteWarehouseItem('${item.code}')">حذف</button>
+        </div>
+      `).join("")}
     </div>
-  `).join("");
+  `;
+}
+
+function deleteWarehouseItem(code){
+  warehouseItems = warehouseItems.filter(item => item.code !== code);
+  saveData();
+  drawWarehouseItems();
 }
 
 /* الشيفات */
@@ -246,29 +270,20 @@ function renderChefs(){
         <h2>الشيفات</h2>
         <button class="btn btn-light" onclick="renderHome()">رجوع</button>
       </div>
-
       <div id="chefSectionsView" class="grid"></div>
     </main>
   `;
 
-  drawChefSectionsView();
-}
-
-function drawChefSectionsView(){
   const box = document.getElementById("chefSectionsView");
-  if(!box) return;
 
-  if(chefSections.length === 0){
-    box.innerHTML = `<div class="panel placeholder">لا توجد أقسام</div>`;
-    return;
-  }
-
-  box.innerHTML = chefSections.map(section => `
-    <div class="card" onclick="renderChefCode('${section.name}')">
-      <div class="icon">${section.icon}</div>
-      <div class="card-title">${section.name}</div>
-    </div>
-  `).join("");
+  box.innerHTML = chefSections.length
+    ? chefSections.map(s => `
+      <div class="card" onclick="renderChefCode('${s.name}')">
+        <div class="icon">${s.icon}</div>
+        <div class="card-title">${s.name}</div>
+      </div>
+    `).join("")
+    : `<div class="panel placeholder">لا توجد أقسام</div>`;
 }
 
 function renderChefCode(sectionName){
@@ -292,10 +307,7 @@ function renderChefCode(sectionName){
 function checkChefCode(sectionName){
   const code = document.getElementById("chefCode").value.trim();
 
-  const chef = chefs.find(item =>
-    item.code === code && item.section === sectionName
-  );
-
+  const chef = chefs.find(c => c.code === code && c.section === sectionName);
   const message = document.getElementById("chefMessage");
 
   if(!chef){
@@ -344,7 +356,7 @@ function renderChefDashboard(chef){
 
 /* طلب المستودع */
 function renderWarehouseRequest(){
-  if(!currentChef) return renderChefs();
+  currentCart = [];
 
   app.innerHTML = `
     <main class="app">
@@ -353,77 +365,127 @@ function renderWarehouseRequest(){
         <button class="btn btn-light" onclick="renderChefDashboard(currentChef)">رجوع</button>
       </div>
 
-      <div id="requestItems" class="grid"></div>
+      <div class="panel">
+        <input id="requestSearch" placeholder="بحث باسم الصنف أو الكود" oninput="drawRequestSearch()">
+        <div id="requestResults"></div>
+      </div>
 
       <div class="panel" style="margin-top:16px">
-        <textarea id="requestNote" placeholder="ملاحظة"></textarea>
+        <h3 style="margin-bottom:12px">السلة</h3>
+        <div id="cartBox" class="placeholder">السلة فارغة</div>
+        <textarea id="requestNote" placeholder="ملاحظة" style="margin-top:12px"></textarea>
         <button class="btn btn-main" onclick="sendWarehouseOrder()">إرسال الطلب</button>
       </div>
     </main>
   `;
 
-  drawRequestItems();
+  drawRequestSearch();
 }
 
-function drawRequestItems(){
-  const box = document.getElementById("requestItems");
-  if(!box) return;
+function drawRequestSearch(){
+  const box = document.getElementById("requestResults");
+  const search = (document.getElementById("requestSearch")?.value || "").trim().toLowerCase();
 
-  if(warehouseItems.length === 0){
-    box.innerHTML = `<div class="panel placeholder">لا توجد أصناف</div>`;
+  const list = warehouseItems.filter(item =>
+    search &&
+    (item.name.toLowerCase().includes(search) || item.code.toLowerCase().includes(search))
+  ).slice(0, 20);
+
+  if(!search){
+    box.innerHTML = `<div class="placeholder">اكتب اسم الصنف أو الكود</div>`;
     return;
   }
 
-  box.innerHTML = warehouseItems.map((item, index) => `
-    <div class="card">
-      <div class="icon">📦</div>
-      <div class="card-title">${item.name}</div>
-      <div style="margin:8px 0;color:#7b8674;font-weight:700">${item.code}</div>
-      <input id="qty_${index}" type="number" min="0" placeholder="الكمية">
+  if(list.length === 0){
+    box.innerHTML = `<div class="placeholder">لا توجد نتائج</div>`;
+    return;
+  }
+
+  box.innerHTML = `
+    <div style="display:grid;gap:8px">
+      ${list.map(item => `
+        <div style="
+          display:grid;
+          grid-template-columns:1fr auto auto;
+          gap:8px;
+          align-items:center;
+          background:#f9fbf5;
+          border:1px solid #e5eadb;
+          border-radius:16px;
+          padding:12px;
+        ">
+          <div>
+            <b>${item.name}</b>
+            <div style="color:#7b8674;font-weight:700">${item.code} - ${item.unit || ""}</div>
+          </div>
+          <input id="qty_${item.code}" type="number" min="1" placeholder="كمية" style="margin:0">
+          <button class="btn btn-main" onclick="addToCart('${item.code}')">إضافة</button>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function addToCart(code){
+  const item = warehouseItems.find(i => i.code === code);
+  const qty = Number(document.getElementById(`qty_${code}`).value);
+
+  if(!item || qty <= 0) return;
+
+  const existing = currentCart.find(i => i.code === code);
+
+  if(existing){
+    existing.qty += qty;
+  }else{
+    currentCart.push({
+      name:item.name,
+      code:item.code,
+      unit:item.unit,
+      qty
+    });
+  }
+
+  drawCart();
+}
+
+function drawCart(){
+  const box = document.getElementById("cartBox");
+
+  if(currentCart.length === 0){
+    box.innerHTML = "السلة فارغة";
+    return;
+  }
+
+  box.innerHTML = currentCart.map(item => `
+    <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
+      <span>${item.name}</span>
+      <b>${item.qty} ${item.unit || ""}</b>
     </div>
   `).join("");
 }
 
 function sendWarehouseOrder(){
-  const items = [];
-
-  warehouseItems.forEach((item, index) => {
-    const qtyInput = document.getElementById(`qty_${index}`);
-    const qty = Number(qtyInput.value);
-
-    if(qty > 0){
-      items.push({
-        name:item.name,
-        code:item.code,
-        qty
-      });
-    }
-  });
-
-  if(items.length === 0) return;
+  if(currentCart.length === 0) return;
 
   const order = {
-    id: Date.now(),
+    id: `ORD-${orderCounter++}`,
     chefName: currentChef.name,
     chefCode: currentChef.code,
     section: currentChef.section,
-    items,
+    items:[...currentCart],
     note: document.getElementById("requestNote").value.trim(),
-    status: "جديد",
+    status:"جديد",
     createdAt: new Date().toLocaleString("ar-SA")
   };
 
   warehouseOrders.push(order);
   saveData();
+  currentCart = [];
   renderMyOrders();
 }
 
 function renderMyOrders(){
-  if(!currentChef) return renderChefs();
-
-  const myOrders = warehouseOrders.filter(order =>
-    order.chefCode === currentChef.code
-  );
+  const myOrders = warehouseOrders.filter(o => o.chefCode === currentChef.code);
 
   app.innerHTML = `
     <main class="app">
@@ -436,7 +498,7 @@ function renderMyOrders(){
         ${
           myOrders.length === 0
           ? `<div class="panel placeholder">لا توجد طلبات</div>`
-          : myOrders.map(order => renderOrderCard(order, true)).join("")
+          : myOrders.map(o => renderOrderCard(o, true)).join("")
         }
       </div>
     </main>
@@ -456,7 +518,7 @@ function renderWarehouse(){
         ${
           warehouseOrders.length === 0
           ? `<div class="panel placeholder">لا توجد طلبات</div>`
-          : warehouseOrders.map(order => renderOrderCard(order, false)).join("")
+          : warehouseOrders.map(o => renderOrderCard(o, false)).join("")
         }
       </div>
     </main>
@@ -466,7 +528,7 @@ function renderWarehouse(){
 function renderOrderCard(order, isChefView){
   return `
     <div class="panel">
-      <h3>طلب #${order.id}</h3>
+      <h3>${order.id}</h3>
       <p style="font-weight:800;margin-top:8px">${order.chefName} - ${order.section}</p>
       <p style="color:#7b8674;margin-top:4px">${order.createdAt}</p>
 
@@ -474,7 +536,7 @@ function renderOrderCard(order, isChefView){
         ${order.items.map(item => `
           <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
             <span>${item.name}</span>
-            <b>${item.qty}</b>
+            <b>${item.qty} ${item.unit || ""}</b>
           </div>
         `).join("")}
       </div>
@@ -485,7 +547,7 @@ function renderOrderCard(order, isChefView){
 
       ${
         isChefView && order.status === "جاهز"
-        ? `<button class="btn btn-main" style="margin-top:12px" onclick="receiveOrder(${order.id})">تم الاستلام</button>`
+        ? `<button class="btn btn-main" style="margin-top:12px" onclick="receiveOrder('${order.id}')">تم الاستلام</button>`
         : ""
       }
 
@@ -493,9 +555,9 @@ function renderOrderCard(order, isChefView){
         !isChefView
         ? `
           <div style="margin-top:12px;display:grid;gap:8px">
-            <button class="btn btn-light" onclick="updateOrderStatus(${order.id}, 'قيد التجهيز')">قيد التجهيز</button>
-            <button class="btn btn-main" onclick="updateOrderStatus(${order.id}, 'جاهز')">جاهز</button>
-            <button class="btn btn-light" onclick="updateOrderStatus(${order.id}, 'متأخر')">متأخر</button>
+            <button class="btn btn-light" onclick="updateOrderStatus('${order.id}', 'قيد التجهيز')">قيد التجهيز</button>
+            <button class="btn btn-main" onclick="updateOrderStatus('${order.id}', 'جاهز')">جاهز</button>
+            <button class="btn btn-light" onclick="updateOrderStatus('${order.id}', 'متأخر')">متأخر</button>
           </div>
         `
         : ""
@@ -505,7 +567,7 @@ function renderOrderCard(order, isChefView){
 }
 
 function updateOrderStatus(orderId, status){
-  const order = warehouseOrders.find(item => item.id === orderId);
+  const order = warehouseOrders.find(o => o.id === orderId);
   if(!order) return;
 
   order.status = status;
@@ -514,7 +576,7 @@ function updateOrderStatus(orderId, status){
 }
 
 function receiveOrder(orderId){
-  const order = warehouseOrders.find(item => item.id === orderId);
+  const order = warehouseOrders.find(o => o.id === orderId);
   if(!order) return;
 
   order.status = "تم الاستلام";
@@ -532,25 +594,10 @@ function renderAdmin(){
       </div>
 
       <section class="grid">
-        <div class="card">
-          <div class="icon">👨‍🍳</div>
-          <div class="card-title">${chefs.length}</div>
-        </div>
-
-        <div class="card">
-          <div class="icon">📦</div>
-          <div class="card-title">${warehouseOrders.length}</div>
-        </div>
-
-        <div class="card">
-          <div class="icon">✅</div>
-          <div class="card-title">${warehouseOrders.filter(o => o.status === "تم الاستلام").length}</div>
-        </div>
-
-        <div class="card">
-          <div class="icon">⚠️</div>
-          <div class="card-title">${warehouseOrders.filter(o => o.status === "متأخر").length}</div>
-        </div>
+        <div class="card"><div class="icon">👨‍🍳</div><div class="card-title">${chefs.length}</div></div>
+        <div class="card"><div class="icon">📦</div><div class="card-title">${warehouseOrders.length}</div></div>
+        <div class="card"><div class="icon">✅</div><div class="card-title">${warehouseOrders.filter(o => o.status === "تم الاستلام").length}</div></div>
+        <div class="card"><div class="icon">⚠️</div><div class="card-title">${warehouseOrders.filter(o => o.status === "متأخر").length}</div></div>
       </section>
     </main>
   `;
