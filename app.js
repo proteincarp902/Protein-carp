@@ -1,4 +1,4 @@
-/* Protein & Carb Operations - Cloud UI + Back System */
+/* Protein & Carb Operations - Cloud UI + Cleaning V1 */
 
 const app = document.getElementById("app");
 
@@ -7,6 +7,8 @@ let chefs = [];
 let warehouseItems = [];
 let warehouseOrders = [];
 let dismissedAlerts = [];
+let cleaningTasks = [];
+let cleaningLogs = [];
 
 let systemSettings = {
   adminPassword: "0000",
@@ -16,17 +18,32 @@ let systemSettings = {
 
 let currentChef = null;
 let currentCart = [];
-
 let currentBackFn = "renderHome()";
 let isPhoneBack = false;
 
+const shiftLabels = {
+  morning:{ ar:"صباح", bn:"সকাল", icon:"🌅" },
+  afternoon:{ ar:"ظهر", bn:"দুপুর", icon:"☀️" },
+  night:{ ar:"ليل", bn:"রাত", icon:"🌙" }
+};
+
+const cleaningBn = {
+  "دورات المياه":"টয়লেট পরিষ্কার",
+  "تنظيف الأرضية":"মেঝে পরিষ্কার",
+  "تنظيف الأرضيات":"মেঝে পরিষ্কার",
+  "تنظيف الطاولات":"টেবিল পরিষ্কার",
+  "تنظيف الثلاجات":"ফ্রিজ পরিষ্কার",
+  "تنظيف المغاسل":"বেসিন পরিষ্কার",
+  "منطقة التحضير":"প্রস্তুতি এলাকা পরিষ্কার",
+  "سلات النفايات":"ডাস্টবিন পরিষ্কার",
+  "تنظيف الجدران":"দেয়াল পরিষ্কার",
+  "تنظيف الأبواب":"দরজা পরিষ্কার",
+  "تنظيف الرفوف":"তাক পরিষ্কার"
+};
+
 function smartBack(){
   const fn = currentBackFn || "renderHome()";
-  try{
-    new Function(fn)();
-  }catch(e){
-    renderHome();
-  }
+  try{ new Function(fn)(); }catch(e){ renderHome(); }
 }
 
 window.addEventListener("popstate", function(){
@@ -37,10 +54,7 @@ window.addEventListener("popstate", function(){
 
 function todayDate(){
   return new Date().toLocaleDateString("ar-SA", {
-    weekday:"long",
-    year:"numeric",
-    month:"long",
-    day:"numeric"
+    weekday:"long", year:"numeric", month:"long", day:"numeric"
   });
 }
 
@@ -148,6 +162,18 @@ async function initCloud(){
     snap.forEach(d => dismissedAlerts.push({ id:d.id, ...d.data() }));
     refreshViews();
   });
+
+  onSnapshot(collection(db, "cleaning_tasks"), snap => {
+    cleaningTasks = [];
+    snap.forEach(d => cleaningTasks.push({ id:d.id, ...d.data() }));
+    refreshViews();
+  });
+
+  onSnapshot(collection(db, "cleaning_logs"), snap => {
+    cleaningLogs = [];
+    snap.forEach(d => cleaningLogs.push({ id:d.id, ...d.data() }));
+    refreshViews();
+  });
 }
 
 function refreshViews(){
@@ -158,9 +184,11 @@ function refreshViews(){
   if(document.getElementById("chefSectionsView")) drawChefSectionsView();
   if(document.getElementById("warehouseOrdersBox")) drawWarehouseOrders();
   if(document.getElementById("adminAlertsBox")) drawAdminAlerts();
+  if(document.getElementById("cleaningTasksContainer")) drawCleaningTasks();
+  if(document.getElementById("cleaningAdminBox")) drawCleaningAdmin();
 }
 
-/* Settings Gate + Menu */
+/* Settings */
 
 function renderSettingsGate(){
   pageLayout("دخول الإعدادات", `
@@ -193,25 +221,20 @@ function renderSettings(){
   `, "renderHome()");
 }
 
-/* Settings: Sections */
+/* Settings Sections */
 
 function renderSettingsSections(){
   pageLayout("أقسام الشيفات", `
     <div class="panel">
       <h3 style="margin-bottom:15px">إضافة قسم</h3>
-
       <label style="font-weight:800">اسم القسم</label>
       <input id="sectionName" placeholder="مثال: الحلويات">
-
       <label style="font-weight:800">الأيقونة</label>
       <input id="sectionIcon" placeholder="مثال: 🍰">
-
       <button class="btn btn-main" onclick="addSection()">➕ إضافة قسم</button>
     </div>
-
     <div id="sectionsContainer" class="grid" style="margin-top:16px"></div>
   `, "renderSettings()");
-
   drawSections();
 }
 
@@ -221,7 +244,6 @@ async function addSection(){
   if(!name) return;
 
   const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
-
   await addDoc(collection(db, "chef_sections"), {
     name,
     icon: icon || "🍽️",
@@ -252,25 +274,20 @@ async function deleteSection(id){
   await deleteDoc(doc(db, "chef_sections", id));
 }
 
-/* Settings: Chefs */
+/* Settings Chefs */
 
 function renderSettingsChefs(){
   pageLayout("إدارة الشيفات", `
     <div class="panel">
       <h3 style="margin-bottom:15px">إضافة شيف</h3>
-
       <label style="font-weight:800">اسم الشيف</label>
       <input id="chefName" placeholder="مثال: أحمد">
-
       <label style="font-weight:800">كود الشيف</label>
       <input id="chefCode" type="number" placeholder="مثال: 1001">
-
       <label style="font-weight:800">القسم</label>
       <select id="chefSection"></select>
-
       <button class="btn btn-main" onclick="addChef()">➕ إضافة شيف</button>
     </div>
-
     <div id="chefsContainer" class="grid" style="margin-top:16px"></div>
   `, "renderSettings()");
 
@@ -333,34 +350,28 @@ async function deleteChef(id){
   await deleteDoc(doc(db, "chefs", id));
 }
 
-/* Settings: Warehouse Items */
+/* Settings Warehouse Items */
 
 function renderSettingsWarehouseItems(){
   pageLayout("أصناف المستودع", `
     <div class="panel">
       <h3 style="margin-bottom:15px">إضافة صنف</h3>
-
       <label style="font-weight:800">اسم الصنف</label>
       <input id="warehouseItemName" placeholder="مثال: صدر دجاج">
-
       <label style="font-weight:800">كود الصنف</label>
       <input id="warehouseItemCode" placeholder="مثال: CH001">
-
       <label style="font-weight:800">الوحدة</label>
       <select id="warehouseItemUnit">
         <option>كجم</option><option>جرام</option><option>لتر</option><option>مل</option>
         <option>حبة</option><option>كرتون</option><option>صندوق</option><option>ربطة</option>
       </select>
-
       <button class="btn btn-main" onclick="addWarehouseItem()">➕ إضافة صنف</button>
     </div>
-
     <div class="panel" style="margin-top:16px">
       <input id="warehouseSearch" placeholder="🔍 بحث باسم الصنف أو الكود" oninput="drawWarehouseItems()">
       <div id="warehouseItemsContainer"></div>
     </div>
   `, "renderSettings()");
-
   drawWarehouseItems();
 }
 
@@ -424,17 +435,89 @@ async function deleteWarehouseItem(id){
   await deleteDoc(doc(db, "warehouse_items", id));
 }
 
-/* Settings: Passwords */
+/* Settings Cleaning */
+
+function renderSettingsCleaning(){
+  pageLayout("عناصر النظافة", `
+    <div class="panel">
+      <h3 style="margin-bottom:15px">إضافة مهمة نظافة</h3>
+
+      <label style="font-weight:800">اسم المهمة بالعربي</label>
+      <input id="cleaningTaskName" placeholder="مثال: دورات المياه">
+
+      <label style="font-weight:800">الورديات</label>
+
+      <label><input id="cleanMorning" type="checkbox" checked> 🌅 صباح</label>
+      <label><input id="cleanAfternoon" type="checkbox" checked> ☀️ ظهر</label>
+      <label><input id="cleanNight" type="checkbox" checked> 🌙 ليل</label>
+
+      <button class="btn btn-main" onclick="addCleaningTask()">➕ إضافة مهمة</button>
+    </div>
+
+    <div id="cleaningTasksContainer" style="margin-top:16px"></div>
+  `, "renderSettings()");
+
+  drawCleaningTasks();
+}
+
+async function addCleaningTask(){
+  const nameAr = document.getElementById("cleaningTaskName").value.trim();
+
+  const morning = document.getElementById("cleanMorning").checked;
+  const afternoon = document.getElementById("cleanAfternoon").checked;
+  const night = document.getElementById("cleanNight").checked;
+
+  if(!nameAr) return;
+
+  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
+
+  await addDoc(collection(db, "cleaning_tasks"), {
+    nameAr,
+    morning,
+    afternoon,
+    night,
+    createdAt: serverTimestamp()
+  });
+
+  document.getElementById("cleaningTaskName").value = "";
+}
+
+function drawCleaningTasks(){
+  const box = document.getElementById("cleaningTasksContainer");
+  if(!box) return;
+
+  if(cleaningTasks.length === 0){
+    box.innerHTML = `<div class="panel placeholder">لا توجد مهام نظافة</div>`;
+    return;
+  }
+
+  box.innerHTML = cleaningTasks.map(task => `
+    <div class="panel" style="margin-bottom:10px">
+      <h3>${task.nameAr}</h3>
+      <div style="color:#7b8674;font-weight:800;margin-top:8px">
+        ${task.morning ? "🌅 صباح " : ""}
+        ${task.afternoon ? "☀️ ظهر " : ""}
+        ${task.night ? "🌙 ليل" : ""}
+      </div>
+      <button class="btn btn-light" style="margin-top:12px" onclick="deleteCleaningTask('${task.id}')">🗑 حذف</button>
+    </div>
+  `).join("");
+}
+
+async function deleteCleaningTask(id){
+  const { db, doc, deleteDoc } = window.firebaseDB;
+  await deleteDoc(doc(db, "cleaning_tasks", id));
+}
+
+/* Settings Passwords */
 
 function renderSettingsPasswords(){
   pageLayout("كلمات المرور", `
     <div class="panel">
       <label style="font-weight:800">كلمة مرور الإدارة</label>
       <input id="adminPasswordInput" type="password" placeholder="كلمة مرور الإدارة">
-
       <label style="font-weight:800">كلمة مرور المستودع</label>
       <input id="warehousePasswordInput" type="password" placeholder="كلمة مرور المستودع">
-
       <button class="btn btn-main" onclick="savePasswords()">💾 حفظ كلمات المرور</button>
     </div>
   `, "renderSettings()");
@@ -453,10 +536,6 @@ async function savePasswords(){
   }, { merge:true });
 
   alert("تم حفظ كلمات المرور");
-}
-
-function renderSettingsCleaning(){
-  pageLayout("عناصر النظافة", `<div class="panel placeholder">جاهز للمرحلة التالية</div>`, "renderSettings()");
 }
 
 function renderSettingsOperations(){
@@ -529,7 +608,6 @@ function renderChefDashboard(chef){
 
 function renderWarehouseRequest(){
   if(!currentChef) return renderChefs();
-
   currentCart = [];
 
   pageLayout("طلب مستودع", `
@@ -779,6 +857,96 @@ async function receiveOrder(id){
   renderMyOrders();
 }
 
+/* Cleaning */
+
+function renderCleaning(){
+  pageLayout("النظافة", `
+    <section class="grid">
+      <div class="card" onclick="renderCleaningLang('ar')"><div class="icon">🇸🇦</div><div class="card-title">العربية</div></div>
+      <div class="card" onclick="renderCleaningLang('bn')"><div class="icon">🇧🇩</div><div class="card-title">বাংলা</div></div>
+    </section>
+  `, "renderHome()");
+}
+
+function renderCleaningLang(lang){
+  const arTitle = lang === "bn" ? "পরিষ্কার" : "النظافة";
+
+  pageLayout(arTitle, `
+    <section class="grid">
+      <div class="card" onclick="renderCleaningShift('${lang}','morning')">
+        <div class="icon">🌅</div>
+        <div class="card-title">${lang === "bn" ? shiftLabels.morning.bn : shiftLabels.morning.ar}</div>
+      </div>
+
+      <div class="card" onclick="renderCleaningShift('${lang}','afternoon')">
+        <div class="icon">☀️</div>
+        <div class="card-title">${lang === "bn" ? shiftLabels.afternoon.bn : shiftLabels.afternoon.ar}</div>
+      </div>
+
+      <div class="card" onclick="renderCleaningShift('${lang}','night')">
+        <div class="icon">🌙</div>
+        <div class="card-title">${lang === "bn" ? shiftLabels.night.bn : shiftLabels.night.ar}</div>
+      </div>
+    </section>
+  `, "renderCleaning()");
+}
+
+function renderCleaningShift(lang, shift){
+  const title = lang === "bn"
+    ? `${shiftLabels[shift].bn} - পরিষ্কার`
+    : `${shiftLabels[shift].ar} - النظافة`;
+
+  const tasks = cleaningTasks.filter(task => task[shift]);
+
+  pageLayout(title, `
+    <div class="panel">
+      ${
+        tasks.length === 0
+        ? `<div class="placeholder">${lang === "bn" ? "কোনো কাজ নেই" : "لا توجد مهام لهذه الوردية"}</div>`
+        : tasks.map(task => `
+          <label style="display:flex;align-items:center;gap:10px;margin:14px 0;font-weight:900">
+            <input type="checkbox" class="cleanTaskCheck" value="${task.id}">
+            ${lang === "bn" ? translateCleaning(task.nameAr) : task.nameAr}
+          </label>
+        `).join("")
+      }
+
+      <button class="btn btn-main" onclick="submitCleaning('${shift}')">
+        ${lang === "bn" ? "সম্পন্ন" : "✅ تم التنفيذ"}
+      </button>
+    </div>
+  `, `renderCleaningLang('${lang}')`);
+}
+
+function translateCleaning(text){
+  return cleaningBn[text] || text;
+}
+
+async function submitCleaning(shift){
+  const checks = Array.from(document.querySelectorAll(".cleanTaskCheck"));
+  const completedIds = checks.filter(c => c.checked).map(c => c.value);
+
+  const tasksForShift = cleaningTasks.filter(task => task[shift]);
+
+  const entries = tasksForShift.map(task => ({
+    taskId:task.id,
+    nameAr:task.nameAr,
+    done:completedIds.includes(task.id)
+  }));
+
+  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
+
+  await addDoc(collection(db, "cleaning_logs"), {
+    shift,
+    entries,
+    createdAtText:new Date().toLocaleString("ar-SA"),
+    createdAt:serverTimestamp()
+  });
+
+  alert("تم حفظ النظافة");
+  renderCleaning();
+}
+
 /* Admin */
 
 function renderAdminGate(){
@@ -839,7 +1007,7 @@ function renderAdmin(){
     <section class="grid" style="margin-top:16px">
       <div class="card" onclick="renderAdminSection('الشيفات')"><div class="icon">👨‍🍳</div><div class="card-title">الشيفات</div></div>
       <div class="card" onclick="renderAdminSection('المستودع')"><div class="icon">📦</div><div class="card-title">المستودع</div></div>
-      <div class="card" onclick="renderAdminSection('النظافة')"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
+      <div class="card" onclick="renderAdminCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
       <div class="card" onclick="renderAdminSection('التشغيل')"><div class="icon">🏭</div><div class="card-title">التشغيل</div></div>
       <div class="card" onclick="renderAdminSection('الجرد')"><div class="icon">📋</div><div class="card-title">الجرد</div></div>
       <div class="card" onclick="renderAdminSection('PDF')"><div class="icon">📄</div><div class="card-title">PDF</div></div>
@@ -879,14 +1047,65 @@ function renderOrderDetails(id){
   pageLayout(order.orderId || order.id, `${renderOrderCard(order, false)}`, "renderAdmin()");
 }
 
+function renderAdminCleaning(){
+  pageLayout("تقرير النظافة", `<div id="cleaningAdminBox"></div>`, "renderAdmin()");
+  drawCleaningAdmin();
+}
+
+function getLatestCleaningLog(shift){
+  const logs = cleaningLogs.filter(log => log.shift === shift);
+  if(logs.length === 0) return null;
+  return logs[logs.length - 1];
+}
+
+function drawCleaningAdmin(){
+  const box = document.getElementById("cleaningAdminBox");
+  if(!box) return;
+
+  const shifts = ["morning","afternoon","night"];
+
+  box.innerHTML = shifts.map(shift => {
+    const log = getLatestCleaningLog(shift);
+
+    if(!log){
+      return `
+        <div class="panel" style="margin-bottom:12px">
+          <h3>${shiftLabels[shift].icon} ${shiftLabels[shift].ar}</h3>
+          <p style="font-weight:900;color:#b91c1c;margin-top:8px">🔴 لم يبدأ</p>
+        </div>
+      `;
+    }
+
+    const total = log.entries ? log.entries.length : 0;
+    const done = log.entries ? log.entries.filter(e => e.done).length : 0;
+    const status = total > 0 && done === total ? "🟢 مكتمل" : "🟡 ناقص";
+
+    return `
+      <div class="panel" style="margin-bottom:12px">
+        <h3>${shiftLabels[shift].icon} ${shiftLabels[shift].ar}</h3>
+        <p style="font-weight:900;margin-top:8px">${status}</p>
+        <p style="color:#7b8674;font-weight:800">${log.createdAtText || ""}</p>
+
+        <div style="margin-top:12px">
+          ${(log.entries || []).map(entry => `
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
+              <span>${entry.nameAr}</span>
+              <b>${entry.done ? "✅" : "❌"}</b>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
 function renderAdminSection(title){
   pageLayout(title, `<div class="panel placeholder">${title}</div>`, "renderAdmin()");
 }
 
-/* Operations + Cleaning */
+/* Operations */
 
 function renderOperations(){ renderEmpty("متابعة التشغيل"); }
-function renderCleaning(){ renderEmpty("النظافة"); }
 
 /* Start */
 
