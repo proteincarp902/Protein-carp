@@ -1,4 +1,4 @@
-/* Protein & Carb Operations - Cloud UI Upgrade */
+/* Protein & Carb Operations - Cloud UI + Back System */
 
 const app = document.getElementById("app");
 
@@ -16,6 +16,24 @@ let systemSettings = {
 
 let currentChef = null;
 let currentCart = [];
+
+let currentBackFn = "renderHome()";
+let isPhoneBack = false;
+
+function smartBack(){
+  const fn = currentBackFn || "renderHome()";
+  try{
+    new Function(fn)();
+  }catch(e){
+    renderHome();
+  }
+}
+
+window.addEventListener("popstate", function(){
+  isPhoneBack = true;
+  smartBack();
+  setTimeout(()=>{ isPhoneBack = false; }, 50);
+});
 
 function todayDate(){
   return new Date().toLocaleDateString("ar-SA", {
@@ -38,11 +56,17 @@ function waitForFirebase(){
 }
 
 function pageLayout(title, content, backFn = "renderHome()"){
+  currentBackFn = backFn;
+
+  if(!isPhoneBack){
+    history.pushState({ page:title }, "");
+  }
+
   app.innerHTML = `
     <main class="app">
       <div class="page-head">
         <h2>${title}</h2>
-        <button class="btn btn-light" onclick="${backFn}">رجوع</button>
+        <button class="btn btn-light" onclick="smartBack()">رجوع</button>
       </div>
       ${content}
     </main>
@@ -50,6 +74,8 @@ function pageLayout(title, content, backFn = "renderHome()"){
 }
 
 function renderHome(){
+  currentBackFn = "renderHome()";
+
   app.innerHTML = `
     <main class="app">
       <div class="topbar">
@@ -164,7 +190,7 @@ function renderSettings(){
       <div class="card" onclick="renderSettingsOperations()"><div class="icon">🏭</div><div class="card-title">مهام التشغيل</div></div>
       <div class="card" onclick="renderSettingsPasswords()"><div class="icon">🔐</div><div class="card-title">كلمات المرور</div></div>
     </section>
-  `);
+  `, "renderHome()");
 }
 
 /* Settings: Sections */
@@ -440,7 +466,7 @@ function renderSettingsOperations(){
 /* Chefs */
 
 function renderChefs(){
-  pageLayout("الشيفات", `<div id="chefSectionsView" class="grid"></div>`);
+  pageLayout("الشيفات", `<div id="chefSectionsView" class="grid"></div>`, "renderHome()");
   drawChefSectionsView();
 }
 
@@ -663,7 +689,7 @@ function renderWarehouseGate(){
       <input id="warehousePasswordInputGate" type="password" placeholder="كلمة مرور المستودع">
       <button class="btn btn-main" onclick="checkWarehousePassword()">دخول</button>
     </div>
-  `);
+  `, "renderHome()");
 }
 
 function checkWarehousePassword(){
@@ -678,7 +704,7 @@ function checkWarehousePassword(){
 }
 
 function renderWarehouse(){
-  pageLayout("المستودع", `<div id="warehouseOrdersBox" class="grid"></div>`);
+  pageLayout("المستودع", `<div id="warehouseOrdersBox" class="grid"></div>`, "renderHome()");
   drawWarehouseOrders();
 }
 
@@ -761,7 +787,7 @@ function renderAdminGate(){
       <input id="adminPasswordInputGate" type="password" placeholder="كلمة مرور الإدارة">
       <button class="btn btn-main" onclick="checkAdminPassword()">دخول</button>
     </div>
-  `);
+  `, "renderHome()");
 }
 
 function checkAdminPassword(){
@@ -818,7 +844,7 @@ function renderAdmin(){
       <div class="card" onclick="renderAdminSection('الجرد')"><div class="icon">📋</div><div class="card-title">الجرد</div></div>
       <div class="card" onclick="renderAdminSection('PDF')"><div class="icon">📄</div><div class="card-title">PDF</div></div>
     </section>
-  `);
+  `, "renderHome()");
 
   drawAdminAlerts();
 }
