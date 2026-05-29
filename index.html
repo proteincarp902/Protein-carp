@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Protein & Carb Operations</title>
-
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
 
 <style>
@@ -28,139 +27,74 @@ body{
   background:
     linear-gradient(rgba(247,248,239,.88),rgba(247,248,239,.88)),
     url("background.jpg");
-  background-size:420px;
+  background-size:cover;
+  background-position:center top;
+  background-attachment:fixed;
 }
-.app{
-  width:min(1100px,100%);
-  margin:auto;
-  padding:18px;
-}
-.topbar{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  gap:12px;
-  margin-bottom:16px;
-}
+.app{width:min(1100px,100%);margin:auto;padding:18px}
+.topbar{display:flex;justify-content:space-between;gap:12px;margin-bottom:16px}
 .btn{
-  border:0;
-  background:var(--green);
-  color:#fff;
-  font-family:'Cairo';
-  font-weight:800;
-  border-radius:18px;
-  padding:11px 18px;
-  cursor:pointer;
-  box-shadow:var(--shadow);
+  border:0;background:var(--green);color:#fff;font-family:'Cairo';
+  font-weight:800;border-radius:18px;padding:11px 18px;cursor:pointer;
+  box-shadow:var(--shadow)
 }
-.btn.secondary{
-  background:#fff;
-  color:var(--green-dark);
-  border:1px solid var(--border);
-}
+.btn.secondary{background:#fff;color:var(--green-dark);border:1px solid var(--border)}
+.btn.yellow{background:var(--yellow);color:#263322}
+.btn.danger{background:#c0392b}
 .hero{
   background:rgba(255,255,255,.82);
   border:1px solid var(--border);
   border-radius:34px;
-  padding:26px 20px;
+  padding:34px 20px;
   text-align:center;
   box-shadow:var(--shadow);
   margin-bottom:22px;
 }
-.logo{
-  width:120px;
-  height:120px;
-  object-fit:contain;
-  margin:auto;
-  display:block;
-}
-.hero h1{
-  margin:8px 0 0;
-  font-size:28px;
-  font-weight:900;
-  color:var(--green-dark);
-}
-.date{
-  color:var(--muted);
-  font-weight:700;
-  margin-top:5px;
-}
-.grid{
-  display:grid;
-  grid-template-columns:repeat(2,1fr);
-  gap:16px;
-}
+.logo{width:145px;height:145px;object-fit:contain;margin:auto;display:block}
+.hero h1{margin:8px 0 0;font-size:28px;font-weight:900;color:var(--green-dark)}
+.date{color:var(--muted);font-weight:700;margin-top:5px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
 .tile{
-  background:var(--card);
-  border:1px solid var(--border);
-  border-radius:32px;
-  min-height:165px;
-  box-shadow:var(--shadow);
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:12px;
-  cursor:pointer;
-  transition:.18s;
+  background:#fff;border:1px solid var(--border);border-radius:32px;
+  min-height:165px;box-shadow:var(--shadow);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;cursor:pointer;transition:.18s;text-align:center
 }
 .tile:hover{transform:translateY(-4px)}
 .icon{
-  width:74px;
-  height:74px;
-  border-radius:24px;
-  display:grid;
-  place-items:center;
-  font-size:38px;
-  background:#f3f8e9;
-  border:1px solid #e2ebd5;
+  width:74px;height:74px;border-radius:24px;display:grid;place-items:center;
+  font-size:38px;background:#f3f8e9;border:1px solid #e2ebd5
 }
-.tile:nth-child(1) .icon{background:#fff8d9}
-.tile:nth-child(2) .icon{background:#eef9e8}
-.tile:nth-child(3) .icon{background:#fff2df}
-.tile:nth-child(4) .icon{background:#eaf2ff}
-.tile h2{
-  margin:0;
-  font-size:20px;
-  font-weight:900;
-}
+.tile h2{margin:0;font-size:20px;font-weight:900}
 .page{display:none}
 .page.active{display:block}
-.page-head{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  margin-bottom:16px;
-}
+.page-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .card{
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:28px;
-  padding:20px;
-  box-shadow:var(--shadow);
+  background:#fff;border:1px solid var(--border);border-radius:28px;
+  padding:20px;box-shadow:var(--shadow);margin-bottom:14px
 }
-input{
-  width:100%;
-  border:1px solid var(--border);
-  border-radius:18px;
-  padding:14px;
-  font-family:'Cairo';
-  font-size:16px;
-  margin-bottom:12px;
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+input,select,textarea{
+  width:100%;border:1px solid var(--border);border-radius:18px;
+  padding:14px;font-family:'Cairo';font-size:16px;margin-bottom:10px;background:#fff
 }
-.placeholder{
-  text-align:center;
-  color:var(--muted);
-  font-weight:700;
-  padding:35px 10px;
+.section-title{font-size:20px;font-weight:900;margin:0 0 12px;color:var(--green-dark)}
+.list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.item{
+  background:#f9fbf5;border:1px solid var(--border);border-radius:20px;
+  padding:14px;display:flex;justify-content:space-between;gap:8px;align-items:center
 }
+.item b{display:block}
+.item span{color:var(--muted);font-size:13px}
+.placeholder{text-align:center;color:var(--muted);font-weight:700;padding:35px 10px}
+.hidden{display:none!important}
 @media(max-width:700px){
   .grid{gap:12px}
   .tile{min-height:145px;border-radius:26px}
   .icon{width:64px;height:64px;font-size:32px}
   .tile h2{font-size:17px}
   .hero h1{font-size:22px}
-  .logo{width:100px;height:100px}
+  .logo{width:120px;height:120px}
 }
 </style>
 </head>
@@ -182,105 +116,379 @@ input{
     </section>
 
     <section class="grid">
-      <div class="tile" onclick="openPage('operations')">
-        <div class="icon">🏭</div>
-        <h2>متابعة التشغيل</h2>
-      </div>
-
-      <div class="tile" onclick="openPage('cleaning')">
-        <div class="icon">🧹</div>
-        <h2>النظافة</h2>
-      </div>
-
-      <div class="tile" onclick="openPage('chefs')">
-        <div class="icon">👨‍🍳</div>
-        <h2>الشيفات</h2>
-      </div>
-
-      <div class="tile" onclick="openPage('warehouse')">
-        <div class="icon">📦</div>
-        <h2>المستودع</h2>
-      </div>
+      <div class="tile" onclick="openPage('operations')"><div class="icon">🏭</div><h2>متابعة التشغيل</h2></div>
+      <div class="tile" onclick="openPage('cleaning')"><div class="icon">🧹</div><h2>النظافة</h2></div>
+      <div class="tile" onclick="openPage('chefs')"><div class="icon">👨‍🍳</div><h2>الشيفات</h2></div>
+      <div class="tile" onclick="openPage('warehouse')"><div class="icon">📦</div><h2>المستودع</h2></div>
     </section>
   </div>
 
   <section id="operations" class="page">
-    <div class="page-head">
-      <h2>متابعة التشغيل</h2>
-      <button class="btn secondary" onclick="goHome()">رجوع</button>
-    </div>
-    <div class="card placeholder">جاهز للمرحلة التالية</div>
+    <div class="page-head"><h2>متابعة التشغيل</h2><button class="btn secondary" onclick="goHome()">رجوع</button></div>
+    <div id="operationTasksView" class="list"></div>
   </section>
 
   <section id="cleaning" class="page">
-    <div class="page-head">
-      <h2>النظافة</h2>
-      <button class="btn secondary" onclick="goHome()">رجوع</button>
-    </div>
-    <div class="card placeholder">جاهز للمرحلة التالية</div>
+    <div class="page-head"><h2>النظافة</h2><button class="btn secondary" onclick="goHome()">رجوع</button></div>
+    <div id="cleaningItemsView" class="list"></div>
   </section>
 
   <section id="chefs" class="page">
-    <div class="page-head">
-      <h2>الشيفات</h2>
-      <button class="btn secondary" onclick="goHome()">رجوع</button>
-    </div>
+    <div class="page-head"><h2>الشيفات</h2><button class="btn secondary" onclick="goHome()">رجوع</button></div>
     <div class="card">
-      <input placeholder="كود الشيف">
-      <button class="btn">دخول</button>
+      <input id="chefLoginCode" placeholder="كود الشيف">
+      <button class="btn" onclick="chefLogin()">دخول</button>
     </div>
+    <div id="chefLoginResult"></div>
   </section>
 
   <section id="warehouse" class="page">
-    <div class="page-head">
-      <h2>المستودع</h2>
-      <button class="btn secondary" onclick="goHome()">رجوع</button>
+    <div class="page-head"><h2>المستودع</h2><button class="btn secondary" onclick="goHome()">رجوع</button></div>
+    <div id="warehouseGate" class="card">
+      <input id="warehousePass" type="password" placeholder="رمز المستودع">
+      <button class="btn" onclick="unlockWarehouse()">دخول</button>
     </div>
-    <div class="card">
-      <input placeholder="رمز المستودع">
-      <button class="btn">دخول</button>
+    <div id="warehousePanel" class="hidden">
+      <div class="card placeholder">طلبات المستودع - المرحلة التالية</div>
     </div>
   </section>
 
   <section id="admin" class="page">
-    <div class="page-head">
-      <h2>الإدارة</h2>
-      <button class="btn secondary" onclick="goHome()">رجوع</button>
+    <div class="page-head"><h2>الإدارة</h2><button class="btn secondary" onclick="goHome()">رجوع</button></div>
+    <div id="adminGate" class="card">
+      <input id="adminPass" type="password" placeholder="رمز الإدارة">
+      <button class="btn" onclick="unlockAdmin()">دخول</button>
     </div>
-    <div class="card">
-      <input placeholder="رمز الإدارة">
-      <button class="btn">دخول</button>
+    <div id="adminPanel" class="hidden">
+      <div class="grid">
+        <div class="tile"><div class="icon">👨‍🍳</div><h2 id="statChefs">0</h2></div>
+        <div class="tile"><div class="icon">📦</div><h2 id="statItems">0</h2></div>
+        <div class="tile"><div class="icon">🧹</div><h2 id="statCleaning">0</h2></div>
+        <div class="tile"><div class="icon">🏭</div><h2 id="statOps">0</h2></div>
+      </div>
     </div>
   </section>
 
   <section id="settings" class="page">
-    <div class="page-head">
-      <h2>الإعدادات</h2>
-      <button class="btn secondary" onclick="goHome()">رجوع</button>
+    <div class="page-head"><h2>الإعدادات</h2><button class="btn secondary" onclick="goHome()">رجوع</button></div>
+
+    <div id="settingsGate" class="card">
+      <input id="settingsPass" type="password" placeholder="رمز الإدارة">
+      <button class="btn" onclick="unlockSettings()">دخول</button>
     </div>
-    <div class="card placeholder">جاهز للمرحلة التالية</div>
+
+    <div id="settingsPanel" class="hidden">
+
+      <div class="card">
+        <h3 class="section-title">كلمات المرور</h3>
+        <div class="form-grid">
+          <input id="newAdminPass" placeholder="رمز الإدارة">
+          <input id="newWarehousePass" placeholder="رمز المستودع">
+        </div>
+        <button class="btn" onclick="savePasswords()">حفظ</button>
+      </div>
+
+      <div class="card">
+        <h3 class="section-title">أقسام الإنتاج</h3>
+        <div class="form-grid">
+          <input id="sectionName" placeholder="اسم القسم">
+          <button class="btn" onclick="addSection()">إضافة</button>
+        </div>
+        <div id="sectionsList" class="list"></div>
+      </div>
+
+      <div class="card">
+        <h3 class="section-title">الشيفات</h3>
+        <div class="form-grid">
+          <input id="chefName" placeholder="اسم الشيف">
+          <input id="chefCode" placeholder="كود الشيف">
+          <select id="chefSection"></select>
+          <button class="btn" onclick="addChef()">إضافة</button>
+        </div>
+        <div id="chefsList" class="list"></div>
+      </div>
+
+      <div class="card">
+        <h3 class="section-title">أصناف المستودع</h3>
+        <div class="form-grid">
+          <input id="itemName" placeholder="اسم الصنف">
+          <input id="itemCode" placeholder="كود الصنف">
+          <button class="btn" onclick="addWarehouseItem()">إضافة</button>
+        </div>
+        <div id="warehouseItemsList" class="list"></div>
+      </div>
+
+      <div class="card">
+        <h3 class="section-title">عناصر النظافة</h3>
+        <div class="form-grid">
+          <input id="cleaningName" placeholder="العنصر">
+          <button class="btn" onclick="addCleaningItem()">إضافة</button>
+        </div>
+        <div id="cleaningItemsList" class="list"></div>
+      </div>
+
+      <div class="card">
+        <h3 class="section-title">مهام التشغيل</h3>
+        <div class="form-grid">
+          <input id="operationName" placeholder="المهمة">
+          <select id="operationTime">
+            <option>قبل الافتتاح</option>
+            <option>أثناء التشغيل</option>
+            <option>قبل الإغلاق</option>
+          </select>
+          <button class="btn" onclick="addOperationTask()">إضافة</button>
+        </div>
+        <div id="operationTasksList" class="list"></div>
+      </div>
+
+    </div>
   </section>
 
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+
 <script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDNpvmUTe5cDQUg2Fk49NPumpIgOO-8e00",
+  authDomain: "protincarps.firebaseapp.com",
+  projectId: "protincarps",
+  storageBucket: "protincarps.firebasestorage.app",
+  messagingSenderId: "68975799324",
+  appId: "1:68975799324:web:af819448ebfcaa9ffb43d9",
+  measurementId: "G-SHFZR3PSCW"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+let settings = {adminPassword:"0000", warehousePassword:"1111"};
+let sections = [];
+let chefs = [];
+let warehouseItems = [];
+let cleaningItems = [];
+let operationTasks = [];
+
 document.getElementById("dateNow").textContent =
-  new Date().toLocaleDateString("ar-SA", {
-    weekday:"long",
-    year:"numeric",
-    month:"long",
-    day:"numeric"
-  });
+  new Date().toLocaleDateString("ar-SA",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
 
 function openPage(id){
-  document.getElementById("home").style.display = "none";
+  document.getElementById("home").style.display="none";
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   document.getElementById(id).classList.add("active");
 }
-
 function goHome(){
-  document.getElementById("home").style.display = "block";
+  document.getElementById("home").style.display="block";
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+}
+
+async function initSettings(){
+  const ref = db.collection("settings").doc("system");
+  const snap = await ref.get();
+  if(!snap.exists){
+    await ref.set(settings);
+  }else{
+    settings = snap.data();
+  }
+}
+initSettings();
+
+db.collection("settings").doc("system").onSnapshot(doc=>{
+  if(doc.exists) settings = doc.data();
+});
+
+db.collection("chef_sections").onSnapshot(snap=>{
+  sections = [];
+  snap.forEach(d=>sections.push({id:d.id,...d.data()}));
+  renderSections();
+});
+
+db.collection("chefs").onSnapshot(snap=>{
+  chefs = [];
+  snap.forEach(d=>chefs.push({id:d.id,...d.data()}));
+  renderChefs();
+});
+
+db.collection("warehouse_items").onSnapshot(snap=>{
+  warehouseItems = [];
+  snap.forEach(d=>warehouseItems.push({id:d.id,...d.data()}));
+  renderWarehouseItems();
+});
+
+db.collection("cleaning_items").onSnapshot(snap=>{
+  cleaningItems = [];
+  snap.forEach(d=>cleaningItems.push({id:d.id,...d.data()}));
+  renderCleaningItems();
+});
+
+db.collection("operation_tasks").onSnapshot(snap=>{
+  operationTasks = [];
+  snap.forEach(d=>operationTasks.push({id:d.id,...d.data()}));
+  renderOperationTasks();
+});
+
+function unlockAdmin(){
+  if(document.getElementById("adminPass").value === settings.adminPassword){
+    document.getElementById("adminGate").classList.add("hidden");
+    document.getElementById("adminPanel").classList.remove("hidden");
+  }
+}
+function unlockSettings(){
+  if(document.getElementById("settingsPass").value === settings.adminPassword){
+    document.getElementById("settingsGate").classList.add("hidden");
+    document.getElementById("settingsPanel").classList.remove("hidden");
+  }
+}
+function unlockWarehouse(){
+  if(document.getElementById("warehousePass").value === settings.warehousePassword){
+    document.getElementById("warehouseGate").classList.add("hidden");
+    document.getElementById("warehousePanel").classList.remove("hidden");
+  }
+}
+
+async function savePasswords(){
+  const a = document.getElementById("newAdminPass").value.trim();
+  const w = document.getElementById("newWarehousePass").value.trim();
+  await db.collection("settings").doc("system").set({
+    adminPassword: a || settings.adminPassword,
+    warehousePassword: w || settings.warehousePassword
+  },{merge:true});
+  document.getElementById("newAdminPass").value="";
+  document.getElementById("newWarehousePass").value="";
+}
+
+async function addSection(){
+  const name=document.getElementById("sectionName").value.trim();
+  if(!name) return;
+  await db.collection("chef_sections").add({name,createdAt:Date.now()});
+  document.getElementById("sectionName").value="";
+}
+function renderSections(){
+  document.getElementById("chefSection").innerHTML =
+    sections.map(s=>`<option value="${s.name}">${s.name}</option>`).join("");
+
+  document.getElementById("sectionsList").innerHTML =
+    sections.map(s=>`
+      <div class="item">
+        <b>${s.name}</b>
+        <button class="btn danger" onclick="deleteDoc('chef_sections','${s.id}')">حذف</button>
+      </div>
+    `).join("") || `<div class="placeholder">لا توجد أقسام</div>`;
+}
+
+async function addChef(){
+  const name=document.getElementById("chefName").value.trim();
+  const code=document.getElementById("chefCode").value.trim();
+  const section=document.getElementById("chefSection").value;
+  if(!name || !code) return;
+  await db.collection("chefs").add({name,code,section,createdAt:Date.now()});
+  document.getElementById("chefName").value="";
+  document.getElementById("chefCode").value="";
+}
+function renderChefs(){
+  document.getElementById("statChefs").textContent = chefs.length;
+  document.getElementById("chefsList").innerHTML =
+    chefs.map(c=>`
+      <div class="item">
+        <div><b>${c.name}</b><span>${c.section} - ${c.code}</span></div>
+        <button class="btn danger" onclick="deleteDoc('chefs','${c.id}')">حذف</button>
+      </div>
+    `).join("") || `<div class="placeholder">لا يوجد شيفات</div>`;
+}
+
+function chefLogin(){
+  const code=document.getElementById("chefLoginCode").value.trim();
+  const chef=chefs.find(c=>c.code===code);
+  document.getElementById("chefLoginResult").innerHTML = chef ? `
+    <div class="card">
+      <h3>${chef.name}</h3>
+      <p>${chef.section}</p>
+      <div class="grid">
+        <div class="tile"><div class="icon">📈</div><h2>الإنتاج</h2></div>
+        <div class="tile"><div class="icon">📦</div><h2>طلب مستودع</h2></div>
+      </div>
+    </div>
+  ` : "";
+}
+
+async function addWarehouseItem(){
+  const name=document.getElementById("itemName").value.trim();
+  const code=document.getElementById("itemCode").value.trim();
+  if(!name || !code) return;
+  await db.collection("warehouse_items").add({name,code,createdAt:Date.now()});
+  document.getElementById("itemName").value="";
+  document.getElementById("itemCode").value="";
+}
+function renderWarehouseItems(){
+  document.getElementById("statItems").textContent = warehouseItems.length;
+  document.getElementById("warehouseItemsList").innerHTML =
+    warehouseItems.map(i=>`
+      <div class="item">
+        <div><b>${i.name}</b><span>${i.code}</span></div>
+        <button class="btn danger" onclick="deleteDoc('warehouse_items','${i.id}')">حذف</button>
+      </div>
+    `).join("") || `<div class="placeholder">لا توجد أصناف</div>`;
+}
+
+async function addCleaningItem(){
+  const name=document.getElementById("cleaningName").value.trim();
+  if(!name) return;
+  await db.collection("cleaning_items").add({name,createdAt:Date.now()});
+  document.getElementById("cleaningName").value="";
+}
+function renderCleaningItems(){
+  document.getElementById("statCleaning").textContent = cleaningItems.length;
+  document.getElementById("cleaningItemsList").innerHTML =
+    cleaningItems.map(i=>`
+      <div class="item">
+        <b>${i.name}</b>
+        <button class="btn danger" onclick="deleteDoc('cleaning_items','${i.id}')">حذف</button>
+      </div>
+    `).join("") || `<div class="placeholder">لا توجد عناصر</div>`;
+
+  document.getElementById("cleaningItemsView").innerHTML =
+    cleaningItems.map(i=>`
+      <div class="card">
+        <h3>${i.name}</h3>
+        <div class="form-grid">
+          <label><input type="checkbox"> صباح</label>
+          <label><input type="checkbox"> عصر</label>
+          <label><input type="checkbox"> إغلاق</label>
+        </div>
+      </div>
+    `).join("") || `<div class="card placeholder">لا توجد عناصر</div>`;
+}
+
+async function addOperationTask(){
+  const name=document.getElementById("operationName").value.trim();
+  const time=document.getElementById("operationTime").value;
+  if(!name) return;
+  await db.collection("operation_tasks").add({name,time,createdAt:Date.now()});
+  document.getElementById("operationName").value="";
+}
+function renderOperationTasks(){
+  document.getElementById("statOps").textContent = operationTasks.length;
+  document.getElementById("operationTasksList").innerHTML =
+    operationTasks.map(t=>`
+      <div class="item">
+        <div><b>${t.name}</b><span>${t.time}</span></div>
+        <button class="btn danger" onclick="deleteDoc('operation_tasks','${t.id}')">حذف</button>
+      </div>
+    `).join("") || `<div class="placeholder">لا توجد مهام</div>`;
+
+  document.getElementById("operationTasksView").innerHTML =
+    operationTasks.map(t=>`
+      <div class="card">
+        <h3>${t.name}</h3>
+        <p>${t.time}</p>
+        <label><input type="checkbox"> تم</label>
+      </div>
+    `).join("") || `<div class="card placeholder">لا توجد مهام</div>`;
+}
+
+async function deleteDoc(collection,id){
+  await db.collection(collection).doc(id).delete();
 }
 </script>
 
