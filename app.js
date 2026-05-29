@@ -1,71 +1,68 @@
-const app = document.getElementById("app");
-
-function todayDate(){
-  return new Date().toLocaleDateString("ar-SA", {
-    weekday:"long",
-    year:"numeric",
-    month:"long",
-    day:"numeric"
-  });
-}
-
-function renderHome(){
-  app.innerHTML = `
-    <main class="app">
-      <div class="topbar">
-        <button class="btn btn-light" onclick="renderSettings()">الإعدادات</button>
-        <button class="btn btn-main" onclick="renderAdmin()">الإدارة</button>
-      </div>
-
-      <section class="hero">
-        <img src="assets/logo.png" class="logo" alt="Protein & Carb">
-        <h1 class="hero-title">Protein & Carb Operations</h1>
-        <p class="hero-date">${todayDate()}</p>
-      </section>
-
-      <section class="grid">
-        <div class="card" onclick="renderOperations()">
-          <div class="icon">🏭</div>
-          <div class="card-title">متابعة التشغيل</div>
-        </div>
-
-        <div class="card" onclick="renderCleaning()">
-          <div class="icon">🧹</div>
-          <div class="card-title">النظافة</div>
-        </div>
-
-        <div class="card" onclick="renderChefs()">
-          <div class="icon">👨‍🍳</div>
-          <div class="card-title">الشيفات</div>
-        </div>
-
-        <div class="card" onclick="renderWarehouse()">
-          <div class="icon">📦</div>
-          <div class="card-title">المستودع</div>
-        </div>
-      </section>
-    </main>
-  `;
-}
-
-function renderPage(title){
+function renderSettings(){
   app.innerHTML = `
     <main class="app">
       <div class="page-head">
-        <h2>${title}</h2>
+        <h2>الإعدادات</h2>
         <button class="btn btn-light" onclick="renderHome()">رجوع</button>
       </div>
 
-      <div class="panel placeholder">${title}</div>
+      <section class="panel">
+        <h3>أقسام الإنتاج</h3>
+
+        <input id="sectionName" placeholder="اسم القسم">
+        <input id="sectionIcon" placeholder="الأيقونة">
+
+        <button class="btn btn-main" onclick="addChefSection()">إضافة</button>
+      </section>
+
+      <section class="grid" id="sectionsList" style="margin-top:16px"></section>
     </main>
   `;
+
+  loadChefSections();
 }
 
-function renderSettings(){ renderPage("الإعدادات"); }
-function renderAdmin(){ renderPage("الإدارة"); }
-function renderOperations(){ renderPage("متابعة التشغيل"); }
-function renderCleaning(){ renderPage("النظافة"); }
-function renderChefs(){ renderPage("الشيفات"); }
-function renderWarehouse(){ renderPage("المستودع"); }
+async function addChefSection(){
+  const name = document.getElementById("sectionName").value.trim();
+  const icon = document.getElementById("sectionIcon").value.trim();
 
-renderHome();
+  if(!name) return;
+
+  await db.collection("chef_sections").add({
+    name:name,
+    icon:icon || "🍽️",
+    createdAt:Date.now()
+  });
+
+  document.getElementById("sectionName").value = "";
+  document.getElementById("sectionIcon").value = "";
+
+  loadChefSections();
+}
+
+function loadChefSections(){
+  const box = document.getElementById("sectionsList");
+  if(!box) return;
+
+  db.collection("chef_sections").orderBy("createdAt","desc").onSnapshot(snapshot=>{
+    if(snapshot.empty){
+      box.innerHTML = `
+        <div class="panel placeholder">لا توجد أقسام</div>
+      `;
+      return;
+    }
+
+    box.innerHTML = "";
+
+    snapshot.forEach(doc=>{
+      const item = doc.data();
+
+      box.innerHTML += `
+        <div class="card">
+          <div class="icon">${item.icon || "🍽️"}</div>
+          <div class="card-title">${item.name}</div>
+        </div>
+      `;
+    });
+  });
+}
