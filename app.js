@@ -4,6 +4,7 @@ let chefSections = JSON.parse(localStorage.getItem("chefSections")) || [];
 let chefs = JSON.parse(localStorage.getItem("chefs")) || [];
 let warehouseItems = JSON.parse(localStorage.getItem("warehouseItems")) || [];
 let warehouseOrders = JSON.parse(localStorage.getItem("warehouseOrders")) || [];
+let dismissedAlerts = JSON.parse(localStorage.getItem("dismissedAlerts")) || [];
 let orderCounter = Number(localStorage.getItem("orderCounter")) || 1001;
 
 let currentChef = null;
@@ -14,6 +15,7 @@ function saveData(){
   localStorage.setItem("chefs", JSON.stringify(chefs));
   localStorage.setItem("warehouseItems", JSON.stringify(warehouseItems));
   localStorage.setItem("warehouseOrders", JSON.stringify(warehouseOrders));
+  localStorage.setItem("dismissedAlerts", JSON.stringify(dismissedAlerts));
   localStorage.setItem("orderCounter", String(orderCounter));
 }
 
@@ -24,47 +26,6 @@ function todayDate(){
     month:"long",
     day:"numeric"
   });
-}
-
-function renderHome(){
-  app.innerHTML = `
-    <main class="app">
-
-      <div class="topbar">
-        <button class="btn btn-light" onclick="renderSettings()">الإعدادات</button>
-        <button class="btn btn-main" onclick="renderAdmin()">الإدارة</button>
-      </div>
-
-      <section class="hero">
-        <img src="assets/logo.png" class="logo" alt="Protein & Carb">
-        <h1 class="hero-title">Protein & Carb Operations</h1>
-        <p class="hero-date">${todayDate()}</p>
-      </section>
-
-      <section class="grid">
-        <div class="card" onclick="renderOperations()">
-          <div class="icon">🏭</div>
-          <div class="card-title">متابعة التشغيل</div>
-        </div>
-
-        <div class="card" onclick="renderCleaning()">
-          <div class="icon">🧹</div>
-          <div class="card-title">النظافة</div>
-        </div>
-
-        <div class="card" onclick="renderChefs()">
-          <div class="icon">👨‍🍳</div>
-          <div class="card-title">الشيفات</div>
-        </div>
-
-        <div class="card" onclick="renderWarehouse()">
-          <div class="icon">📦</div>
-          <div class="card-title">المستودع</div>
-        </div>
-      </section>
-
-    </main>
-  `;
 }
 
 function pageLayout(title, content, backFn = "renderHome()"){
@@ -79,14 +40,35 @@ function pageLayout(title, content, backFn = "renderHome()"){
   `;
 }
 
+function renderHome(){
+  app.innerHTML = `
+    <main class="app">
+      <div class="topbar">
+        <button class="btn btn-light" onclick="renderSettings()">الإعدادات</button>
+        <button class="btn btn-main" onclick="renderAdmin()">الإدارة</button>
+      </div>
+
+      <section class="hero">
+        <img src="assets/logo.png" class="logo" alt="Protein & Carb">
+        <h1 class="hero-title">Protein & Carb Operations</h1>
+        <p class="hero-date">${todayDate()}</p>
+      </section>
+
+      <section class="grid">
+        <div class="card" onclick="renderOperations()"><div class="icon">🏭</div><div class="card-title">متابعة التشغيل</div></div>
+        <div class="card" onclick="renderCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
+        <div class="card" onclick="renderChefs()"><div class="icon">👨‍🍳</div><div class="card-title">الشيفات</div></div>
+        <div class="card" onclick="renderWarehouse()"><div class="icon">📦</div><div class="card-title">المستودع</div></div>
+      </section>
+    </main>
+  `;
+}
+
 function renderEmpty(title){
   pageLayout(title, `<div class="panel placeholder">${title}</div>`);
 }
 
-/* =========================
-   الإعدادات
-========================= */
-
+/* الإعدادات */
 function renderSettings(){
   pageLayout("الإعدادات", `
     <div class="panel">
@@ -142,39 +124,26 @@ function renderSettings(){
 function addSection(){
   const name = document.getElementById("sectionName").value.trim();
   const icon = document.getElementById("sectionIcon").value.trim();
-
   if(!name) return;
 
-  chefSections.push({
-    name,
-    icon: icon || "🍽️"
-  });
-
+  chefSections.push({ name, icon: icon || "🍽️" });
   saveData();
-
-  document.getElementById("sectionName").value = "";
-  document.getElementById("sectionIcon").value = "";
-
-  drawSections();
-  drawChefSectionOptions();
+  renderSettings();
 }
 
 function drawSections(){
   const box = document.getElementById("sectionsContainer");
   if(!box) return;
 
-  if(chefSections.length === 0){
-    box.innerHTML = `<div class="panel placeholder">لا توجد أقسام</div>`;
-    return;
-  }
-
-  box.innerHTML = chefSections.map((section, index) => `
-    <div class="card">
-      <div class="icon">${section.icon}</div>
-      <div class="card-title">${section.name}</div>
-      <button class="btn btn-light" style="margin-top:12px" onclick="deleteSection(${index})">حذف</button>
-    </div>
-  `).join("");
+  box.innerHTML = chefSections.length
+    ? chefSections.map((section, index) => `
+      <div class="card">
+        <div class="icon">${section.icon}</div>
+        <div class="card-title">${section.name}</div>
+        <button class="btn btn-light" style="margin-top:12px" onclick="deleteSection(${index})">حذف</button>
+      </div>
+    `).join("")
+    : `<div class="panel placeholder">لا توجد أقسام</div>`;
 }
 
 function deleteSection(index){
@@ -189,14 +158,9 @@ function drawChefSectionOptions(){
   const select = document.getElementById("chefSection");
   if(!select) return;
 
-  if(chefSections.length === 0){
-    select.innerHTML = `<option value="">لا توجد أقسام</option>`;
-    return;
-  }
-
-  select.innerHTML = chefSections.map(section => `
-    <option value="${section.name}">${section.name}</option>
-  `).join("");
+  select.innerHTML = chefSections.length
+    ? chefSections.map(section => `<option value="${section.name}">${section.name}</option>`).join("")
+    : `<option value="">لا توجد أقسام</option>`;
 }
 
 function addChef(){
@@ -205,46 +169,30 @@ function addChef(){
   const section = document.getElementById("chefSection").value;
 
   if(!name || !code || !section) return;
-
-  const exists = chefs.some(chef => chef.code === code);
-  if(exists){
+  if(chefs.some(chef => chef.code === code)){
     alert("الكود مستخدم");
     return;
   }
 
-  chefs.push({
-    name,
-    code,
-    section
-  });
-
+  chefs.push({ name, code, section });
   saveData();
-
-  document.getElementById("chefName").value = "";
-  document.getElementById("chefCode").value = "";
-
-  drawChefs();
+  renderSettings();
 }
 
 function drawChefs(){
   const box = document.getElementById("chefsContainer");
   if(!box) return;
 
-  if(chefs.length === 0){
-    box.innerHTML = `<div class="panel placeholder">لا يوجد شيفات</div>`;
-    return;
-  }
-
-  box.innerHTML = chefs.map((chef, index) => `
-    <div class="card">
-      <div class="icon">👨‍🍳</div>
-      <div class="card-title">${chef.name}</div>
-      <div style="margin-top:8px;color:#7b8674;font-weight:700">
-        ${chef.section} - ${chef.code}
+  box.innerHTML = chefs.length
+    ? chefs.map((chef, index) => `
+      <div class="card">
+        <div class="icon">👨‍🍳</div>
+        <div class="card-title">${chef.name}</div>
+        <div style="margin-top:8px;color:#7b8674;font-weight:700">${chef.section} - ${chef.code}</div>
+        <button class="btn btn-light" style="margin-top:12px" onclick="deleteChef(${index})">حذف</button>
       </div>
-      <button class="btn btn-light" style="margin-top:12px" onclick="deleteChef(${index})">حذف</button>
-    </div>
-  `).join("");
+    `).join("")
+    : `<div class="panel placeholder">لا يوجد شيفات</div>`;
 }
 
 function deleteChef(index){
@@ -259,25 +207,14 @@ function addWarehouseItem(){
   const unit = document.getElementById("warehouseItemUnit").value;
 
   if(!name || !code) return;
-
-  const exists = warehouseItems.some(item => item.code === code);
-  if(exists){
+  if(warehouseItems.some(item => item.code === code)){
     alert("كود الصنف مستخدم");
     return;
   }
 
-  warehouseItems.push({
-    name,
-    code,
-    unit
-  });
-
+  warehouseItems.push({ name, code, unit });
   saveData();
-
-  document.getElementById("warehouseItemName").value = "";
-  document.getElementById("warehouseItemCode").value = "";
-
-  drawWarehouseItems();
+  renderSettings();
 }
 
 function drawWarehouseItems(){
@@ -299,16 +236,7 @@ function drawWarehouseItems(){
   box.innerHTML = `
     <div style="display:grid;gap:8px">
       ${list.map(item => `
-        <div style="
-          display:grid;
-          grid-template-columns:1fr auto auto auto;
-          gap:8px;
-          align-items:center;
-          background:#f9fbf5;
-          border:1px solid #e5eadb;
-          border-radius:16px;
-          padding:12px;
-        ">
+        <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;background:#f9fbf5;border:1px solid #e5eadb;border-radius:16px;padding:12px;">
           <b>${item.name}</b>
           <span>${item.code}</span>
           <span>${item.unit || ""}</span>
@@ -325,30 +253,19 @@ function deleteWarehouseItem(code){
   drawWarehouseItems();
 }
 
-/* =========================
-   الشيفات
-========================= */
-
+/* الشيفات */
 function renderChefs(){
   pageLayout("الشيفات", `<div id="chefSectionsView" class="grid"></div>`);
-  drawChefSectionsView();
-}
-
-function drawChefSectionsView(){
   const box = document.getElementById("chefSectionsView");
-  if(!box) return;
 
-  if(chefSections.length === 0){
-    box.innerHTML = `<div class="panel placeholder">لا توجد أقسام</div>`;
-    return;
-  }
-
-  box.innerHTML = chefSections.map(section => `
-    <div class="card" onclick="renderChefCode('${section.name}')">
-      <div class="icon">${section.icon}</div>
-      <div class="card-title">${section.name}</div>
-    </div>
-  `).join("");
+  box.innerHTML = chefSections.length
+    ? chefSections.map(section => `
+      <div class="card" onclick="renderChefCode('${section.name}')">
+        <div class="icon">${section.icon}</div>
+        <div class="card-title">${section.name}</div>
+      </div>
+    `).join("")
+    : `<div class="panel placeholder">لا توجد أقسام</div>`;
 }
 
 function renderChefCode(sectionName){
@@ -357,18 +274,13 @@ function renderChefCode(sectionName){
       <input id="chefCode" type="number" placeholder="كود الشيف">
       <button class="btn btn-main" onclick="checkChefCode('${sectionName}')">دخول</button>
     </div>
-
     <div id="chefMessage" class="panel placeholder" style="margin-top:16px;display:none"></div>
   `, "renderChefs()");
 }
 
 function checkChefCode(sectionName){
   const code = document.getElementById("chefCode").value.trim();
-
-  const chef = chefs.find(c =>
-    c.code === code && c.section === sectionName
-  );
-
+  const chef = chefs.find(c => c.code === code && c.section === sectionName);
   const message = document.getElementById("chefMessage");
 
   if(!chef){
@@ -408,13 +320,9 @@ function renderChefDashboard(chef){
   `, "renderChefs()");
 }
 
-/* =========================
-   طلب المستودع
-========================= */
-
+/* طلب مستودع */
 function renderWarehouseRequest(){
   if(!currentChef) return renderChefs();
-
   currentCart = [];
 
   pageLayout("طلب مستودع", `
@@ -440,10 +348,7 @@ function drawRequestSearch(){
 
   const list = warehouseItems.filter(item =>
     search &&
-    (
-      item.name.toLowerCase().includes(search) ||
-      item.code.toLowerCase().includes(search)
-    )
+    (item.name.toLowerCase().includes(search) || item.code.toLowerCase().includes(search))
   ).slice(0, 20);
 
   if(!search){
@@ -459,21 +364,10 @@ function drawRequestSearch(){
   box.innerHTML = `
     <div style="display:grid;gap:8px">
       ${list.map(item => `
-        <div style="
-          display:grid;
-          grid-template-columns:1fr auto auto;
-          gap:8px;
-          align-items:center;
-          background:#f9fbf5;
-          border:1px solid #e5eadb;
-          border-radius:16px;
-          padding:12px;
-        ">
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;background:#f9fbf5;border:1px solid #e5eadb;border-radius:16px;padding:12px;">
           <div>
             <b>${item.name}</b>
-            <div style="color:#7b8674;font-weight:700">
-              ${item.code} - ${item.unit || ""}
-            </div>
+            <div style="color:#7b8674;font-weight:700">${item.code} - ${item.unit || ""}</div>
           </div>
           <input id="qty_${item.code}" type="number" min="1" placeholder="كمية" style="margin:0">
           <button class="btn btn-main" onclick="addToCart('${item.code}')">إضافة</button>
@@ -494,12 +388,7 @@ function addToCart(code){
   if(existing){
     existing.qty += qty;
   }else{
-    currentCart.push({
-      name:item.name,
-      code:item.code,
-      unit:item.unit,
-      qty
-    });
+    currentCart.push({ name:item.name, code:item.code, unit:item.unit, qty });
   }
 
   drawCart();
@@ -514,14 +403,7 @@ function drawCart(){
   }
 
   box.innerHTML = currentCart.map((item, index) => `
-    <div style="
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      border-bottom:1px solid #e5eadb;
-      padding:8px 0;
-      gap:10px;
-    ">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e5eadb;padding:8px 0;gap:10px;">
       <span>${item.name}</span>
       <b>${item.qty} ${item.unit || ""}</b>
       <button class="btn btn-light" onclick="removeFromCart(${index})">حذف</button>
@@ -550,7 +432,6 @@ function sendWarehouseOrder(){
 
   warehouseOrders.push(order);
   saveData();
-
   currentCart = [];
   renderMyOrders();
 }
@@ -558,9 +439,7 @@ function sendWarehouseOrder(){
 function renderMyOrders(){
   if(!currentChef) return renderChefs();
 
-  const myOrders = warehouseOrders.filter(o =>
-    o.chefCode === currentChef.code
-  );
+  const myOrders = warehouseOrders.filter(o => o.chefCode === currentChef.code);
 
   pageLayout("طلباتي", `
     <div class="grid">
@@ -573,10 +452,7 @@ function renderMyOrders(){
   `, "renderChefDashboard(currentChef)");
 }
 
-/* =========================
-   المستودع
-========================= */
-
+/* المستودع */
 function renderWarehouse(){
   pageLayout("المستودع", `
     <div class="grid">
@@ -593,23 +469,12 @@ function renderOrderCard(order, isChefView){
   return `
     <div class="panel">
       <h3>${order.id}</h3>
-
-      <p style="font-weight:800;margin-top:8px">
-        ${order.chefName} - ${order.section}
-      </p>
-
-      <p style="color:#7b8674;margin-top:4px">
-        ${order.createdAt}
-      </p>
+      <p style="font-weight:800;margin-top:8px">${order.chefName} - ${order.section}</p>
+      <p style="color:#7b8674;margin-top:4px">${order.createdAt}</p>
 
       <div style="margin-top:12px">
         ${order.items.map(item => `
-          <div style="
-            display:flex;
-            justify-content:space-between;
-            border-bottom:1px solid #e5eadb;
-            padding:8px 0;
-          ">
+          <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0;">
             <span>${item.name}</span>
             <b>${item.qty} ${item.unit || ""}</b>
           </div>
@@ -659,104 +524,92 @@ function receiveOrder(orderId){
   renderMyOrders();
 }
 
-/* =========================
-   الإدارة
-========================= */
+/* الإدارة والتنبيهات */
+function getAlert(order){
+  let text = "";
+
+  if(order.status === "جديد") text = `طلب جديد من ${order.section}`;
+  if(order.status === "قيد التجهيز") text = `طلب ${order.section} قيد التجهيز`;
+  if(order.status === "جاهز") text = `طلب ${order.section} جاهز للاستلام`;
+  if(order.status === "متأخر") text = `طلب ${order.section} متأخر`;
+  if(order.status === "تم الاستلام") text = `تم استلام طلب من ${order.section}`;
+
+  return {
+    key:`${order.id}-${order.status}`,
+    orderId:order.id,
+    text,
+    sub:`${order.chefName} - ${order.id}`
+  };
+}
+
+function dismissAlert(key){
+  if(!dismissedAlerts.includes(key)){
+    dismissedAlerts.push(key);
+    saveData();
+  }
+  renderAdmin();
+}
 
 function renderAdmin(){
-  const newOrders = warehouseOrders.filter(o => o.status === "جديد").length;
-  const preparing = warehouseOrders.filter(o => o.status === "قيد التجهيز").length;
-  const ready = warehouseOrders.filter(o => o.status === "جاهز").length;
-  const received = warehouseOrders.filter(o => o.status === "تم الاستلام").length;
-  const delayed = warehouseOrders.filter(o => o.status === "متأخر").length;
+  const alerts = warehouseOrders
+    .map(getAlert)
+    .filter(alert => alert.text && !dismissedAlerts.includes(alert.key));
 
   pageLayout("الإدارة", `
-    <section class="grid">
-      <div class="card" onclick="renderAdminSection('الشيفات')">
-        <div class="icon">👨‍🍳</div>
-        <div class="card-title">الشيفات</div>
-      </div>
+    <div class="panel">
+      <h3 style="margin-bottom:15px">🔔 التنبيهات</h3>
 
-      <div class="card" onclick="renderAdminSection('المستودع')">
-        <div class="icon">📦</div>
-        <div class="card-title">المستودع</div>
-      </div>
-
-      <div class="card" onclick="renderAdminSection('النظافة')">
-        <div class="icon">🧹</div>
-        <div class="card-title">النظافة</div>
-      </div>
-
-      <div class="card" onclick="renderAdminSection('التشغيل')">
-        <div class="icon">🏭</div>
-        <div class="card-title">التشغيل</div>
-      </div>
-
-      <div class="card" onclick="renderAdminSection('الجرد')">
-        <div class="icon">📋</div>
-        <div class="card-title">الجرد</div>
-      </div>
-
-      <div class="card" onclick="renderAdminSection('PDF')">
-        <div class="icon">📄</div>
-        <div class="card-title">PDF</div>
-      </div>
-    </section>
-
-    <div class="panel" style="margin-top:16px">
-      <h3 style="margin-bottom:15px">حالات الطلبات</h3>
-      <div class="grid">
-        <div class="card"><div class="icon">🟡</div><div class="card-title">${newOrders}</div></div>
-        <div class="card"><div class="icon">🔵</div><div class="card-title">${preparing}</div></div>
-        <div class="card"><div class="icon">🟢</div><div class="card-title">${ready}</div></div>
-        <div class="card"><div class="icon">✅</div><div class="card-title">${received}</div></div>
-        <div class="card"><div class="icon">⚠️</div><div class="card-title">${delayed}</div></div>
-      </div>
-    </div>
-
-    <div class="panel" style="margin-top:16px">
-      <h3 style="margin-bottom:15px">الطلبات</h3>
       ${
-        warehouseOrders.length === 0
-        ? `<div class="placeholder">لا توجد طلبات</div>`
-        : warehouseOrders.map(order => `
+        alerts.length === 0
+        ? `<div class="placeholder">لا توجد تنبيهات</div>`
+        : alerts.map(alert => `
           <div style="
             display:grid;
-            grid-template-columns:auto 1fr auto;
+            grid-template-columns:1fr auto;
             gap:10px;
             align-items:center;
-            border-bottom:1px solid #e5eadb;
-            padding:10px 0;
+            background:#f9fbf5;
+            border:1px solid #e5eadb;
+            border-radius:18px;
+            padding:14px;
+            margin-bottom:10px;
           ">
-            <b>${order.id}</b>
-            <span>${order.chefName} - ${order.section}</span>
-            <b>${order.status}</b>
+            <div onclick="renderOrderDetails('${alert.orderId}')" style="cursor:pointer">
+              <b>${alert.text}</b>
+              <div style="color:#7b8674;font-weight:700;margin-top:4px">${alert.sub}</div>
+            </div>
+            <button class="btn btn-light" onclick="dismissAlert('${alert.key}')">×</button>
           </div>
         `).join("")
       }
     </div>
+
+    <section class="grid" style="margin-top:16px">
+      <div class="card" onclick="renderAdminSection('الشيفات')"><div class="icon">👨‍🍳</div><div class="card-title">الشيفات</div></div>
+      <div class="card" onclick="renderAdminSection('المستودع')"><div class="icon">📦</div><div class="card-title">المستودع</div></div>
+      <div class="card" onclick="renderAdminSection('النظافة')"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
+      <div class="card" onclick="renderAdminSection('التشغيل')"><div class="icon">🏭</div><div class="card-title">التشغيل</div></div>
+      <div class="card" onclick="renderAdminSection('الجرد')"><div class="icon">📋</div><div class="card-title">الجرد</div></div>
+      <div class="card" onclick="renderAdminSection('PDF')"><div class="icon">📄</div><div class="card-title">PDF</div></div>
+    </section>
   `);
 }
 
-function renderAdminSection(title){
-  pageLayout(title, `
-    <div class="panel placeholder">
-      ${title}
-    </div>
+function renderOrderDetails(orderId){
+  const order = warehouseOrders.find(o => o.id === orderId);
+  if(!order) return renderAdmin();
+
+  pageLayout(order.id, `
+    ${renderOrderCard(order, false)}
   `, "renderAdmin()");
 }
 
-/* =========================
-   التشغيل والنظافة
-========================= */
-
-function renderOperations(){
-  renderEmpty("متابعة التشغيل");
+function renderAdminSection(title){
+  pageLayout(title, `<div class="panel placeholder">${title}</div>`, "renderAdmin()");
 }
 
-function renderCleaning(){
-  renderEmpty("النظافة");
-}
+/* التشغيل والنظافة */
+function renderOperations(){ renderEmpty("متابعة التشغيل"); }
+function renderCleaning(){ renderEmpty("النظافة"); }
 
-/* تشغيل */
 renderHome();
