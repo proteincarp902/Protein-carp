@@ -1,6 +1,6 @@
 const app = document.getElementById("app");
 
-let chefSections = JSON.parse(localStorage.getItem("chefSections")) || [];
+let chefSections = [];
 let chefs = JSON.parse(localStorage.getItem("chefs")) || [];
 let warehouseItems = JSON.parse(localStorage.getItem("warehouseItems")) || [];
 let warehouseOrders = JSON.parse(localStorage.getItem("warehouseOrders")) || [];
@@ -11,7 +11,6 @@ let currentChef = null;
 let currentCart = [];
 
 function saveData(){
-  localStorage.setItem("chefSections", JSON.stringify(chefSections));
   localStorage.setItem("chefs", JSON.stringify(chefs));
   localStorage.setItem("warehouseItems", JSON.stringify(warehouseItems));
   localStorage.setItem("warehouseOrders", JSON.stringify(warehouseOrders));
@@ -68,6 +67,42 @@ function renderEmpty(title){
   pageLayout(title, `<div class="panel placeholder">${title}</div>`);
 }
 
+/* Firebase - أقسام الشيفات فقط */
+
+function waitForFirebase(){
+  return new Promise(resolve => {
+    const timer = setInterval(() => {
+      if(window.firebaseDB){
+        clearInterval(timer);
+        resolve(window.firebaseDB);
+      }
+    }, 100);
+  });
+}
+
+async function listenChefSections(){
+  const {
+    db,
+    collection,
+    onSnapshot
+  } = await waitForFirebase();
+
+  onSnapshot(collection(db, "chef_sections"), snapshot => {
+    chefSections = [];
+
+    snapshot.forEach(doc => {
+      chefSections.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+
+    if(document.getElementById("sectionsContainer")) drawSections();
+    if(document.getElementById("chefSection")) drawChefSectionOptions();
+    if(document.getElementById("chefSectionsView")) drawChefSectionsView();
+  });
+}
+
 /* الإعدادات */
 function renderSettings(){
   pageLayout("الإعدادات", `
@@ -121,14 +156,27 @@ function renderSettings(){
   drawWarehouseItems();
 }
 
-function addSection(){
+async function addSection(){
   const name = document.getElementById("sectionName").value.trim();
   const icon = document.getElementById("sectionIcon").value.trim();
+
   if(!name) return;
 
-  chefSections.push({ name, icon: icon || "🍽️" });
-  saveData();
-  renderSettings();
+  const {
+    db,
+    addDoc,
+    collection,
+    serverTimestamp
+  } = window.firebaseDB;
+
+  await addDoc(collection(db, "chef_sections"), {
+    name,
+    icon: icon || "🍽️",
+    createdAt: serverTimestamp()
+  });
+
+  document.getElementById("sectionName").value = "";
+  document.getElementById("sectionIcon").value = "";
 }
 
 function drawSections(){
@@ -138,7 +186,7 @@ function drawSections(){
   box.innerHTML = chefSections.length
     ? chefSections.map((section, index) => `
       <div class="card">
-        <div class="icon">${section.icon}</div>
+        <div class="icon">${section.icon || "🍽️"}</div>
         <div class="card-title">${section.name}</div>
         <button class="btn btn-light" style="margin-top:12px" onclick="deleteSection(${index})">حذف</button>
       </div>
@@ -146,12 +194,20 @@ function drawSections(){
     : `<div class="panel placeholder">لا توجد أقسام</div>`;
 }
 
-function deleteSection(index){
-  const sectionName = chefSections[index].name;
-  chefSections.splice(index, 1);
-  chefs = chefs.filter(chef => chef.section !== sectionName);
+async function deleteSection(index){
+  const section = chefSections[index];
+  if(!section || !section.id) return;
+
+  const {
+    db,
+    doc,
+    deleteDoc
+  } = window.firebaseDB;
+
+  await deleteDoc(doc(db, "chef_sections", section.id));
+
+  chefs = chefs.filter(chef => chef.section !== section.name);
   saveData();
-  renderSettings();
 }
 
 function drawChefSectionOptions(){
@@ -256,12 +312,17 @@ function deleteWarehouseItem(code){
 /* الشيفات */
 function renderChefs(){
   pageLayout("الشيفات", `<div id="chefSectionsView" class="grid"></div>`);
+  drawChefSectionsView();
+}
+
+function drawChefSectionsView(){
   const box = document.getElementById("chefSectionsView");
+  if(!box) return;
 
   box.innerHTML = chefSections.length
     ? chefSections.map(section => `
       <div class="card" onclick="renderChefCode('${section.name}')">
-        <div class="icon">${section.icon}</div>
+        <div class="icon">${section.icon || "🍽️"}</div>
         <div class="card-title">${section.name}</div>
       </div>
     `).join("")
@@ -612,4 +673,5 @@ function renderAdminSection(title){
 function renderOperations(){ renderEmpty("متابعة التشغيل"); }
 function renderCleaning(){ renderEmpty("النظافة"); }
 
+listenChefSections();
 renderHome();
