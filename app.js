@@ -29,6 +29,7 @@ function todayDate(){
 function renderHome(){
   app.innerHTML = `
     <main class="app">
+
       <div class="topbar">
         <button class="btn btn-light" onclick="renderSettings()">الإعدادات</button>
         <button class="btn btn-main" onclick="renderAdmin()">الإدارة</button>
@@ -41,12 +42,12 @@ function renderHome(){
       </section>
 
       <section class="grid">
-        <div class="card" onclick="renderPage('متابعة التشغيل')">
+        <div class="card" onclick="renderOperations()">
           <div class="icon">🏭</div>
           <div class="card-title">متابعة التشغيل</div>
         </div>
 
-        <div class="card" onclick="renderPage('النظافة')">
+        <div class="card" onclick="renderCleaning()">
           <div class="icon">🧹</div>
           <div class="card-title">النظافة</div>
         </div>
@@ -61,75 +62,76 @@ function renderHome(){
           <div class="card-title">المستودع</div>
         </div>
       </section>
+
     </main>
   `;
 }
 
-function renderPage(title){
+function pageLayout(title, content, backFn = "renderHome()"){
   app.innerHTML = `
     <main class="app">
       <div class="page-head">
         <h2>${title}</h2>
-        <button class="btn btn-light" onclick="renderHome()">رجوع</button>
+        <button class="btn btn-light" onclick="${backFn}">رجوع</button>
       </div>
-      <div class="panel placeholder">${title}</div>
+      ${content}
     </main>
   `;
 }
 
-/* الإعدادات */
+function renderEmpty(title){
+  pageLayout(title, `<div class="panel placeholder">${title}</div>`);
+}
+
+/* =========================
+   الإعدادات
+========================= */
+
 function renderSettings(){
-  app.innerHTML = `
-    <main class="app">
-      <div class="page-head">
-        <h2>الإعدادات</h2>
-        <button class="btn btn-light" onclick="renderHome()">رجوع</button>
-      </div>
+  pageLayout("الإعدادات", `
+    <div class="panel">
+      <h3 style="margin-bottom:15px">أقسام الشيفات</h3>
+      <input id="sectionName" placeholder="اسم القسم">
+      <input id="sectionIcon" placeholder="الأيقونة">
+      <button class="btn btn-main" onclick="addSection()">إضافة قسم</button>
+    </div>
 
-      <div class="panel">
-        <h3 style="margin-bottom:15px">أقسام الشيفات</h3>
-        <input id="sectionName" placeholder="اسم القسم">
-        <input id="sectionIcon" placeholder="الأيقونة">
-        <button class="btn btn-main" onclick="addSection()">إضافة قسم</button>
-      </div>
+    <div id="sectionsContainer" class="grid" style="margin-top:16px"></div>
 
-      <div id="sectionsContainer" class="grid" style="margin-top:16px"></div>
+    <div class="panel" style="margin-top:16px">
+      <h3 style="margin-bottom:15px">الشيفات</h3>
+      <input id="chefName" placeholder="اسم الشيف">
+      <input id="chefCode" type="number" placeholder="كود الشيف">
+      <select id="chefSection"></select>
+      <button class="btn btn-main" onclick="addChef()">إضافة شيف</button>
+    </div>
 
-      <div class="panel" style="margin-top:16px">
-        <h3 style="margin-bottom:15px">الشيفات</h3>
-        <input id="chefName" placeholder="اسم الشيف">
-        <input id="chefCode" type="number" placeholder="كود الشيف">
-        <select id="chefSection"></select>
-        <button class="btn btn-main" onclick="addChef()">إضافة شيف</button>
-      </div>
+    <div id="chefsContainer" class="grid" style="margin-top:16px"></div>
 
-      <div id="chefsContainer" class="grid" style="margin-top:16px"></div>
+    <div class="panel" style="margin-top:16px">
+      <h3 style="margin-bottom:15px">أصناف المستودع</h3>
+      <input id="warehouseItemName" placeholder="اسم الصنف">
+      <input id="warehouseItemCode" placeholder="كود الصنف">
 
-      <div class="panel" style="margin-top:16px">
-        <h3 style="margin-bottom:15px">أصناف المستودع</h3>
-        <input id="warehouseItemName" placeholder="اسم الصنف">
-        <input id="warehouseItemCode" placeholder="كود الصنف">
+      <select id="warehouseItemUnit">
+        <option>كجم</option>
+        <option>جرام</option>
+        <option>لتر</option>
+        <option>مل</option>
+        <option>حبة</option>
+        <option>كرتون</option>
+        <option>صندوق</option>
+        <option>ربطة</option>
+      </select>
 
-        <select id="warehouseItemUnit">
-          <option>كجم</option>
-          <option>جرام</option>
-          <option>لتر</option>
-          <option>مل</option>
-          <option>حبة</option>
-          <option>كرتون</option>
-          <option>صندوق</option>
-          <option>ربطة</option>
-        </select>
+      <button class="btn btn-main" onclick="addWarehouseItem()">إضافة صنف</button>
+    </div>
 
-        <button class="btn btn-main" onclick="addWarehouseItem()">إضافة صنف</button>
-      </div>
-
-      <div class="panel" style="margin-top:16px">
-        <input id="warehouseSearch" placeholder="بحث باسم الصنف أو الكود" oninput="drawWarehouseItems()">
-        <div id="warehouseItemsContainer"></div>
-      </div>
-    </main>
-  `;
+    <div class="panel" style="margin-top:16px">
+      <input id="warehouseSearch" placeholder="بحث باسم الصنف أو الكود" oninput="drawWarehouseItems()">
+      <div id="warehouseItemsContainer"></div>
+    </div>
+  `);
 
   drawSections();
   drawChefSectionOptions();
@@ -140,13 +142,19 @@ function renderSettings(){
 function addSection(){
   const name = document.getElementById("sectionName").value.trim();
   const icon = document.getElementById("sectionIcon").value.trim();
+
   if(!name) return;
 
-  chefSections.push({ name, icon: icon || "🍽️" });
+  chefSections.push({
+    name,
+    icon: icon || "🍽️"
+  });
+
   saveData();
 
   document.getElementById("sectionName").value = "";
   document.getElementById("sectionIcon").value = "";
+
   drawSections();
   drawChefSectionOptions();
 }
@@ -155,36 +163,66 @@ function drawSections(){
   const box = document.getElementById("sectionsContainer");
   if(!box) return;
 
-  box.innerHTML = chefSections.length
-    ? chefSections.map(s => `
-      <div class="card">
-        <div class="icon">${s.icon}</div>
-        <div class="card-title">${s.name}</div>
-      </div>
-    `).join("")
-    : `<div class="panel placeholder">لا توجد أقسام</div>`;
+  if(chefSections.length === 0){
+    box.innerHTML = `<div class="panel placeholder">لا توجد أقسام</div>`;
+    return;
+  }
+
+  box.innerHTML = chefSections.map((section, index) => `
+    <div class="card">
+      <div class="icon">${section.icon}</div>
+      <div class="card-title">${section.name}</div>
+      <button class="btn btn-light" style="margin-top:12px" onclick="deleteSection(${index})">حذف</button>
+    </div>
+  `).join("");
+}
+
+function deleteSection(index){
+  const sectionName = chefSections[index].name;
+  chefSections.splice(index, 1);
+  chefs = chefs.filter(chef => chef.section !== sectionName);
+  saveData();
+  renderSettings();
 }
 
 function drawChefSectionOptions(){
   const select = document.getElementById("chefSection");
   if(!select) return;
 
-  select.innerHTML = chefSections.length
-    ? chefSections.map(s => `<option value="${s.name}">${s.name}</option>`).join("")
-    : `<option value="">لا توجد أقسام</option>`;
+  if(chefSections.length === 0){
+    select.innerHTML = `<option value="">لا توجد أقسام</option>`;
+    return;
+  }
+
+  select.innerHTML = chefSections.map(section => `
+    <option value="${section.name}">${section.name}</option>
+  `).join("");
 }
 
 function addChef(){
   const name = document.getElementById("chefName").value.trim();
   const code = document.getElementById("chefCode").value.trim();
   const section = document.getElementById("chefSection").value;
+
   if(!name || !code || !section) return;
 
-  chefs.push({ name, code, section });
+  const exists = chefs.some(chef => chef.code === code);
+  if(exists){
+    alert("الكود مستخدم");
+    return;
+  }
+
+  chefs.push({
+    name,
+    code,
+    section
+  });
+
   saveData();
 
   document.getElementById("chefName").value = "";
   document.getElementById("chefCode").value = "";
+
   drawChefs();
 }
 
@@ -192,28 +230,53 @@ function drawChefs(){
   const box = document.getElementById("chefsContainer");
   if(!box) return;
 
-  box.innerHTML = chefs.length
-    ? chefs.map(c => `
-      <div class="card">
-        <div class="icon">👨‍🍳</div>
-        <div class="card-title">${c.name}</div>
-        <div style="margin-top:8px;color:#7b8674;font-weight:700">${c.section} - ${c.code}</div>
+  if(chefs.length === 0){
+    box.innerHTML = `<div class="panel placeholder">لا يوجد شيفات</div>`;
+    return;
+  }
+
+  box.innerHTML = chefs.map((chef, index) => `
+    <div class="card">
+      <div class="icon">👨‍🍳</div>
+      <div class="card-title">${chef.name}</div>
+      <div style="margin-top:8px;color:#7b8674;font-weight:700">
+        ${chef.section} - ${chef.code}
       </div>
-    `).join("")
-    : `<div class="panel placeholder">لا يوجد شيفات</div>`;
+      <button class="btn btn-light" style="margin-top:12px" onclick="deleteChef(${index})">حذف</button>
+    </div>
+  `).join("");
+}
+
+function deleteChef(index){
+  chefs.splice(index, 1);
+  saveData();
+  renderSettings();
 }
 
 function addWarehouseItem(){
   const name = document.getElementById("warehouseItemName").value.trim();
   const code = document.getElementById("warehouseItemCode").value.trim();
   const unit = document.getElementById("warehouseItemUnit").value;
+
   if(!name || !code) return;
 
-  warehouseItems.push({ name, code, unit });
+  const exists = warehouseItems.some(item => item.code === code);
+  if(exists){
+    alert("كود الصنف مستخدم");
+    return;
+  }
+
+  warehouseItems.push({
+    name,
+    code,
+    unit
+  });
+
   saveData();
 
   document.getElementById("warehouseItemName").value = "";
   document.getElementById("warehouseItemCode").value = "";
+
   drawWarehouseItems();
 }
 
@@ -235,7 +298,7 @@ function drawWarehouseItems(){
 
   box.innerHTML = `
     <div style="display:grid;gap:8px">
-      ${list.map((item, i) => `
+      ${list.map(item => `
         <div style="
           display:grid;
           grid-template-columns:1fr auto auto auto;
@@ -262,52 +325,50 @@ function deleteWarehouseItem(code){
   drawWarehouseItems();
 }
 
-/* الشيفات */
+/* =========================
+   الشيفات
+========================= */
+
 function renderChefs(){
-  app.innerHTML = `
-    <main class="app">
-      <div class="page-head">
-        <h2>الشيفات</h2>
-        <button class="btn btn-light" onclick="renderHome()">رجوع</button>
-      </div>
-      <div id="chefSectionsView" class="grid"></div>
-    </main>
-  `;
+  pageLayout("الشيفات", `<div id="chefSectionsView" class="grid"></div>`);
+  drawChefSectionsView();
+}
 
+function drawChefSectionsView(){
   const box = document.getElementById("chefSectionsView");
+  if(!box) return;
 
-  box.innerHTML = chefSections.length
-    ? chefSections.map(s => `
-      <div class="card" onclick="renderChefCode('${s.name}')">
-        <div class="icon">${s.icon}</div>
-        <div class="card-title">${s.name}</div>
-      </div>
-    `).join("")
-    : `<div class="panel placeholder">لا توجد أقسام</div>`;
+  if(chefSections.length === 0){
+    box.innerHTML = `<div class="panel placeholder">لا توجد أقسام</div>`;
+    return;
+  }
+
+  box.innerHTML = chefSections.map(section => `
+    <div class="card" onclick="renderChefCode('${section.name}')">
+      <div class="icon">${section.icon}</div>
+      <div class="card-title">${section.name}</div>
+    </div>
+  `).join("");
 }
 
 function renderChefCode(sectionName){
-  app.innerHTML = `
-    <main class="app">
-      <div class="page-head">
-        <h2>${sectionName}</h2>
-        <button class="btn btn-light" onclick="renderChefs()">رجوع</button>
-      </div>
+  pageLayout(sectionName, `
+    <div class="panel">
+      <input id="chefCode" type="number" placeholder="كود الشيف">
+      <button class="btn btn-main" onclick="checkChefCode('${sectionName}')">دخول</button>
+    </div>
 
-      <div class="panel">
-        <input id="chefCode" type="number" placeholder="كود الشيف">
-        <button class="btn btn-main" onclick="checkChefCode('${sectionName}')">دخول</button>
-      </div>
-
-      <div id="chefMessage" class="panel placeholder" style="margin-top:16px;display:none"></div>
-    </main>
-  `;
+    <div id="chefMessage" class="panel placeholder" style="margin-top:16px;display:none"></div>
+  `, "renderChefs()");
 }
 
 function checkChefCode(sectionName){
   const code = document.getElementById("chefCode").value.trim();
 
-  const chef = chefs.find(c => c.code === code && c.section === sectionName);
+  const chef = chefs.find(c =>
+    c.code === code && c.section === sectionName
+  );
+
   const message = document.getElementById("chefMessage");
 
   if(!chef){
@@ -321,63 +382,54 @@ function checkChefCode(sectionName){
 }
 
 function renderChefDashboard(chef){
-  app.innerHTML = `
-    <main class="app">
-      <div class="page-head">
-        <h2>${chef.name}</h2>
-        <button class="btn btn-light" onclick="renderChefs()">رجوع</button>
+  pageLayout(chef.name, `
+    <div class="panel" style="margin-bottom:16px;text-align:center">
+      <div style="font-size:48px">👨‍🍳</div>
+      <h2>${chef.name}</h2>
+      <div style="color:#7b8674;font-weight:700">${chef.section}</div>
+    </div>
+
+    <section class="grid">
+      <div class="card" onclick="renderEmpty('الإنتاج')">
+        <div class="icon">📈</div>
+        <div class="card-title">الإنتاج</div>
       </div>
 
-      <div class="panel" style="margin-bottom:16px;text-align:center">
-        <div style="font-size:48px">👨‍🍳</div>
-        <h2>${chef.name}</h2>
-        <div style="color:#7b8674;font-weight:700">${chef.section}</div>
+      <div class="card" onclick="renderWarehouseRequest()">
+        <div class="icon">📦</div>
+        <div class="card-title">طلب مستودع</div>
       </div>
 
-      <section class="grid">
-        <div class="card" onclick="renderPage('الإنتاج')">
-          <div class="icon">📈</div>
-          <div class="card-title">الإنتاج</div>
-        </div>
-
-        <div class="card" onclick="renderWarehouseRequest()">
-          <div class="icon">📦</div>
-          <div class="card-title">طلب مستودع</div>
-        </div>
-
-        <div class="card" onclick="renderMyOrders()">
-          <div class="icon">📋</div>
-          <div class="card-title">طلباتي</div>
-        </div>
-      </section>
-    </main>
-  `;
+      <div class="card" onclick="renderMyOrders()">
+        <div class="icon">📋</div>
+        <div class="card-title">طلباتي</div>
+      </div>
+    </section>
+  `, "renderChefs()");
 }
 
-/* طلب المستودع */
+/* =========================
+   طلب المستودع
+========================= */
+
 function renderWarehouseRequest(){
+  if(!currentChef) return renderChefs();
+
   currentCart = [];
 
-  app.innerHTML = `
-    <main class="app">
-      <div class="page-head">
-        <h2>طلب مستودع</h2>
-        <button class="btn btn-light" onclick="renderChefDashboard(currentChef)">رجوع</button>
-      </div>
+  pageLayout("طلب مستودع", `
+    <div class="panel">
+      <input id="requestSearch" placeholder="بحث باسم الصنف أو الكود" oninput="drawRequestSearch()">
+      <div id="requestResults"></div>
+    </div>
 
-      <div class="panel">
-        <input id="requestSearch" placeholder="بحث باسم الصنف أو الكود" oninput="drawRequestSearch()">
-        <div id="requestResults"></div>
-      </div>
-
-      <div class="panel" style="margin-top:16px">
-        <h3 style="margin-bottom:12px">السلة</h3>
-        <div id="cartBox" class="placeholder">السلة فارغة</div>
-        <textarea id="requestNote" placeholder="ملاحظة" style="margin-top:12px"></textarea>
-        <button class="btn btn-main" onclick="sendWarehouseOrder()">إرسال الطلب</button>
-      </div>
-    </main>
-  `;
+    <div class="panel" style="margin-top:16px">
+      <h3 style="margin-bottom:12px">السلة</h3>
+      <div id="cartBox" class="placeholder">السلة فارغة</div>
+      <textarea id="requestNote" placeholder="ملاحظة" style="margin-top:12px"></textarea>
+      <button class="btn btn-main" onclick="sendWarehouseOrder()">إرسال الطلب</button>
+    </div>
+  `, "renderChefDashboard(currentChef)");
 
   drawRequestSearch();
 }
@@ -388,7 +440,10 @@ function drawRequestSearch(){
 
   const list = warehouseItems.filter(item =>
     search &&
-    (item.name.toLowerCase().includes(search) || item.code.toLowerCase().includes(search))
+    (
+      item.name.toLowerCase().includes(search) ||
+      item.code.toLowerCase().includes(search)
+    )
   ).slice(0, 20);
 
   if(!search){
@@ -416,7 +471,9 @@ function drawRequestSearch(){
         ">
           <div>
             <b>${item.name}</b>
-            <div style="color:#7b8674;font-weight:700">${item.code} - ${item.unit || ""}</div>
+            <div style="color:#7b8674;font-weight:700">
+              ${item.code} - ${item.unit || ""}
+            </div>
           </div>
           <input id="qty_${item.code}" type="number" min="1" placeholder="كمية" style="margin:0">
           <button class="btn btn-main" onclick="addToCart('${item.code}')">إضافة</button>
@@ -456,85 +513,103 @@ function drawCart(){
     return;
   }
 
-  box.innerHTML = currentCart.map(item => `
-    <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
+  box.innerHTML = currentCart.map((item, index) => `
+    <div style="
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      border-bottom:1px solid #e5eadb;
+      padding:8px 0;
+      gap:10px;
+    ">
       <span>${item.name}</span>
       <b>${item.qty} ${item.unit || ""}</b>
+      <button class="btn btn-light" onclick="removeFromCart(${index})">حذف</button>
     </div>
   `).join("");
+}
+
+function removeFromCart(index){
+  currentCart.splice(index, 1);
+  drawCart();
 }
 
 function sendWarehouseOrder(){
   if(currentCart.length === 0) return;
 
   const order = {
-    id: `ORD-${orderCounter++}`,
-    chefName: currentChef.name,
-    chefCode: currentChef.code,
-    section: currentChef.section,
+    id:`ORD-${orderCounter++}`,
+    chefName:currentChef.name,
+    chefCode:currentChef.code,
+    section:currentChef.section,
     items:[...currentCart],
-    note: document.getElementById("requestNote").value.trim(),
+    note:document.getElementById("requestNote").value.trim(),
     status:"جديد",
-    createdAt: new Date().toLocaleString("ar-SA")
+    createdAt:new Date().toLocaleString("ar-SA")
   };
 
   warehouseOrders.push(order);
   saveData();
+
   currentCart = [];
   renderMyOrders();
 }
 
 function renderMyOrders(){
-  const myOrders = warehouseOrders.filter(o => o.chefCode === currentChef.code);
+  if(!currentChef) return renderChefs();
 
-  app.innerHTML = `
-    <main class="app">
-      <div class="page-head">
-        <h2>طلباتي</h2>
-        <button class="btn btn-light" onclick="renderChefDashboard(currentChef)">رجوع</button>
-      </div>
+  const myOrders = warehouseOrders.filter(o =>
+    o.chefCode === currentChef.code
+  );
 
-      <div class="grid">
-        ${
-          myOrders.length === 0
-          ? `<div class="panel placeholder">لا توجد طلبات</div>`
-          : myOrders.map(o => renderOrderCard(o, true)).join("")
-        }
-      </div>
-    </main>
-  `;
+  pageLayout("طلباتي", `
+    <div class="grid">
+      ${
+        myOrders.length === 0
+        ? `<div class="panel placeholder">لا توجد طلبات</div>`
+        : myOrders.map(o => renderOrderCard(o, true)).join("")
+      }
+    </div>
+  `, "renderChefDashboard(currentChef)");
 }
 
-/* المستودع */
-function renderWarehouse(){
-  app.innerHTML = `
-    <main class="app">
-      <div class="page-head">
-        <h2>المستودع</h2>
-        <button class="btn btn-light" onclick="renderHome()">رجوع</button>
-      </div>
+/* =========================
+   المستودع
+========================= */
 
-      <div class="grid">
-        ${
-          warehouseOrders.length === 0
-          ? `<div class="panel placeholder">لا توجد طلبات</div>`
-          : warehouseOrders.map(o => renderOrderCard(o, false)).join("")
-        }
-      </div>
-    </main>
-  `;
+function renderWarehouse(){
+  pageLayout("المستودع", `
+    <div class="grid">
+      ${
+        warehouseOrders.length === 0
+        ? `<div class="panel placeholder">لا توجد طلبات</div>`
+        : warehouseOrders.map(o => renderOrderCard(o, false)).join("")
+      }
+    </div>
+  `);
 }
 
 function renderOrderCard(order, isChefView){
   return `
     <div class="panel">
       <h3>${order.id}</h3>
-      <p style="font-weight:800;margin-top:8px">${order.chefName} - ${order.section}</p>
-      <p style="color:#7b8674;margin-top:4px">${order.createdAt}</p>
+
+      <p style="font-weight:800;margin-top:8px">
+        ${order.chefName} - ${order.section}
+      </p>
+
+      <p style="color:#7b8674;margin-top:4px">
+        ${order.createdAt}
+      </p>
 
       <div style="margin-top:12px">
         ${order.items.map(item => `
-          <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
+          <div style="
+            display:flex;
+            justify-content:space-between;
+            border-bottom:1px solid #e5eadb;
+            padding:8px 0;
+          ">
             <span>${item.name}</span>
             <b>${item.qty} ${item.unit || ""}</b>
           </div>
@@ -584,23 +659,104 @@ function receiveOrder(orderId){
   renderMyOrders();
 }
 
-/* الإدارة */
+/* =========================
+   الإدارة
+========================= */
+
 function renderAdmin(){
-  app.innerHTML = `
-    <main class="app">
-      <div class="page-head">
-        <h2>الإدارة</h2>
-        <button class="btn btn-light" onclick="renderHome()">رجوع</button>
+  const newOrders = warehouseOrders.filter(o => o.status === "جديد").length;
+  const preparing = warehouseOrders.filter(o => o.status === "قيد التجهيز").length;
+  const ready = warehouseOrders.filter(o => o.status === "جاهز").length;
+  const received = warehouseOrders.filter(o => o.status === "تم الاستلام").length;
+  const delayed = warehouseOrders.filter(o => o.status === "متأخر").length;
+
+  pageLayout("الإدارة", `
+    <section class="grid">
+      <div class="card" onclick="renderAdminSection('الشيفات')">
+        <div class="icon">👨‍🍳</div>
+        <div class="card-title">الشيفات</div>
       </div>
 
-      <section class="grid">
-        <div class="card"><div class="icon">👨‍🍳</div><div class="card-title">${chefs.length}</div></div>
-        <div class="card"><div class="icon">📦</div><div class="card-title">${warehouseOrders.length}</div></div>
-        <div class="card"><div class="icon">✅</div><div class="card-title">${warehouseOrders.filter(o => o.status === "تم الاستلام").length}</div></div>
-        <div class="card"><div class="icon">⚠️</div><div class="card-title">${warehouseOrders.filter(o => o.status === "متأخر").length}</div></div>
-      </section>
-    </main>
-  `;
+      <div class="card" onclick="renderAdminSection('المستودع')">
+        <div class="icon">📦</div>
+        <div class="card-title">المستودع</div>
+      </div>
+
+      <div class="card" onclick="renderAdminSection('النظافة')">
+        <div class="icon">🧹</div>
+        <div class="card-title">النظافة</div>
+      </div>
+
+      <div class="card" onclick="renderAdminSection('التشغيل')">
+        <div class="icon">🏭</div>
+        <div class="card-title">التشغيل</div>
+      </div>
+
+      <div class="card" onclick="renderAdminSection('الجرد')">
+        <div class="icon">📋</div>
+        <div class="card-title">الجرد</div>
+      </div>
+
+      <div class="card" onclick="renderAdminSection('PDF')">
+        <div class="icon">📄</div>
+        <div class="card-title">PDF</div>
+      </div>
+    </section>
+
+    <div class="panel" style="margin-top:16px">
+      <h3 style="margin-bottom:15px">حالات الطلبات</h3>
+      <div class="grid">
+        <div class="card"><div class="icon">🟡</div><div class="card-title">${newOrders}</div></div>
+        <div class="card"><div class="icon">🔵</div><div class="card-title">${preparing}</div></div>
+        <div class="card"><div class="icon">🟢</div><div class="card-title">${ready}</div></div>
+        <div class="card"><div class="icon">✅</div><div class="card-title">${received}</div></div>
+        <div class="card"><div class="icon">⚠️</div><div class="card-title">${delayed}</div></div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h3 style="margin-bottom:15px">الطلبات</h3>
+      ${
+        warehouseOrders.length === 0
+        ? `<div class="placeholder">لا توجد طلبات</div>`
+        : warehouseOrders.map(order => `
+          <div style="
+            display:grid;
+            grid-template-columns:auto 1fr auto;
+            gap:10px;
+            align-items:center;
+            border-bottom:1px solid #e5eadb;
+            padding:10px 0;
+          ">
+            <b>${order.id}</b>
+            <span>${order.chefName} - ${order.section}</span>
+            <b>${order.status}</b>
+          </div>
+        `).join("")
+      }
+    </div>
+  `);
 }
 
+function renderAdminSection(title){
+  pageLayout(title, `
+    <div class="panel placeholder">
+      ${title}
+    </div>
+  `, "renderAdmin()");
+}
+
+/* =========================
+   التشغيل والنظافة
+========================= */
+
+function renderOperations(){
+  renderEmpty("متابعة التشغيل");
+}
+
+function renderCleaning(){
+  renderEmpty("النظافة");
+}
+
+/* تشغيل */
 renderHome();
