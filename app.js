@@ -1,6 +1,7 @@
 const app = document.getElementById("app");
 
 let chefSections = [];
+let chefs = [];
 
 function todayDate(){
   return new Date().toLocaleDateString("ar-SA", {
@@ -57,7 +58,6 @@ function renderPage(title){
         <h2>${title}</h2>
         <button class="btn btn-light" onclick="renderHome()">رجوع</button>
       </div>
-
       <div class="panel placeholder">${title}</div>
     </main>
   `;
@@ -81,10 +81,25 @@ function renderSettings(){
       </div>
 
       <div id="sectionsContainer" class="grid" style="margin-top:16px"></div>
+
+      <div class="panel" style="margin-top:16px">
+        <h3 style="margin-bottom:15px">الشيفات</h3>
+
+        <input id="chefName" placeholder="اسم الشيف">
+        <input id="chefCode" type="number" placeholder="كود الشيف">
+
+        <select id="chefSection"></select>
+
+        <button class="btn btn-main" onclick="addChef()">إضافة شيف</button>
+      </div>
+
+      <div id="chefsContainer" class="grid" style="margin-top:16px"></div>
     </main>
   `;
 
   drawSections();
+  drawChefSectionOptions();
+  drawChefs();
 }
 
 function addSection(){
@@ -102,6 +117,7 @@ function addSection(){
   document.getElementById("sectionIcon").value = "";
 
   drawSections();
+  drawChefSectionOptions();
 }
 
 function drawSections(){
@@ -121,6 +137,63 @@ function drawSections(){
     <div class="card">
       <div class="icon">${section.icon}</div>
       <div class="card-title">${section.name}</div>
+    </div>
+  `).join("");
+}
+
+function drawChefSectionOptions(){
+  const select = document.getElementById("chefSection");
+  if(!select) return;
+
+  if(chefSections.length === 0){
+    select.innerHTML = `<option value="">لا توجد أقسام</option>`;
+    return;
+  }
+
+  select.innerHTML = chefSections.map(section => `
+    <option value="${section.name}">${section.name}</option>
+  `).join("");
+}
+
+function addChef(){
+  const name = document.getElementById("chefName").value.trim();
+  const code = document.getElementById("chefCode").value.trim();
+  const section = document.getElementById("chefSection").value;
+
+  if(!name || !code || !section) return;
+
+  chefs.push({
+    name,
+    code,
+    section
+  });
+
+  document.getElementById("chefName").value = "";
+  document.getElementById("chefCode").value = "";
+
+  drawChefs();
+}
+
+function drawChefs(){
+  const box = document.getElementById("chefsContainer");
+  if(!box) return;
+
+  if(chefs.length === 0){
+    box.innerHTML = `
+      <div class="panel placeholder">
+        لا يوجد شيفات
+      </div>
+    `;
+    return;
+  }
+
+  box.innerHTML = chefs.map(chef => `
+    <div class="card">
+      <div class="icon">👨‍🍳</div>
+      <div class="card-title">${chef.name}</div>
+      <div style="margin-top:8px;color:#7b8674;font-weight:700">
+        ${chef.section} - ${chef.code}
+      </div>
     </div>
   `).join("");
 }
@@ -170,19 +243,45 @@ function renderChefCode(sectionName){
       </div>
 
       <div class="panel">
-        <input id="chefCode" placeholder="كود الشيف">
-        <button class="btn btn-main" onclick="renderChefDashboard('${sectionName}')">دخول</button>
+        <input id="chefCode" type="number" placeholder="كود الشيف">
+        <button class="btn btn-main" onclick="checkChefCode('${sectionName}')">دخول</button>
       </div>
+
+      <div id="chefMessage" class="panel placeholder" style="margin-top:16px;display:none"></div>
     </main>
   `;
 }
 
-function renderChefDashboard(sectionName){
+function checkChefCode(sectionName){
+  const code = document.getElementById("chefCode").value.trim();
+
+  const chef = chefs.find(item =>
+    item.code === code && item.section === sectionName
+  );
+
+  const message = document.getElementById("chefMessage");
+
+  if(!chef){
+    message.style.display = "block";
+    message.textContent = "الكود غير صحيح";
+    return;
+  }
+
+  renderChefDashboard(chef);
+}
+
+function renderChefDashboard(chef){
   app.innerHTML = `
     <main class="app">
       <div class="page-head">
-        <h2>${sectionName}</h2>
+        <h2>${chef.name}</h2>
         <button class="btn btn-light" onclick="renderChefs()">رجوع</button>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px;text-align:center">
+        <div style="font-size:48px">👨‍🍳</div>
+        <h2>${chef.name}</h2>
+        <div style="color:#7b8674;font-weight:700">${chef.section}</div>
       </div>
 
       <section class="grid">
