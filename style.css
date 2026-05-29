@@ -2,7 +2,6 @@
   --green:#4e8f2f;
   --green-dark:#2f5f1f;
   --yellow:#f4c542;
-  --cream:#f7f8ef;
   --card:#ffffff;
   --text:#263322;
   --muted:#7b8674;
@@ -30,14 +29,14 @@ body{
 .app{
   width:min(1200px,100%);
   margin:auto;
-  padding:20px;
+  padding:18px;
 }
 
 .topbar{
   display:flex;
   justify-content:space-between;
   align-items:center;
-  margin-bottom:15px;
+  margin-bottom:16px;
 }
 
 .btn{
@@ -50,18 +49,18 @@ body{
 
 .btn-main{
   background:var(--green);
-  color:#fff;
+  color:white;
 }
 
 .btn-light{
-  background:#fff;
-  color:var(--green);
+  background:white;
+  color:var(--green-dark);
   border:1px solid var(--border);
 }
 
 .hero{
   background:rgba(255,255,255,.85);
-  border-radius:35px;
+  border-radius:34px;
   padding:30px;
   text-align:center;
   margin-bottom:20px;
@@ -69,61 +68,51 @@ body{
 }
 
 .logo{
-  width:160px;
-  height:160px;
+  width:150px;
+  height:150px;
   object-fit:contain;
 }
 
 .hero-title{
-  font-size:34px;
-  color:var(--green-dark);
+  font-size:32px;
   font-weight:900;
-  margin-top:10px;
+  color:var(--green-dark);
 }
 
 .hero-date{
   color:var(--muted);
-  margin-top:6px;
+  margin-top:5px;
 }
 
 .grid{
   display:grid;
   grid-template-columns:repeat(2,1fr);
-  gap:18px;
+  gap:16px;
 }
 
 .card{
-  background:#fff;
-  border-radius:30px;
-  min-height:180px;
+  background:white;
+  border-radius:28px;
+  min-height:170px;
   box-shadow:var(--shadow);
   display:flex;
   flex-direction:column;
   justify-content:center;
   align-items:center;
   cursor:pointer;
-  transition:.2s;
-}
-
-.card:hover{
-  transform:translateY(-5px);
 }
 
 .icon{
-  font-size:55px;
+  font-size:50px;
   margin-bottom:10px;
 }
 
 .card-title{
-  font-size:22px;
+  font-size:20px;
   font-weight:900;
 }
 
 @media(max-width:700px){
-
-.grid{
-  grid-template-columns:1fr 1fr;
-}
 
 .logo{
   width:120px;
@@ -131,15 +120,15 @@ body{
 }
 
 .hero-title{
-  font-size:25px;
+  font-size:24px;
 }
 
 .card{
-  min-height:150px;
+  min-height:145px;
 }
 
 .icon{
-  font-size:45px;
+  font-size:42px;
 }
 
 .card-title{
