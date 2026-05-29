@@ -1,14 +1,37 @@
-
 const app = document.getElementById("app");
 
-const today = new Date().toLocaleDateString("ar-SA", {
-  weekday: "long",
-  year: "numeric",
-  month: "long",
-  day: "numeric"
-});
+function backHome(){
+  renderHome();
+}
+
+function page(title){
+  app.innerHTML = `
+    <main class="app">
+      <div class="topbar">
+        <button class="btn btn-light" onclick="backHome()">رجوع</button>
+      </div>
+      <section class="hero">
+        <h1 class="hero-title">${title}</h1>
+      </section>
+    </main>
+  `;
+}
+
+function renderSettings(){ page("الإعدادات"); }
+function renderAdmin(){ page("الإدارة"); }
+function renderOperations(){ page("متابعة التشغيل"); }
+function renderCleaning(){ page("النظافة"); }
+function renderChefs(){ page("الشيفات"); }
+function renderWarehouse(){ page("المستودع"); }
 
 function renderHome(){
+  const today = new Date().toLocaleDateString("ar-SA", {
+    weekday:"long",
+    year:"numeric",
+    month:"long",
+    day:"numeric"
+  });
+
   app.innerHTML = `
     <main class="app">
 
