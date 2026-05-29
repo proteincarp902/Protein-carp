@@ -1,4 +1,4 @@
-/* Protein & Carb Operations - Cloud UI + Cleaning V1 */
+/* Protein & Carb Operations - Cloud UI + Cleaning + Operations */
 
 const app = document.getElementById("app");
 
@@ -9,6 +9,8 @@ let warehouseOrders = [];
 let dismissedAlerts = [];
 let cleaningTasks = [];
 let cleaningLogs = [];
+let operationTasks = [];
+let operationLogs = [];
 
 let systemSettings = {
   adminPassword: "0000",
@@ -174,6 +176,18 @@ async function initCloud(){
     snap.forEach(d => cleaningLogs.push({ id:d.id, ...d.data() }));
     refreshViews();
   });
+
+  onSnapshot(collection(db, "operation_tasks"), snap => {
+    operationTasks = [];
+    snap.forEach(d => operationTasks.push({ id:d.id, ...d.data() }));
+    refreshViews();
+  });
+
+  onSnapshot(collection(db, "operation_logs"), snap => {
+    operationLogs = [];
+    snap.forEach(d => operationLogs.push({ id:d.id, ...d.data() }));
+    refreshViews();
+  });
 }
 
 function refreshViews(){
@@ -186,6 +200,9 @@ function refreshViews(){
   if(document.getElementById("adminAlertsBox")) drawAdminAlerts();
   if(document.getElementById("cleaningTasksContainer")) drawCleaningTasks();
   if(document.getElementById("cleaningAdminBox")) drawCleaningAdmin();
+  if(document.getElementById("operationTasksContainer")) drawOperationTasks();
+  if(document.getElementById("operationAdminBox")) drawOperationAdmin();
+  if(document.getElementById("operationRunBox")) drawOperationRunBox();
 }
 
 /* Settings */
@@ -447,9 +464,9 @@ function renderSettingsCleaning(){
 
       <label style="font-weight:800">الورديات</label>
 
-      <label><input id="cleanMorning" type="checkbox" checked> 🌅 صباح</label>
-      <label><input id="cleanAfternoon" type="checkbox" checked> ☀️ ظهر</label>
-      <label><input id="cleanNight" type="checkbox" checked> 🌙 ليل</label>
+      <label><input id="cleanMorning" type="checkbox" checked> صباح</label>
+      <label><input id="cleanAfternoon" type="checkbox" checked> ظهر</label>
+      <label><input id="cleanNight" type="checkbox" checked> ليل</label>
 
       <button class="btn btn-main" onclick="addCleaningTask()">➕ إضافة مهمة</button>
     </div>
@@ -495,9 +512,9 @@ function drawCleaningTasks(){
     <div class="panel" style="margin-bottom:10px">
       <h3>${task.nameAr}</h3>
       <div style="color:#7b8674;font-weight:800;margin-top:8px">
-        ${task.morning ? "🌅 صباح " : ""}
-        ${task.afternoon ? "☀️ ظهر " : ""}
-        ${task.night ? "🌙 ليل" : ""}
+        ${task.morning ? "صباح " : ""}
+        ${task.afternoon ? "ظهر " : ""}
+        ${task.night ? "ليل" : ""}
       </div>
       <button class="btn btn-light" style="margin-top:12px" onclick="deleteCleaningTask('${task.id}')">🗑 حذف</button>
     </div>
@@ -507,6 +524,69 @@ function drawCleaningTasks(){
 async function deleteCleaningTask(id){
   const { db, doc, deleteDoc } = window.firebaseDB;
   await deleteDoc(doc(db, "cleaning_tasks", id));
+}
+
+/* Settings Operations */
+
+function renderSettingsOperations(){
+  pageLayout("مهام التشغيل", `
+    <div class="panel">
+      <h3 style="margin-bottom:15px">إضافة مهمة تشغيل</h3>
+
+      <label style="font-weight:800">اسم المهمة</label>
+      <input id="operationTaskName" placeholder="مثال: تشغيل الشوايات">
+
+      <label style="font-weight:800">الفترة / الوقت</label>
+      <input id="operationTaskPeriod" placeholder="مثال: قبل الافتتاح أو 12 ظهر أو قبل الإغلاق">
+
+      <button class="btn btn-main" onclick="addOperationTask()">➕ إضافة مهمة</button>
+    </div>
+
+    <div id="operationTasksContainer" style="margin-top:16px"></div>
+  `, "renderSettings()");
+
+  drawOperationTasks();
+}
+
+async function addOperationTask(){
+  const name = document.getElementById("operationTaskName").value.trim();
+  const period = document.getElementById("operationTaskPeriod").value.trim();
+
+  if(!name || !period) return;
+
+  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
+
+  await addDoc(collection(db, "operation_tasks"), {
+    name,
+    period,
+    createdAt: serverTimestamp()
+  });
+
+  document.getElementById("operationTaskName").value = "";
+  document.getElementById("operationTaskPeriod").value = "";
+}
+
+function drawOperationTasks(){
+  const box = document.getElementById("operationTasksContainer");
+  if(!box) return;
+
+  if(operationTasks.length === 0){
+    box.innerHTML = `<div class="panel placeholder">لا توجد مهام تشغيل</div>`;
+    return;
+  }
+
+  box.innerHTML = operationTasks.map(task => `
+    <div class="panel" style="margin-bottom:10px">
+      <h3>${task.name}</h3>
+      <div style="color:#7b8674;font-weight:800;margin-top:8px">${task.period}</div>
+      <button class="btn btn-light" style="margin-top:12px" onclick="deleteOperationTask('${task.id}')">🗑 حذف</button>
+    </div>
+  `).join("");
+}
+
+async function deleteOperationTask(id){
+  const { db, doc, deleteDoc } = window.firebaseDB;
+  await deleteDoc(doc(db, "operation_tasks", id));
 }
 
 /* Settings Passwords */
@@ -536,10 +616,6 @@ async function savePasswords(){
   }, { merge:true });
 
   alert("تم حفظ كلمات المرور");
-}
-
-function renderSettingsOperations(){
-  pageLayout("مهام التشغيل", `<div class="panel placeholder">جاهز للمرحلة التالية</div>`, "renderSettings()");
 }
 
 /* Chefs */
@@ -869,22 +945,19 @@ function renderCleaning(){
 }
 
 function renderCleaningLang(lang){
-  const arTitle = lang === "bn" ? "পরিষ্কার" : "النظافة";
+  const title = lang === "bn" ? "পরিষ্কার" : "النظافة";
 
-  pageLayout(arTitle, `
+  pageLayout(title, `
     <section class="grid">
       <div class="card" onclick="renderCleaningShift('${lang}','morning')">
-        <div class="icon">🌅</div>
         <div class="card-title">${lang === "bn" ? shiftLabels.morning.bn : shiftLabels.morning.ar}</div>
       </div>
 
       <div class="card" onclick="renderCleaningShift('${lang}','afternoon')">
-        <div class="icon">☀️</div>
         <div class="card-title">${lang === "bn" ? shiftLabels.afternoon.bn : shiftLabels.afternoon.ar}</div>
       </div>
 
       <div class="card" onclick="renderCleaningShift('${lang}','night')">
-        <div class="icon">🌙</div>
         <div class="card-title">${lang === "bn" ? shiftLabels.night.bn : shiftLabels.night.ar}</div>
       </div>
     </section>
@@ -940,11 +1013,104 @@ async function submitCleaning(shift){
     shift,
     entries,
     createdAtText:new Date().toLocaleString("ar-SA"),
+    timeMs:Date.now(),
     createdAt:serverTimestamp()
   });
 
   alert("تم حفظ النظافة");
   renderCleaning();
+}
+
+/* Operations */
+
+function renderOperations(){
+  pageLayout("متابعة التشغيل", `
+    <div class="panel">
+      <label style="font-weight:800">اسم مسؤول التشغيل</label>
+      <input id="operatorName" placeholder="اكتب اسم المسؤول">
+    </div>
+
+    <div id="operationRunBox" style="margin-top:16px"></div>
+  `, "renderHome()");
+
+  drawOperationRunBox();
+}
+
+function getOperationPeriods(){
+  return [...new Set(operationTasks.map(t => t.period).filter(Boolean))];
+}
+
+function drawOperationRunBox(){
+  const box = document.getElementById("operationRunBox");
+  if(!box) return;
+
+  if(operationTasks.length === 0){
+    box.innerHTML = `<div class="panel placeholder">لا توجد مهام تشغيل</div>`;
+    return;
+  }
+
+  const periods = getOperationPeriods();
+
+  box.innerHTML = periods.map(period => {
+    const tasks = operationTasks.filter(t => t.period === period);
+
+    return `
+      <div class="panel" style="margin-bottom:14px">
+        <h3>${period}</h3>
+
+        <div style="margin-top:12px">
+          ${tasks.map(task => {
+            const latest = getLatestOperationLog(task.id);
+            const checked = latest && latest.done ? "checked" : "";
+            const timeText = latest && latest.done ? `<div style="color:#7b8674;font-weight:800;margin-top:4px">تم: ${latest.completedAtText || ""} - ${latest.operatorName || ""}</div>` : "";
+
+            return `
+              <label style="display:block;margin:14px 0;font-weight:900">
+                <input type="checkbox" ${checked} onchange="toggleOperationTask('${task.id}', this.checked)">
+                ${task.name}
+                ${timeText}
+              </label>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function toggleOperationTask(taskId, done){
+  const operatorName = document.getElementById("operatorName")?.value.trim();
+
+  if(!operatorName){
+    alert("اكتب اسم مسؤول التشغيل أولاً");
+    drawOperationRunBox();
+    return;
+  }
+
+  const task = operationTasks.find(t => t.id === taskId);
+  if(!task) return;
+
+  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
+
+  await addDoc(collection(db, "operation_logs"), {
+    taskId:task.id,
+    taskName:task.name,
+    period:task.period,
+    done,
+    operatorName,
+    completedAtText:done ? new Date().toLocaleTimeString("ar-SA", { hour:"2-digit", minute:"2-digit" }) : "",
+    createdAtText:new Date().toLocaleString("ar-SA"),
+    timeMs:Date.now(),
+    createdAt:serverTimestamp()
+  });
+}
+
+function getLatestOperationLog(taskId){
+  const logs = operationLogs.filter(log => log.taskId === taskId);
+  if(logs.length === 0) return null;
+
+  logs.sort((a,b) => (a.timeMs || 0) - (b.timeMs || 0));
+  return logs[logs.length - 1];
 }
 
 /* Admin */
@@ -1008,7 +1174,7 @@ function renderAdmin(){
       <div class="card" onclick="renderAdminSection('الشيفات')"><div class="icon">👨‍🍳</div><div class="card-title">الشيفات</div></div>
       <div class="card" onclick="renderAdminSection('المستودع')"><div class="icon">📦</div><div class="card-title">المستودع</div></div>
       <div class="card" onclick="renderAdminCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
-      <div class="card" onclick="renderAdminSection('التشغيل')"><div class="icon">🏭</div><div class="card-title">التشغيل</div></div>
+      <div class="card" onclick="renderAdminOperations()"><div class="icon">🏭</div><div class="card-title">التشغيل</div></div>
       <div class="card" onclick="renderAdminSection('الجرد')"><div class="icon">📋</div><div class="card-title">الجرد</div></div>
       <div class="card" onclick="renderAdminSection('PDF')"><div class="icon">📄</div><div class="card-title">PDF</div></div>
     </section>
@@ -1055,6 +1221,8 @@ function renderAdminCleaning(){
 function getLatestCleaningLog(shift){
   const logs = cleaningLogs.filter(log => log.shift === shift);
   if(logs.length === 0) return null;
+
+  logs.sort((a,b) => (a.timeMs || 0) - (b.timeMs || 0));
   return logs[logs.length - 1];
 }
 
@@ -1070,19 +1238,19 @@ function drawCleaningAdmin(){
     if(!log){
       return `
         <div class="panel" style="margin-bottom:12px">
-          <h3>${shiftLabels[shift].icon} ${shiftLabels[shift].ar}</h3>
-          <p style="font-weight:900;color:#b91c1c;margin-top:8px">🔴 لم يبدأ</p>
+          <h3>${shiftLabels[shift].ar}</h3>
+          <p style="font-weight:900;color:#b91c1c;margin-top:8px">لم يبدأ</p>
         </div>
       `;
     }
 
     const total = log.entries ? log.entries.length : 0;
     const done = log.entries ? log.entries.filter(e => e.done).length : 0;
-    const status = total > 0 && done === total ? "🟢 مكتمل" : "🟡 ناقص";
+    const status = total > 0 && done === total ? "مكتمل" : "ناقص";
 
     return `
       <div class="panel" style="margin-bottom:12px">
-        <h3>${shiftLabels[shift].icon} ${shiftLabels[shift].ar}</h3>
+        <h3>${shiftLabels[shift].ar}</h3>
         <p style="font-weight:900;margin-top:8px">${status}</p>
         <p style="color:#7b8674;font-weight:800">${log.createdAtText || ""}</p>
 
@@ -1090,7 +1258,65 @@ function drawCleaningAdmin(){
           ${(log.entries || []).map(entry => `
             <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
               <span>${entry.nameAr}</span>
-              <b>${entry.done ? "✅" : "❌"}</b>
+              <b>${entry.done ? "تم" : "لم يتم"}</b>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderAdminOperations(){
+  pageLayout("تقرير التشغيل", `<div id="operationAdminBox"></div>`, "renderAdmin()");
+  drawOperationAdmin();
+}
+
+function drawOperationAdmin(){
+  const box = document.getElementById("operationAdminBox");
+  if(!box) return;
+
+  if(operationTasks.length === 0){
+    box.innerHTML = `<div class="panel placeholder">لا توجد مهام تشغيل</div>`;
+    return;
+  }
+
+  const periods = getOperationPeriods();
+
+  box.innerHTML = periods.map(period => {
+    const tasks = operationTasks.filter(t => t.period === period);
+
+    const rows = tasks.map(task => {
+      const latest = getLatestOperationLog(task.id);
+
+      return {
+        task,
+        latest,
+        done: latest && latest.done
+      };
+    });
+
+    const total = rows.length;
+    const doneCount = rows.filter(r => r.done).length;
+    const status = total > 0 && total === doneCount ? "مكتمل" : "ناقص";
+
+    return `
+      <div class="panel" style="margin-bottom:14px">
+        <h3>${period}</h3>
+        <p style="font-weight:900;margin-top:8px">${status}</p>
+
+        <div style="margin-top:12px">
+          ${rows.map(row => `
+            <div style="border-bottom:1px solid #e5eadb;padding:10px 0">
+              <div style="display:flex;justify-content:space-between;gap:10px">
+                <span>${row.task.name}</span>
+                <b>${row.done ? "تم" : "لم يتم"}</b>
+              </div>
+              ${
+                row.latest && row.latest.done
+                ? `<div style="color:#7b8674;font-weight:800;margin-top:4px">${row.latest.completedAtText || ""} - ${row.latest.operatorName || ""}</div>`
+                : ""
+              }
             </div>
           `).join("")}
         </div>
@@ -1102,10 +1328,6 @@ function drawCleaningAdmin(){
 function renderAdminSection(title){
   pageLayout(title, `<div class="panel placeholder">${title}</div>`, "renderAdmin()");
 }
-
-/* Operations */
-
-function renderOperations(){ renderEmpty("متابعة التشغيل"); }
 
 /* Start */
 
