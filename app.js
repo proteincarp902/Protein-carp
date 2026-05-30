@@ -1,4 +1,4 @@
-/* Protein & Carb Operations - Cloud UI + Cleaning + Operations */
+/* Protein & Carb Operations - Cloud Full Core */
 
 const app = document.getElementById("app");
 
@@ -11,6 +11,10 @@ let cleaningTasks = [];
 let cleaningLogs = [];
 let operationTasks = [];
 let operationLogs = [];
+let productionLogs = [];
+let warehouseStaff = [];
+let internalDestinations = [];
+let internalIssues = [];
 
 let systemSettings = {
   adminPassword: "0000",
@@ -20,13 +24,16 @@ let systemSettings = {
 
 let currentChef = null;
 let currentCart = [];
+let productionDraft = [];
+let internalIssueCart = [];
+
 let currentBackFn = "renderHome()";
 let isPhoneBack = false;
 
 const shiftLabels = {
-  morning:{ ar:"صباح", bn:"সকাল", icon:"🌅" },
-  afternoon:{ ar:"ظهر", bn:"দুপুর", icon:"☀️" },
-  night:{ ar:"ليل", bn:"রাত", icon:"🌙" }
+  morning:{ ar:"صباح", bn:"সকাল" },
+  afternoon:{ ar:"ظهر", bn:"দুপুর" },
+  night:{ ar:"ليل", bn:"রাত" }
 };
 
 const cleaningBn = {
@@ -37,15 +44,12 @@ const cleaningBn = {
   "تنظيف الثلاجات":"ফ্রিজ পরিষ্কার",
   "تنظيف المغاسل":"বেসিন পরিষ্কার",
   "منطقة التحضير":"প্রস্তুতি এলাকা পরিষ্কার",
-  "سلات النفايات":"ডাস্টবিন পরিষ্কার",
-  "تنظيف الجدران":"দেয়াল পরিষ্কার",
-  "تنظيف الأبواب":"দরজা পরিষ্কার",
-  "تنظيف الرفوف":"তাক পরিষ্কার"
+  "سلات النفايات":"ডাস্টবিন পরিষ্কার"
 };
 
 function smartBack(){
-  const fn = currentBackFn || "renderHome()";
-  try{ new Function(fn)(); }catch(e){ renderHome(); }
+  try{ new Function(currentBackFn || "renderHome()")(); }
+  catch(e){ renderHome(); }
 }
 
 window.addEventListener("popstate", function(){
@@ -55,29 +59,31 @@ window.addEventListener("popstate", function(){
 });
 
 function todayDate(){
-  return new Date().toLocaleDateString("ar-SA", {
-    weekday:"long", year:"numeric", month:"long", day:"numeric"
-  });
+  return new Date().toLocaleDateString("ar-SA",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
+}
+
+function nowText(){
+  return new Date().toLocaleString("ar-SA");
+}
+
+function timeOnly(){
+  return new Date().toLocaleTimeString("ar-SA",{hour:"2-digit",minute:"2-digit"});
 }
 
 function waitForFirebase(){
-  return new Promise(resolve => {
-    const timer = setInterval(() => {
+  return new Promise(resolve=>{
+    const timer=setInterval(()=>{
       if(window.firebaseDB){
         clearInterval(timer);
         resolve(window.firebaseDB);
       }
-    }, 100);
+    },100);
   });
 }
 
-function pageLayout(title, content, backFn = "renderHome()"){
+function pageLayout(title, content, backFn="renderHome()"){
   currentBackFn = backFn;
-
-  if(!isPhoneBack){
-    history.pushState({ page:title }, "");
-  }
-
+  if(!isPhoneBack) history.pushState({page:title},"");
   app.innerHTML = `
     <main class="app">
       <div class="page-head">
@@ -91,6 +97,7 @@ function pageLayout(title, content, backFn = "renderHome()"){
 
 function renderHome(){
   currentBackFn = "renderHome()";
+  const newOrders = warehouseOrders.filter(o=>o.status==="جديد").length;
 
   app.innerHTML = `
     <main class="app">
@@ -109,7 +116,7 @@ function renderHome(){
         <div class="card" onclick="renderOperations()"><div class="icon">🏭</div><div class="card-title">متابعة التشغيل</div></div>
         <div class="card" onclick="renderCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
         <div class="card" onclick="renderChefs()"><div class="icon">👨‍🍳</div><div class="card-title">الشيفات</div></div>
-        <div class="card" onclick="renderWarehouseGate()"><div class="icon">📦</div><div class="card-title">المستودع</div></div>
+        <div class="card" onclick="renderWarehouseGate()"><div class="icon">📦</div><div class="card-title">المستودع ${newOrders ? `(${newOrders})` : ""}</div></div>
       </section>
     </main>
   `;
@@ -124,70 +131,36 @@ function renderEmpty(title){
 async function initCloud(){
   const { db, doc, getDoc, setDoc, collection, onSnapshot } = await waitForFirebase();
 
-  const settingsRef = doc(db, "settings", "system");
+  const settingsRef = doc(db,"settings","system");
   const snap = await getDoc(settingsRef);
+  if(!snap.exists()) await setDoc(settingsRef,systemSettings);
 
-  if(!snap.exists()){
-    await setDoc(settingsRef, systemSettings);
-  }
-
-  onSnapshot(settingsRef, s => {
-    if(s.exists()) systemSettings = { ...systemSettings, ...s.data() };
+  onSnapshot(settingsRef,s=>{
+    if(s.exists()) systemSettings = {...systemSettings,...s.data()};
   });
 
-  onSnapshot(collection(db, "chef_sections"), snap => {
-    chefSections = [];
-    snap.forEach(d => chefSections.push({ id:d.id, ...d.data() }));
-    refreshViews();
-  });
+  const listen = (name, setter) => {
+    onSnapshot(collection(db,name), snap=>{
+      const arr=[];
+      snap.forEach(d=>arr.push({id:d.id,...d.data()}));
+      setter(arr);
+      refreshViews();
+    });
+  };
 
-  onSnapshot(collection(db, "chefs"), snap => {
-    chefs = [];
-    snap.forEach(d => chefs.push({ id:d.id, ...d.data() }));
-    refreshViews();
-  });
-
-  onSnapshot(collection(db, "warehouse_items"), snap => {
-    warehouseItems = [];
-    snap.forEach(d => warehouseItems.push({ id:d.id, ...d.data() }));
-    refreshViews();
-  });
-
-  onSnapshot(collection(db, "warehouse_orders"), snap => {
-    warehouseOrders = [];
-    snap.forEach(d => warehouseOrders.push({ id:d.id, ...d.data() }));
-    refreshViews();
-  });
-
-  onSnapshot(collection(db, "dismissed_alerts"), snap => {
-    dismissedAlerts = [];
-    snap.forEach(d => dismissedAlerts.push({ id:d.id, ...d.data() }));
-    refreshViews();
-  });
-
-  onSnapshot(collection(db, "cleaning_tasks"), snap => {
-    cleaningTasks = [];
-    snap.forEach(d => cleaningTasks.push({ id:d.id, ...d.data() }));
-    refreshViews();
-  });
-
-  onSnapshot(collection(db, "cleaning_logs"), snap => {
-    cleaningLogs = [];
-    snap.forEach(d => cleaningLogs.push({ id:d.id, ...d.data() }));
-    refreshViews();
-  });
-
-  onSnapshot(collection(db, "operation_tasks"), snap => {
-    operationTasks = [];
-    snap.forEach(d => operationTasks.push({ id:d.id, ...d.data() }));
-    refreshViews();
-  });
-
-  onSnapshot(collection(db, "operation_logs"), snap => {
-    operationLogs = [];
-    snap.forEach(d => operationLogs.push({ id:d.id, ...d.data() }));
-    refreshViews();
-  });
+  listen("chef_sections", v=>chefSections=v);
+  listen("chefs", v=>chefs=v);
+  listen("warehouse_items", v=>warehouseItems=v);
+  listen("warehouse_orders", v=>warehouseOrders=v);
+  listen("dismissed_alerts", v=>dismissedAlerts=v);
+  listen("cleaning_tasks", v=>cleaningTasks=v);
+  listen("cleaning_logs", v=>cleaningLogs=v);
+  listen("operation_tasks", v=>operationTasks=v);
+  listen("operation_logs", v=>operationLogs=v);
+  listen("production_logs", v=>productionLogs=v);
+  listen("warehouse_staff", v=>warehouseStaff=v);
+  listen("internal_destinations", v=>internalDestinations=v);
+  listen("internal_issues", v=>internalIssues=v);
 }
 
 function refreshViews(){
@@ -203,6 +176,10 @@ function refreshViews(){
   if(document.getElementById("operationTasksContainer")) drawOperationTasks();
   if(document.getElementById("operationAdminBox")) drawOperationAdmin();
   if(document.getElementById("operationRunBox")) drawOperationRunBox();
+  if(document.getElementById("productionAdminBox")) drawProductionAdmin();
+  if(document.getElementById("internalIssueAdminBox")) drawInternalIssueAdmin();
+  if(document.getElementById("warehouseStaffBox")) drawWarehouseStaff();
+  if(document.getElementById("internalDestinationsBox")) drawInternalDestinations();
 }
 
 /* Settings */
@@ -233,9 +210,10 @@ function renderSettings(){
       <div class="card" onclick="renderSettingsWarehouseItems()"><div class="icon">📦</div><div class="card-title">أصناف المستودع</div></div>
       <div class="card" onclick="renderSettingsCleaning()"><div class="icon">🧹</div><div class="card-title">عناصر النظافة</div></div>
       <div class="card" onclick="renderSettingsOperations()"><div class="icon">🏭</div><div class="card-title">مهام التشغيل</div></div>
+      <div class="card" onclick="renderSettingsInternalIssue()"><div class="icon">📤</div><div class="card-title">إعدادات الصرف الداخلي</div></div>
       <div class="card" onclick="renderSettingsPasswords()"><div class="icon">🔐</div><div class="card-title">كلمات المرور</div></div>
     </section>
-  `, "renderHome()");
+  `,"renderHome()");
 }
 
 /* Settings Sections */
@@ -243,52 +221,39 @@ function renderSettings(){
 function renderSettingsSections(){
   pageLayout("أقسام الشيفات", `
     <div class="panel">
-      <h3 style="margin-bottom:15px">إضافة قسم</h3>
-      <label style="font-weight:800">اسم القسم</label>
+      <h3>إضافة قسم</h3>
+      <label>اسم القسم</label>
       <input id="sectionName" placeholder="مثال: الحلويات">
-      <label style="font-weight:800">الأيقونة</label>
+      <label>الأيقونة</label>
       <input id="sectionIcon" placeholder="مثال: 🍰">
       <button class="btn btn-main" onclick="addSection()">➕ إضافة قسم</button>
     </div>
     <div id="sectionsContainer" class="grid" style="margin-top:16px"></div>
-  `, "renderSettings()");
+  `,"renderSettings()");
   drawSections();
 }
 
 async function addSection(){
-  const name = document.getElementById("sectionName").value.trim();
-  const icon = document.getElementById("sectionIcon").value.trim();
+  const name=document.getElementById("sectionName").value.trim();
+  const icon=document.getElementById("sectionIcon").value.trim();
   if(!name) return;
 
-  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
-  await addDoc(collection(db, "chef_sections"), {
-    name,
-    icon: icon || "🍽️",
-    createdAt: serverTimestamp()
-  });
-
-  document.getElementById("sectionName").value = "";
-  document.getElementById("sectionIcon").value = "";
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  await addDoc(collection(db,"chef_sections"),{name,icon:icon||"🍽️",createdAt:serverTimestamp()});
+  document.getElementById("sectionName").value="";
+  document.getElementById("sectionIcon").value="";
 }
 
 function drawSections(){
-  const box = document.getElementById("sectionsContainer");
+  const box=document.getElementById("sectionsContainer");
   if(!box) return;
-
-  box.innerHTML = chefSections.length
-    ? chefSections.map(section => `
-      <div class="card">
-        <div class="icon">${section.icon || "🍽️"}</div>
-        <div class="card-title">${section.name}</div>
-        <button class="btn btn-light" style="margin-top:12px" onclick="deleteSection('${section.id}')">🗑 حذف</button>
-      </div>
-    `).join("")
-    : `<div class="panel placeholder">لا توجد أقسام</div>`;
-}
-
-async function deleteSection(id){
-  const { db, doc, deleteDoc } = window.firebaseDB;
-  await deleteDoc(doc(db, "chef_sections", id));
+  box.innerHTML = chefSections.length ? chefSections.map(s=>`
+    <div class="card">
+      <div class="icon">${s.icon||"🍽️"}</div>
+      <div class="card-title">${s.name}</div>
+      <button class="btn btn-light" style="margin-top:12px" onclick="deleteDocByPath('chef_sections','${s.id}')">🗑 حذف</button>
+    </div>
+  `).join("") : `<div class="panel placeholder">لا توجد أقسام</div>`;
 }
 
 /* Settings Chefs */
@@ -296,88 +261,68 @@ async function deleteSection(id){
 function renderSettingsChefs(){
   pageLayout("إدارة الشيفات", `
     <div class="panel">
-      <h3 style="margin-bottom:15px">إضافة شيف</h3>
-      <label style="font-weight:800">اسم الشيف</label>
+      <h3>إضافة شيف</h3>
+      <label>اسم الشيف</label>
       <input id="chefName" placeholder="مثال: أحمد">
-      <label style="font-weight:800">كود الشيف</label>
+      <label>كود الشيف</label>
       <input id="chefCode" type="number" placeholder="مثال: 1001">
-      <label style="font-weight:800">القسم</label>
+      <label>القسم</label>
       <select id="chefSection"></select>
       <button class="btn btn-main" onclick="addChef()">➕ إضافة شيف</button>
     </div>
     <div id="chefsContainer" class="grid" style="margin-top:16px"></div>
-  `, "renderSettings()");
-
+  `,"renderSettings()");
   drawChefSectionOptions();
   drawChefs();
 }
 
 function drawChefSectionOptions(){
-  const select = document.getElementById("chefSection");
+  const select=document.getElementById("chefSection");
   if(!select) return;
-
-  select.innerHTML = chefSections.length
-    ? chefSections.map(s => `<option value="${s.name}">${s.name}</option>`).join("")
-    : `<option value="">لا توجد أقسام</option>`;
+  select.innerHTML = chefSections.length ? chefSections.map(s=>`<option value="${s.name}">${s.name}</option>`).join("") : `<option value="">لا توجد أقسام</option>`;
 }
 
 async function addChef(){
-  const name = document.getElementById("chefName").value.trim();
-  const code = document.getElementById("chefCode").value.trim();
-  const section = document.getElementById("chefSection").value;
+  const name=document.getElementById("chefName").value.trim();
+  const code=document.getElementById("chefCode").value.trim();
+  const section=document.getElementById("chefSection").value;
+  if(!name||!code||!section) return;
 
-  if(!name || !code || !section) return;
-
-  if(chefs.some(c => c.code === code)){
+  if(chefs.some(c=>c.code===code)){
     alert("الكود مستخدم");
     return;
   }
 
-  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
-
-  await addDoc(collection(db, "chefs"), {
-    name,
-    code,
-    section,
-    createdAt: serverTimestamp()
-  });
-
-  document.getElementById("chefName").value = "";
-  document.getElementById("chefCode").value = "";
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  await addDoc(collection(db,"chefs"),{name,code,section,createdAt:serverTimestamp()});
+  document.getElementById("chefName").value="";
+  document.getElementById("chefCode").value="";
 }
 
 function drawChefs(){
-  const box = document.getElementById("chefsContainer");
+  const box=document.getElementById("chefsContainer");
   if(!box) return;
-
-  box.innerHTML = chefs.length
-    ? chefs.map(chef => `
-      <div class="card">
-        <div class="icon">👨‍🍳</div>
-        <div class="card-title">${chef.name}</div>
-        <div style="margin-top:8px;color:#7b8674;font-weight:700">${chef.section} - ${chef.code}</div>
-        <button class="btn btn-light" style="margin-top:12px" onclick="deleteChef('${chef.id}')">🗑 حذف</button>
-      </div>
-    `).join("")
-    : `<div class="panel placeholder">لا يوجد شيفات</div>`;
+  box.innerHTML = chefs.length ? chefs.map(c=>`
+    <div class="card">
+      <div class="icon">👨‍🍳</div>
+      <div class="card-title">${c.name}</div>
+      <div style="margin-top:8px;color:#7b8674;font-weight:700">${c.section} - ${c.code}</div>
+      <button class="btn btn-light" style="margin-top:12px" onclick="deleteDocByPath('chefs','${c.id}')">🗑 حذف</button>
+    </div>
+  `).join("") : `<div class="panel placeholder">لا يوجد شيفات</div>`;
 }
 
-async function deleteChef(id){
-  const { db, doc, deleteDoc } = window.firebaseDB;
-  await deleteDoc(doc(db, "chefs", id));
-}
-
-/* Settings Warehouse Items */
+/* Warehouse Items */
 
 function renderSettingsWarehouseItems(){
   pageLayout("أصناف المستودع", `
     <div class="panel">
-      <h3 style="margin-bottom:15px">إضافة صنف</h3>
-      <label style="font-weight:800">اسم الصنف</label>
+      <h3>إضافة صنف</h3>
+      <label>اسم الصنف</label>
       <input id="warehouseItemName" placeholder="مثال: صدر دجاج">
-      <label style="font-weight:800">كود الصنف</label>
+      <label>كود الصنف</label>
       <input id="warehouseItemCode" placeholder="مثال: CH001">
-      <label style="font-weight:800">الوحدة</label>
+      <label>الوحدة</label>
       <select id="warehouseItemUnit">
         <option>كجم</option><option>جرام</option><option>لتر</option><option>مل</option>
         <option>حبة</option><option>كرتون</option><option>صندوق</option><option>ربطة</option>
@@ -388,255 +333,249 @@ function renderSettingsWarehouseItems(){
       <input id="warehouseSearch" placeholder="🔍 بحث باسم الصنف أو الكود" oninput="drawWarehouseItems()">
       <div id="warehouseItemsContainer"></div>
     </div>
-  `, "renderSettings()");
+  `,"renderSettings()");
   drawWarehouseItems();
 }
 
 async function addWarehouseItem(){
-  const name = document.getElementById("warehouseItemName").value.trim();
-  const code = document.getElementById("warehouseItemCode").value.trim();
-  const unit = document.getElementById("warehouseItemUnit").value;
+  const name=document.getElementById("warehouseItemName").value.trim();
+  const code=document.getElementById("warehouseItemCode").value.trim();
+  const unit=document.getElementById("warehouseItemUnit").value;
+  if(!name||!code) return;
 
-  if(!name || !code) return;
-
-  if(warehouseItems.some(i => i.code === code)){
+  if(warehouseItems.some(i=>i.code===code)){
     alert("كود الصنف مستخدم");
     return;
   }
 
-  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
-
-  await addDoc(collection(db, "warehouse_items"), {
-    name,
-    code,
-    unit,
-    createdAt: serverTimestamp()
-  });
-
-  document.getElementById("warehouseItemName").value = "";
-  document.getElementById("warehouseItemCode").value = "";
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  await addDoc(collection(db,"warehouse_items"),{name,code,unit,createdAt:serverTimestamp()});
+  document.getElementById("warehouseItemName").value="";
+  document.getElementById("warehouseItemCode").value="";
 }
 
 function drawWarehouseItems(){
-  const box = document.getElementById("warehouseItemsContainer");
+  const box=document.getElementById("warehouseItemsContainer");
   if(!box) return;
 
-  const search = (document.getElementById("warehouseSearch")?.value || "").trim().toLowerCase();
+  const search=(document.getElementById("warehouseSearch")?.value||"").trim().toLowerCase();
+  const list=warehouseItems.filter(i=>i.name.toLowerCase().includes(search)||i.code.toLowerCase().includes(search));
 
-  const list = warehouseItems.filter(item =>
-    item.name.toLowerCase().includes(search) ||
-    item.code.toLowerCase().includes(search)
-  );
-
-  if(list.length === 0){
-    box.innerHTML = `<div class="placeholder">لا توجد أصناف</div>`;
+  if(!list.length){
+    box.innerHTML=`<div class="placeholder">لا توجد أصناف</div>`;
     return;
   }
 
-  box.innerHTML = `
+  box.innerHTML=`
     <div style="display:grid;gap:8px">
-      ${list.map(item => `
+      ${list.map(i=>`
         <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;background:#f9fbf5;border:1px solid #e5eadb;border-radius:16px;padding:12px;">
-          <b>${item.name}</b>
-          <span>${item.code}</span>
-          <span>${item.unit || ""}</span>
-          <button class="btn btn-light" onclick="deleteWarehouseItem('${item.id}')">🗑</button>
+          <b>${i.name}</b>
+          <span>${i.code}</span>
+          <span>${i.unit||""}</span>
+          <button class="btn btn-light" onclick="deleteDocByPath('warehouse_items','${i.id}')">🗑</button>
         </div>
       `).join("")}
     </div>
   `;
 }
 
-async function deleteWarehouseItem(id){
-  const { db, doc, deleteDoc } = window.firebaseDB;
-  await deleteDoc(doc(db, "warehouse_items", id));
-}
-
-/* Settings Cleaning */
+/* Cleaning Settings */
 
 function renderSettingsCleaning(){
   pageLayout("عناصر النظافة", `
     <div class="panel">
-      <h3 style="margin-bottom:15px">إضافة مهمة نظافة</h3>
-
-      <label style="font-weight:800">اسم المهمة بالعربي</label>
+      <h3>إضافة مهمة نظافة</h3>
+      <label>اسم المهمة بالعربي</label>
       <input id="cleaningTaskName" placeholder="مثال: دورات المياه">
-
-      <label style="font-weight:800">الورديات</label>
-
+      <label>الورديات</label>
       <label><input id="cleanMorning" type="checkbox" checked> صباح</label>
       <label><input id="cleanAfternoon" type="checkbox" checked> ظهر</label>
       <label><input id="cleanNight" type="checkbox" checked> ليل</label>
-
       <button class="btn btn-main" onclick="addCleaningTask()">➕ إضافة مهمة</button>
     </div>
-
     <div id="cleaningTasksContainer" style="margin-top:16px"></div>
-  `, "renderSettings()");
-
+  `,"renderSettings()");
   drawCleaningTasks();
 }
 
 async function addCleaningTask(){
-  const nameAr = document.getElementById("cleaningTaskName").value.trim();
-
-  const morning = document.getElementById("cleanMorning").checked;
-  const afternoon = document.getElementById("cleanAfternoon").checked;
-  const night = document.getElementById("cleanNight").checked;
-
+  const nameAr=document.getElementById("cleaningTaskName").value.trim();
   if(!nameAr) return;
-
-  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
-
-  await addDoc(collection(db, "cleaning_tasks"), {
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  await addDoc(collection(db,"cleaning_tasks"),{
     nameAr,
-    morning,
-    afternoon,
-    night,
-    createdAt: serverTimestamp()
+    morning:document.getElementById("cleanMorning").checked,
+    afternoon:document.getElementById("cleanAfternoon").checked,
+    night:document.getElementById("cleanNight").checked,
+    createdAt:serverTimestamp()
   });
-
-  document.getElementById("cleaningTaskName").value = "";
+  document.getElementById("cleaningTaskName").value="";
 }
 
 function drawCleaningTasks(){
-  const box = document.getElementById("cleaningTasksContainer");
+  const box=document.getElementById("cleaningTasksContainer");
   if(!box) return;
-
-  if(cleaningTasks.length === 0){
-    box.innerHTML = `<div class="panel placeholder">لا توجد مهام نظافة</div>`;
+  if(!cleaningTasks.length){
+    box.innerHTML=`<div class="panel placeholder">لا توجد مهام نظافة</div>`;
     return;
   }
-
-  box.innerHTML = cleaningTasks.map(task => `
+  box.innerHTML=cleaningTasks.map(t=>`
     <div class="panel" style="margin-bottom:10px">
-      <h3>${task.nameAr}</h3>
+      <h3>${t.nameAr}</h3>
       <div style="color:#7b8674;font-weight:800;margin-top:8px">
-        ${task.morning ? "صباح " : ""}
-        ${task.afternoon ? "ظهر " : ""}
-        ${task.night ? "ليل" : ""}
+        ${t.morning?"صباح ":""} ${t.afternoon?"ظهر ":""} ${t.night?"ليل":""}
       </div>
-      <button class="btn btn-light" style="margin-top:12px" onclick="deleteCleaningTask('${task.id}')">🗑 حذف</button>
+      <button class="btn btn-light" style="margin-top:12px" onclick="deleteDocByPath('cleaning_tasks','${t.id}')">🗑 حذف</button>
     </div>
   `).join("");
 }
 
-async function deleteCleaningTask(id){
-  const { db, doc, deleteDoc } = window.firebaseDB;
-  await deleteDoc(doc(db, "cleaning_tasks", id));
-}
-
-/* Settings Operations */
+/* Operations Settings */
 
 function renderSettingsOperations(){
   pageLayout("مهام التشغيل", `
     <div class="panel">
-      <h3 style="margin-bottom:15px">إضافة مهمة تشغيل</h3>
-
-      <label style="font-weight:800">اسم المهمة</label>
+      <h3>إضافة مهمة تشغيل</h3>
+      <label>اسم المهمة</label>
       <input id="operationTaskName" placeholder="مثال: تشغيل الشوايات">
-
-      <label style="font-weight:800">الفترة / الوقت</label>
+      <label>الفترة / الوقت</label>
       <input id="operationTaskPeriod" placeholder="مثال: قبل الافتتاح أو 12 ظهر أو قبل الإغلاق">
-
       <button class="btn btn-main" onclick="addOperationTask()">➕ إضافة مهمة</button>
     </div>
-
     <div id="operationTasksContainer" style="margin-top:16px"></div>
-  `, "renderSettings()");
-
+  `,"renderSettings()");
   drawOperationTasks();
 }
 
 async function addOperationTask(){
-  const name = document.getElementById("operationTaskName").value.trim();
-  const period = document.getElementById("operationTaskPeriod").value.trim();
-
-  if(!name || !period) return;
-
-  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
-
-  await addDoc(collection(db, "operation_tasks"), {
-    name,
-    period,
-    createdAt: serverTimestamp()
-  });
-
-  document.getElementById("operationTaskName").value = "";
-  document.getElementById("operationTaskPeriod").value = "";
+  const name=document.getElementById("operationTaskName").value.trim();
+  const period=document.getElementById("operationTaskPeriod").value.trim();
+  if(!name||!period) return;
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  await addDoc(collection(db,"operation_tasks"),{name,period,createdAt:serverTimestamp()});
+  document.getElementById("operationTaskName").value="";
+  document.getElementById("operationTaskPeriod").value="";
 }
 
 function drawOperationTasks(){
-  const box = document.getElementById("operationTasksContainer");
+  const box=document.getElementById("operationTasksContainer");
   if(!box) return;
-
-  if(operationTasks.length === 0){
-    box.innerHTML = `<div class="panel placeholder">لا توجد مهام تشغيل</div>`;
+  if(!operationTasks.length){
+    box.innerHTML=`<div class="panel placeholder">لا توجد مهام تشغيل</div>`;
     return;
   }
-
-  box.innerHTML = operationTasks.map(task => `
+  box.innerHTML=operationTasks.map(t=>`
     <div class="panel" style="margin-bottom:10px">
-      <h3>${task.name}</h3>
-      <div style="color:#7b8674;font-weight:800;margin-top:8px">${task.period}</div>
-      <button class="btn btn-light" style="margin-top:12px" onclick="deleteOperationTask('${task.id}')">🗑 حذف</button>
+      <h3>${t.name}</h3>
+      <div style="color:#7b8674;font-weight:800;margin-top:8px">${t.period}</div>
+      <button class="btn btn-light" style="margin-top:12px" onclick="deleteDocByPath('operation_tasks','${t.id}')">🗑 حذف</button>
     </div>
   `).join("");
 }
 
-async function deleteOperationTask(id){
-  const { db, doc, deleteDoc } = window.firebaseDB;
-  await deleteDoc(doc(db, "operation_tasks", id));
+/* Internal Issue Settings */
+
+function renderSettingsInternalIssue(){
+  pageLayout("إعدادات الصرف الداخلي", `
+    <div class="panel">
+      <h3>موظفي المستودع</h3>
+      <input id="warehouseStaffName" placeholder="اسم موظف المستودع">
+      <button class="btn btn-main" onclick="addWarehouseStaff()">➕ إضافة موظف</button>
+    </div>
+    <div id="warehouseStaffBox" style="margin-top:12px"></div>
+
+    <div class="panel" style="margin-top:16px">
+      <h3>جهات الصرف</h3>
+      <input id="internalDestinationName" placeholder="مثال: مطبخ العمال">
+      <button class="btn btn-main" onclick="addInternalDestination()">➕ إضافة جهة</button>
+    </div>
+    <div id="internalDestinationsBox" style="margin-top:12px"></div>
+  `,"renderSettings()");
+  drawWarehouseStaff();
+  drawInternalDestinations();
 }
 
-/* Settings Passwords */
+async function addWarehouseStaff(){
+  const name=document.getElementById("warehouseStaffName").value.trim();
+  if(!name) return;
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  await addDoc(collection(db,"warehouse_staff"),{name,createdAt:serverTimestamp()});
+  document.getElementById("warehouseStaffName").value="";
+}
+
+function drawWarehouseStaff(){
+  const box=document.getElementById("warehouseStaffBox");
+  if(!box) return;
+  box.innerHTML = warehouseStaff.length ? warehouseStaff.map(s=>`
+    <div class="panel" style="margin-bottom:8px">
+      <b>${s.name}</b>
+      <button class="btn btn-light" style="float:left" onclick="deleteDocByPath('warehouse_staff','${s.id}')">🗑</button>
+    </div>
+  `).join("") : `<div class="panel placeholder">لا يوجد موظفين</div>`;
+}
+
+async function addInternalDestination(){
+  const name=document.getElementById("internalDestinationName").value.trim();
+  if(!name) return;
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  await addDoc(collection(db,"internal_destinations"),{name,createdAt:serverTimestamp()});
+  document.getElementById("internalDestinationName").value="";
+}
+
+function drawInternalDestinations(){
+  const box=document.getElementById("internalDestinationsBox");
+  if(!box) return;
+  box.innerHTML = internalDestinations.length ? internalDestinations.map(d=>`
+    <div class="panel" style="margin-bottom:8px">
+      <b>${d.name}</b>
+      <button class="btn btn-light" style="float:left" onclick="deleteDocByPath('internal_destinations','${d.id}')">🗑</button>
+    </div>
+  `).join("") : `<div class="panel placeholder">لا توجد جهات صرف</div>`;
+}
+
+/* Passwords */
 
 function renderSettingsPasswords(){
   pageLayout("كلمات المرور", `
     <div class="panel">
-      <label style="font-weight:800">كلمة مرور الإدارة</label>
+      <label>كلمة مرور الإدارة</label>
       <input id="adminPasswordInput" type="password" placeholder="كلمة مرور الإدارة">
-      <label style="font-weight:800">كلمة مرور المستودع</label>
+      <label>كلمة مرور المستودع</label>
       <input id="warehousePasswordInput" type="password" placeholder="كلمة مرور المستودع">
       <button class="btn btn-main" onclick="savePasswords()">💾 حفظ كلمات المرور</button>
     </div>
-  `, "renderSettings()");
+  `,"renderSettings()");
 }
 
 async function savePasswords(){
-  const adminPassword = document.getElementById("adminPasswordInput").value.trim();
-  const warehousePassword = document.getElementById("warehousePasswordInput").value.trim();
-
-  const { db, doc, setDoc } = window.firebaseDB;
-
-  await setDoc(doc(db, "settings", "system"), {
-    adminPassword: adminPassword || systemSettings.adminPassword,
-    warehousePassword: warehousePassword || systemSettings.warehousePassword,
-    orderCounter: systemSettings.orderCounter || 1001
-  }, { merge:true });
-
+  const adminPassword=document.getElementById("adminPasswordInput").value.trim();
+  const warehousePassword=document.getElementById("warehousePasswordInput").value.trim();
+  const {db,doc,setDoc}=window.firebaseDB;
+  await setDoc(doc(db,"settings","system"),{
+    adminPassword:adminPassword||systemSettings.adminPassword,
+    warehousePassword:warehousePassword||systemSettings.warehousePassword,
+    orderCounter:systemSettings.orderCounter||1001
+  },{merge:true});
   alert("تم حفظ كلمات المرور");
 }
 
 /* Chefs */
 
 function renderChefs(){
-  pageLayout("الشيفات", `<div id="chefSectionsView" class="grid"></div>`, "renderHome()");
+  pageLayout("الشيفات", `<div id="chefSectionsView" class="grid"></div>`,"renderHome()");
   drawChefSectionsView();
 }
 
 function drawChefSectionsView(){
-  const box = document.getElementById("chefSectionsView");
+  const box=document.getElementById("chefSectionsView");
   if(!box) return;
-
-  box.innerHTML = chefSections.length
-    ? chefSections.map(section => `
-      <div class="card" onclick="renderChefCode('${section.name}')">
-        <div class="icon">${section.icon || "🍽️"}</div>
-        <div class="card-title">${section.name}</div>
-      </div>
-    `).join("")
-    : `<div class="panel placeholder">لا توجد أقسام</div>`;
+  box.innerHTML = chefSections.length ? chefSections.map(s=>`
+    <div class="card" onclick="renderChefCode('${s.name}')">
+      <div class="icon">${s.icon||"🍽️"}</div>
+      <div class="card-title">${s.name}</div>
+    </div>
+  `).join("") : `<div class="panel placeholder">لا توجد أقسام</div>`;
 }
 
 function renderChefCode(sectionName){
@@ -646,21 +585,20 @@ function renderChefCode(sectionName){
       <button class="btn btn-main" onclick="checkChefCode('${sectionName}')">دخول</button>
     </div>
     <div id="chefMessage" class="panel placeholder" style="margin-top:16px;display:none"></div>
-  `, "renderChefs()");
+  `,"renderChefs()");
 }
 
 function checkChefCode(sectionName){
-  const code = document.getElementById("chefCode").value.trim();
-  const chef = chefs.find(c => c.code === code && c.section === sectionName);
-  const message = document.getElementById("chefMessage");
-
+  const code=document.getElementById("chefCode").value.trim();
+  const chef=chefs.find(c=>c.code===code && c.section===sectionName);
+  const msg=document.getElementById("chefMessage");
   if(!chef){
-    message.style.display = "block";
-    message.textContent = "الكود غير صحيح";
+    msg.style.display="block";
+    msg.textContent="الكود غير صحيح";
     return;
   }
-
-  currentChef = chef;
+  currentChef=chef;
+  productionDraft=[];
   renderChefDashboard(chef);
 }
 
@@ -673,18 +611,161 @@ function renderChefDashboard(chef){
     </div>
 
     <section class="grid">
-      <div class="card" onclick="renderEmpty('الإنتاج')"><div class="icon">📈</div><div class="card-title">الإنتاج</div></div>
+      <div class="card" onclick="renderProduction()"><div class="icon">📈</div><div class="card-title">الإنتاج</div></div>
       <div class="card" onclick="renderWarehouseRequest()"><div class="icon">📦</div><div class="card-title">طلب مستودع</div></div>
       <div class="card" onclick="renderMyOrders()"><div class="icon">📋</div><div class="card-title">طلباتي</div></div>
     </section>
-  `, "renderChefs()");
+  `,"renderChefs()");
+}
+
+/* Production */
+
+function renderProduction(){
+  if(!currentChef) return renderChefs();
+
+  pageLayout("الإنتاج", `
+    <div class="panel">
+      <label>اكتب المنتج ثم اضغط Enter</label>
+      <input id="productionInput" placeholder="مثال: كرواسون" onkeydown="handleProductionInput(event)">
+      <textarea id="productionNote" placeholder="ملاحظة للإدارة"></textarea>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h3>الإنتاج الحالي</h3>
+      <div id="productionDraftBox"></div>
+      <button class="btn btn-main" style="margin-top:12px" onclick="submitProduction()">رفع الإنتاج للإدارة</button>
+    </div>
+
+    <div id="lastProductionBox" style="margin-top:16px"></div>
+  `,"renderChefDashboard(currentChef)");
+
+  drawProductionDraft();
+  drawLastProductionForChef();
+}
+
+function handleProductionInput(e){
+  if(e.key !== "Enter") return;
+  e.preventDefault();
+
+  const input=document.getElementById("productionInput");
+  const name=input.value.trim();
+  if(!name) return;
+
+  const existing=productionDraft.find(i=>i.name===name);
+  if(existing) existing.qty++;
+  else productionDraft.push({name,qty:1});
+
+  input.value="";
+  drawProductionDraft();
+}
+
+function drawProductionDraft(){
+  const box=document.getElementById("productionDraftBox");
+  if(!box) return;
+
+  if(!productionDraft.length){
+    box.innerHTML=`<div class="placeholder">لا يوجد إنتاج حالي</div>`;
+    return;
+  }
+
+  box.innerHTML=productionDraft.map((item,index)=>`
+    <div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:8px;align-items:center;border-bottom:1px solid #e5eadb;padding:10px 0">
+      <b>${item.name}</b>
+      <button class="btn btn-light" onclick="changeProductionQty(${index},-1)">-</button>
+      <b>${item.qty}</b>
+      <button class="btn btn-main" onclick="changeProductionQty(${index},1)">+</button>
+      <button class="btn btn-light" onclick="deleteProductionItem(${index})">🗑</button>
+    </div>
+  `).join("");
+}
+
+function changeProductionQty(index,delta){
+  productionDraft[index].qty += delta;
+  if(productionDraft[index].qty <= 0) productionDraft.splice(index,1);
+  drawProductionDraft();
+}
+
+function deleteProductionItem(index){
+  productionDraft.splice(index,1);
+  drawProductionDraft();
+}
+
+async function submitProduction(){
+  if(!productionDraft.length || !currentChef) return;
+
+  const note=document.getElementById("productionNote")?.value.trim() || "";
+  const timeMs=Date.now();
+
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  await addDoc(collection(db,"production_logs"),{
+    chefName:currentChef.name,
+    chefCode:currentChef.code,
+    section:currentChef.section,
+    items:[...productionDraft],
+    note,
+    createdAtText:nowText(),
+    timeMs,
+    expiresAtMs:timeMs + (24*60*60*1000),
+    createdAt:serverTimestamp()
+  });
+
+  alert("تم رفع الإنتاج للإدارة");
+  productionDraft=[];
+  renderProduction();
+}
+
+function getChefRecentProduction(){
+  const now=Date.now();
+  return productionLogs
+    .filter(l=>l.chefCode===currentChef?.code && (l.expiresAtMs||0)>now)
+    .sort((a,b)=>(b.timeMs||0)-(a.timeMs||0))[0];
+}
+
+function formatRemaining(ms){
+  if(ms<=0) return "انتهى";
+  const h=Math.floor(ms/3600000);
+  const m=Math.floor((ms%3600000)/60000);
+  const s=Math.floor((ms%60000)/1000);
+  return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+function drawLastProductionForChef(){
+  const box=document.getElementById("lastProductionBox");
+  if(!box) return;
+
+  const log=getChefRecentProduction();
+  if(!log){
+    box.innerHTML="";
+    return;
+  }
+
+  const remaining=(log.expiresAtMs||0)-Date.now();
+
+  box.innerHTML=`
+    <div class="panel">
+      <h3>آخر إنتاج مرفوع</h3>
+      <p style="color:#7b8674;font-weight:800;margin-top:8px">تم الرفع: ${log.createdAtText||""}</p>
+      <p style="font-weight:900;margin-top:8px">المتبقي: ${formatRemaining(remaining)}</p>
+
+      <div style="margin-top:12px">
+        ${(log.items||[]).map(i=>`
+          <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
+            <span>${i.name}</span>
+            <b>${i.qty}</b>
+          </div>
+        `).join("")}
+      </div>
+
+      ${log.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${log.note}</p>` : ""}
+    </div>
+  `;
 }
 
 /* Warehouse Request */
 
 function renderWarehouseRequest(){
   if(!currentChef) return renderChefs();
-  currentCart = [];
+  currentCart=[];
 
   pageLayout("طلب مستودع", `
     <div class="panel">
@@ -693,45 +774,38 @@ function renderWarehouseRequest(){
     </div>
 
     <div class="panel" style="margin-top:16px">
-      <h3 style="margin-bottom:12px">السلة</h3>
+      <h3>السلة</h3>
       <div id="cartBox" class="placeholder">السلة فارغة</div>
-      <textarea id="requestNote" placeholder="ملاحظة" style="margin-top:12px"></textarea>
+      <textarea id="requestNote" placeholder="ملاحظة"></textarea>
       <button class="btn btn-main" onclick="sendWarehouseOrder()">إرسال الطلب</button>
     </div>
-  `, "renderChefDashboard(currentChef)");
+  `,"renderChefDashboard(currentChef)");
 
   drawRequestSearch();
 }
 
 function drawRequestSearch(){
-  const box = document.getElementById("requestResults");
-  const search = (document.getElementById("requestSearch")?.value || "").trim().toLowerCase();
+  const box=document.getElementById("requestResults");
+  const search=(document.getElementById("requestSearch")?.value||"").trim().toLowerCase();
 
-  const list = warehouseItems.filter(item =>
-    search &&
-    (item.name.toLowerCase().includes(search) || item.code.toLowerCase().includes(search))
-  ).slice(0, 20);
+  const list=warehouseItems.filter(i=>search&&(i.name.toLowerCase().includes(search)||i.code.toLowerCase().includes(search))).slice(0,20);
 
   if(!search){
-    box.innerHTML = `<div class="placeholder">اكتب اسم الصنف أو الكود</div>`;
+    box.innerHTML=`<div class="placeholder">اكتب اسم الصنف أو الكود</div>`;
+    return;
+  }
+  if(!list.length){
+    box.innerHTML=`<div class="placeholder">لا توجد نتائج</div>`;
     return;
   }
 
-  if(list.length === 0){
-    box.innerHTML = `<div class="placeholder">لا توجد نتائج</div>`;
-    return;
-  }
-
-  box.innerHTML = `
+  box.innerHTML=`
     <div style="display:grid;gap:8px">
-      ${list.map(item => `
+      ${list.map(i=>`
         <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;background:#f9fbf5;border:1px solid #e5eadb;border-radius:16px;padding:12px;">
-          <div>
-            <b>${item.name}</b>
-            <div style="color:#7b8674;font-weight:700">${item.code} - ${item.unit || ""}</div>
-          </div>
-          <input id="qty_${item.id}" type="number" min="1" placeholder="كمية" style="margin:0">
-          <button class="btn btn-main" onclick="addToCart('${item.id}')">إضافة</button>
+          <div><b>${i.name}</b><div style="color:#7b8674;font-weight:700">${i.code} - ${i.unit||""}</div></div>
+          <input id="qty_${i.id}" type="number" min="1" placeholder="كمية" style="margin:0">
+          <button class="btn btn-main" onclick="addToCart('${i.id}')">إضافة</button>
         </div>
       `).join("")}
     </div>
@@ -739,71 +813,52 @@ function drawRequestSearch(){
 }
 
 function addToCart(itemId){
-  const item = warehouseItems.find(i => i.id === itemId);
-  const qty = Number(document.getElementById(`qty_${itemId}`).value);
+  const item=warehouseItems.find(i=>i.id===itemId);
+  const qty=Number(document.getElementById(`qty_${itemId}`).value);
+  if(!item||qty<=0) return;
 
-  if(!item || qty <= 0) return;
-
-  const existing = currentCart.find(i => i.itemId === itemId);
-
-  if(existing){
-    existing.qty += qty;
-  }else{
-    currentCart.push({
-      itemId:item.id,
-      name:item.name,
-      code:item.code,
-      unit:item.unit,
-      qty
-    });
-  }
-
+  const ex=currentCart.find(i=>i.itemId===itemId);
+  if(ex) ex.qty += qty;
+  else currentCart.push({itemId:item.id,name:item.name,code:item.code,unit:item.unit,qty});
   drawCart();
 }
 
 function drawCart(){
-  const box = document.getElementById("cartBox");
-
-  if(currentCart.length === 0){
-    box.innerHTML = "السلة فارغة";
+  const box=document.getElementById("cartBox");
+  if(!currentCart.length){
+    box.innerHTML="السلة فارغة";
     return;
   }
 
-  box.innerHTML = currentCart.map((item, index) => `
-    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e5eadb;padding:8px 0;gap:10px;">
-      <span>${item.name}</span>
-      <b>${item.qty} ${item.unit || ""}</b>
+  box.innerHTML=currentCart.map((i,index)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e5eadb;padding:8px 0;gap:10px">
+      <span>${i.name}</span>
+      <b>${i.qty} ${i.unit||""}</b>
       <button class="btn btn-light" onclick="removeFromCart(${index})">حذف</button>
     </div>
   `).join("");
 }
 
 function removeFromCart(index){
-  currentCart.splice(index, 1);
+  currentCart.splice(index,1);
   drawCart();
 }
 
 async function getNextOrderId(){
-  const { db, doc, getDoc, setDoc } = window.firebaseDB;
-  const ref = doc(db, "settings", "system");
-  const snap = await getDoc(ref);
-
-  const current = snap.exists() && snap.data().orderCounter
-    ? snap.data().orderCounter
-    : 1001;
-
-  await setDoc(ref, { orderCounter: current + 1 }, { merge:true });
-
+  const {db,doc,getDoc,setDoc}=window.firebaseDB;
+  const ref=doc(db,"settings","system");
+  const snap=await getDoc(ref);
+  const current=snap.exists() && snap.data().orderCounter ? snap.data().orderCounter : 1001;
+  await setDoc(ref,{orderCounter:current+1},{merge:true});
   return `ORD-${current}`;
 }
 
 async function sendWarehouseOrder(){
-  if(currentCart.length === 0 || !currentChef) return;
+  if(!currentCart.length||!currentChef) return;
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  const orderId=await getNextOrderId();
 
-  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
-  const orderId = await getNextOrderId();
-
-  await addDoc(collection(db, "warehouse_orders"), {
+  await addDoc(collection(db,"warehouse_orders"),{
     orderId,
     chefName:currentChef.name,
     chefCode:currentChef.code,
@@ -811,28 +866,22 @@ async function sendWarehouseOrder(){
     items:[...currentCart],
     note:document.getElementById("requestNote").value.trim(),
     status:"جديد",
-    createdAtText:new Date().toLocaleString("ar-SA"),
+    createdAtText:nowText(),
     createdAt:serverTimestamp()
   });
 
-  currentCart = [];
+  currentCart=[];
   renderMyOrders();
 }
 
 function renderMyOrders(){
   if(!currentChef) return renderChefs();
-
-  const myOrders = warehouseOrders.filter(o => o.chefCode === currentChef.code);
-
+  const myOrders=warehouseOrders.filter(o=>o.chefCode===currentChef.code);
   pageLayout("طلباتي", `
     <div class="grid">
-      ${
-        myOrders.length === 0
-        ? `<div class="panel placeholder">لا توجد طلبات</div>`
-        : myOrders.map(o => renderOrderCard(o, true)).join("")
-      }
+      ${myOrders.length ? myOrders.map(o=>renderOrderCard(o,true)).join("") : `<div class="panel placeholder">لا توجد طلبات</div>`}
     </div>
-  `, "renderChefDashboard(currentChef)");
+  `,"renderChefDashboard(currentChef)");
 }
 
 /* Warehouse */
@@ -843,94 +892,201 @@ function renderWarehouseGate(){
       <input id="warehousePasswordInputGate" type="password" placeholder="كلمة مرور المستودع">
       <button class="btn btn-main" onclick="checkWarehousePassword()">دخول</button>
     </div>
-  `, "renderHome()");
+  `,"renderHome()");
 }
 
 function checkWarehousePassword(){
-  const pass = document.getElementById("warehousePasswordInputGate").value.trim();
-
+  const pass=document.getElementById("warehousePasswordInputGate").value.trim();
   if(pass !== String(systemSettings.warehousePassword)){
     alert("كلمة المرور غير صحيحة");
     return;
   }
-
-  renderWarehouse();
+  renderWarehouseMenu();
 }
 
-function renderWarehouse(){
-  pageLayout("المستودع", `<div id="warehouseOrdersBox" class="grid"></div>`, "renderHome()");
+function renderWarehouseMenu(){
+  pageLayout("المستودع", `
+    <section class="grid">
+      <div class="card" onclick="renderWarehouseOrders()"><div class="icon">📦</div><div class="card-title">طلبات الشيفات</div></div>
+      <div class="card" onclick="renderInternalIssue()"><div class="icon">📤</div><div class="card-title">صرف داخلي</div></div>
+    </section>
+  `,"renderHome()");
+}
+
+function renderWarehouseOrders(){
+  pageLayout("طلبات الشيفات", `<div id="warehouseOrdersBox" class="grid"></div>`,"renderWarehouseMenu()");
   drawWarehouseOrders();
 }
 
 function drawWarehouseOrders(){
-  const box = document.getElementById("warehouseOrdersBox");
+  const box=document.getElementById("warehouseOrdersBox");
   if(!box) return;
-
-  box.innerHTML = warehouseOrders.length
-    ? warehouseOrders.map(o => renderOrderCard(o, false)).join("")
-    : `<div class="panel placeholder">لا توجد طلبات</div>`;
+  box.innerHTML=warehouseOrders.length ? warehouseOrders.map(o=>renderOrderCard(o,false)).join("") : `<div class="panel placeholder">لا توجد طلبات</div>`;
 }
 
-function renderOrderCard(order, isChefView){
+function renderOrderCard(order,isChefView){
   return `
     <div class="panel">
       <h2>📦 طلبية من قسم ${order.section}</h2>
-
-      <p style="font-weight:800;margin-top:8px">
-        👨‍🍳 الشيف: ${order.chefName}
-      </p>
-
-      <p style="color:#7b8674;margin-top:4px">
-        🆔 ${order.orderId || order.id}
-      </p>
-
-      <p style="color:#7b8674;margin-top:4px">
-        🕒 ${order.createdAtText || ""}
-      </p>
+      <p style="font-weight:800;margin-top:8px">👨‍🍳 الشيف: ${order.chefName}</p>
+      <p style="color:#7b8674;margin-top:4px">🆔 ${order.orderId||order.id}</p>
+      <p style="color:#7b8674;margin-top:4px">🕒 ${order.createdAtText||""}</p>
 
       <div style="margin-top:12px">
-        ${(order.items || []).map((item, i) => `
-          <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0;">
-            <span>${i + 1}- ${item.name}</span>
-            <b>${item.qty} ${item.unit || ""}</b>
+        ${(order.items||[]).map((item,i)=>`
+          <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
+            <span>${i+1}- ${item.name}</span>
+            <b>${item.qty} ${item.unit||""}</b>
           </div>
         `).join("")}
       </div>
 
       ${order.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${order.note}</p>` : ""}
-
       <h3 style="margin-top:12px">الحالة: ${order.status}</h3>
 
-      ${
-        isChefView && order.status === "جاهز"
-        ? `<button class="btn btn-main" style="margin-top:12px" onclick="receiveOrder('${order.id}')">تم الاستلام</button>`
-        : ""
-      }
+      ${isChefView && order.status==="جاهز" ? `<button class="btn btn-main" style="margin-top:12px" onclick="receiveOrder('${order.id}')">تم الاستلام</button>` : ""}
 
-      ${
-        !isChefView
-        ? `
-          <div style="margin-top:12px;display:grid;gap:8px">
-            <button class="btn btn-light" onclick="updateOrderStatus('${order.id}', 'قيد التجهيز')">قيد التجهيز</button>
-            <button class="btn btn-main" onclick="updateOrderStatus('${order.id}', 'جاهز')">جاهز</button>
-            <button class="btn btn-light" onclick="updateOrderStatus('${order.id}', 'متأخر')">متأخر</button>
-          </div>
-        `
-        : ""
-      }
+      ${!isChefView ? `
+        <div style="margin-top:12px;display:grid;gap:8px">
+          <button class="btn btn-light" onclick="updateOrderStatus('${order.id}','قيد التجهيز')">قيد التجهيز</button>
+          <button class="btn btn-main" onclick="updateOrderStatus('${order.id}','جاهز')">جاهز</button>
+          <button class="btn btn-light" onclick="updateOrderStatus('${order.id}','متأخر')">متأخر</button>
+        </div>
+      ` : ""}
     </div>
   `;
 }
 
-async function updateOrderStatus(id, status){
-  const { db, doc, updateDoc } = window.firebaseDB;
-  await updateDoc(doc(db, "warehouse_orders", id), { status });
+async function updateOrderStatus(id,status){
+  const {db,doc,updateDoc}=window.firebaseDB;
+  await updateDoc(doc(db,"warehouse_orders",id),{status});
 }
 
 async function receiveOrder(id){
-  const { db, doc, updateDoc } = window.firebaseDB;
-  await updateDoc(doc(db, "warehouse_orders", id), { status:"تم الاستلام" });
+  const {db,doc,updateDoc}=window.firebaseDB;
+  await updateDoc(doc(db,"warehouse_orders",id),{status:"تم الاستلام"});
   renderMyOrders();
+}
+
+/* Internal Issue */
+
+function renderInternalIssue(){
+  internalIssueCart=[];
+
+  pageLayout("صرف داخلي", `
+    <div class="panel">
+      <label>موظف المستودع</label>
+      <select id="internalStaff">
+        ${warehouseStaff.length ? warehouseStaff.map(s=>`<option>${s.name}</option>`).join("") : `<option>موظف المستودع</option>`}
+      </select>
+
+      <label>جهة الصرف</label>
+      <select id="internalDestination">
+        ${internalDestinations.length ? internalDestinations.map(d=>`<option>${d.name}</option>`).join("") : `<option>مطبخ العمال</option>`}
+      </select>
+
+      <input id="internalSearch" placeholder="🔍 بحث باسم الصنف أو الكود" oninput="drawInternalSearch()">
+      <div id="internalResults"></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h3>سلة الصرف</h3>
+      <div id="internalCartBox" class="placeholder">السلة فارغة</div>
+      <textarea id="internalNote" placeholder="ملاحظة"></textarea>
+      <button class="btn btn-main" onclick="saveInternalIssue()">حفظ الصرف</button>
+    </div>
+  `,"renderWarehouseMenu()");
+
+  drawInternalSearch();
+}
+
+function drawInternalSearch(){
+  const box=document.getElementById("internalResults");
+  if(!box) return;
+
+  const search=(document.getElementById("internalSearch")?.value||"").trim().toLowerCase();
+  const list=warehouseItems.filter(i=>search&&(i.name.toLowerCase().includes(search)||i.code.toLowerCase().includes(search))).slice(0,20);
+
+  if(!search){
+    box.innerHTML=`<div class="placeholder">اكتب اسم الصنف أو الكود</div>`;
+    return;
+  }
+
+  if(!list.length){
+    box.innerHTML=`<div class="placeholder">لا توجد نتائج</div>`;
+    return;
+  }
+
+  box.innerHTML=`
+    <div style="display:grid;gap:8px">
+      ${list.map(i=>`
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;background:#f9fbf5;border:1px solid #e5eadb;border-radius:16px;padding:12px">
+          <div><b>${i.name}</b><div style="color:#7b8674;font-weight:700">${i.code} - ${i.unit||""}</div></div>
+          <input id="internal_qty_${i.id}" type="number" min="1" placeholder="كمية" style="margin:0">
+          <button class="btn btn-main" onclick="addInternalItem('${i.id}')">إضافة</button>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function addInternalItem(itemId){
+  const item=warehouseItems.find(i=>i.id===itemId);
+  const qty=Number(document.getElementById(`internal_qty_${itemId}`).value);
+  if(!item||qty<=0) return;
+
+  const ex=internalIssueCart.find(i=>i.itemId===itemId);
+  if(ex) ex.qty += qty;
+  else internalIssueCart.push({itemId:item.id,name:item.name,code:item.code,unit:item.unit,qty});
+
+  drawInternalCart();
+}
+
+function drawInternalCart(){
+  const box=document.getElementById("internalCartBox");
+  if(!box) return;
+
+  if(!internalIssueCart.length){
+    box.innerHTML="السلة فارغة";
+    return;
+  }
+
+  box.innerHTML=internalIssueCart.map((i,index)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e5eadb;padding:8px 0;gap:10px">
+      <span>${i.name}</span>
+      <b>${i.qty} ${i.unit||""}</b>
+      <button class="btn btn-light" onclick="removeInternalItem(${index})">حذف</button>
+    </div>
+  `).join("");
+}
+
+function removeInternalItem(index){
+  internalIssueCart.splice(index,1);
+  drawInternalCart();
+}
+
+async function saveInternalIssue(){
+  if(!internalIssueCart.length) return;
+
+  const staff=document.getElementById("internalStaff").value;
+  const destination=document.getElementById("internalDestination").value;
+  const note=document.getElementById("internalNote").value.trim();
+
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+
+  await addDoc(collection(db,"internal_issues"),{
+    staff,
+    destination,
+    items:[...internalIssueCart],
+    note,
+    createdAtText:nowText(),
+    timeMs:Date.now(),
+    createdAt:serverTimestamp()
+  });
+
+  alert("تم حفظ الصرف الداخلي");
+  internalIssueCart=[];
+  renderWarehouseMenu();
 }
 
 /* Cleaning */
@@ -941,80 +1097,49 @@ function renderCleaning(){
       <div class="card" onclick="renderCleaningLang('ar')"><div class="icon">🇸🇦</div><div class="card-title">العربية</div></div>
       <div class="card" onclick="renderCleaningLang('bn')"><div class="icon">🇧🇩</div><div class="card-title">বাংলা</div></div>
     </section>
-  `, "renderHome()");
+  `,"renderHome()");
 }
 
 function renderCleaningLang(lang){
-  const title = lang === "bn" ? "পরিষ্কার" : "النظافة";
-
-  pageLayout(title, `
+  pageLayout(lang==="bn"?"পরিষ্কার":"النظافة", `
     <section class="grid">
-      <div class="card" onclick="renderCleaningShift('${lang}','morning')">
-        <div class="card-title">${lang === "bn" ? shiftLabels.morning.bn : shiftLabels.morning.ar}</div>
-      </div>
-
-      <div class="card" onclick="renderCleaningShift('${lang}','afternoon')">
-        <div class="card-title">${lang === "bn" ? shiftLabels.afternoon.bn : shiftLabels.afternoon.ar}</div>
-      </div>
-
-      <div class="card" onclick="renderCleaningShift('${lang}','night')">
-        <div class="card-title">${lang === "bn" ? shiftLabels.night.bn : shiftLabels.night.ar}</div>
-      </div>
+      <div class="card" onclick="renderCleaningShift('${lang}','morning')"><div class="card-title">${lang==="bn"?shiftLabels.morning.bn:shiftLabels.morning.ar}</div></div>
+      <div class="card" onclick="renderCleaningShift('${lang}','afternoon')"><div class="card-title">${lang==="bn"?shiftLabels.afternoon.bn:shiftLabels.afternoon.ar}</div></div>
+      <div class="card" onclick="renderCleaningShift('${lang}','night')"><div class="card-title">${lang==="bn"?shiftLabels.night.bn:shiftLabels.night.ar}</div></div>
     </section>
-  `, "renderCleaning()");
+  `,"renderCleaning()");
 }
 
-function renderCleaningShift(lang, shift){
-  const title = lang === "bn"
-    ? `${shiftLabels[shift].bn} - পরিষ্কার`
-    : `${shiftLabels[shift].ar} - النظافة`;
-
-  const tasks = cleaningTasks.filter(task => task[shift]);
-
-  pageLayout(title, `
+function renderCleaningShift(lang,shift){
+  const tasks=cleaningTasks.filter(t=>t[shift]);
+  pageLayout(lang==="bn"?`${shiftLabels[shift].bn} - পরিষ্কার`:`${shiftLabels[shift].ar} - النظافة`, `
     <div class="panel">
-      ${
-        tasks.length === 0
-        ? `<div class="placeholder">${lang === "bn" ? "কোনো কাজ নেই" : "لا توجد مهام لهذه الوردية"}</div>`
-        : tasks.map(task => `
-          <label style="display:flex;align-items:center;gap:10px;margin:14px 0;font-weight:900">
-            <input type="checkbox" class="cleanTaskCheck" value="${task.id}">
-            ${lang === "bn" ? translateCleaning(task.nameAr) : task.nameAr}
-          </label>
-        `).join("")
-      }
+      ${tasks.length ? tasks.map(t=>`
+        <label style="display:flex;align-items:center;gap:10px;margin:14px 0;font-weight:900">
+          <input type="checkbox" class="cleanTaskCheck" value="${t.id}">
+          ${lang==="bn"?translateCleaning(t.nameAr):t.nameAr}
+        </label>
+      `).join("") : `<div class="placeholder">${lang==="bn"?"কোনো কাজ নেই":"لا توجد مهام لهذه الوردية"}</div>`}
 
-      <button class="btn btn-main" onclick="submitCleaning('${shift}')">
-        ${lang === "bn" ? "সম্পন্ন" : "✅ تم التنفيذ"}
-      </button>
+      <button class="btn btn-main" onclick="submitCleaning('${shift}')">${lang==="bn"?"সম্পন্ন":"✅ تم التنفيذ"}</button>
     </div>
-  `, `renderCleaningLang('${lang}')`);
+  `,`renderCleaningLang('${lang}')`);
 }
 
 function translateCleaning(text){
-  return cleaningBn[text] || text;
+  return cleaningBn[text]||text;
 }
 
 async function submitCleaning(shift){
-  const checks = Array.from(document.querySelectorAll(".cleanTaskCheck"));
-  const completedIds = checks.filter(c => c.checked).map(c => c.value);
+  const checks=Array.from(document.querySelectorAll(".cleanTaskCheck"));
+  const doneIds=checks.filter(c=>c.checked).map(c=>c.value);
+  const tasks=cleaningTasks.filter(t=>t[shift]);
 
-  const tasksForShift = cleaningTasks.filter(task => task[shift]);
+  const entries=tasks.map(t=>({taskId:t.id,nameAr:t.nameAr,done:doneIds.includes(t.id)}));
 
-  const entries = tasksForShift.map(task => ({
-    taskId:task.id,
-    nameAr:task.nameAr,
-    done:completedIds.includes(task.id)
-  }));
-
-  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
-
-  await addDoc(collection(db, "cleaning_logs"), {
-    shift,
-    entries,
-    createdAtText:new Date().toLocaleString("ar-SA"),
-    timeMs:Date.now(),
-    createdAt:serverTimestamp()
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  await addDoc(collection(db,"cleaning_logs"),{
+    shift,entries,createdAtText:nowText(),timeMs:Date.now(),createdAt:serverTimestamp()
   });
 
   alert("تم حفظ النظافة");
@@ -1026,48 +1151,48 @@ async function submitCleaning(shift){
 function renderOperations(){
   pageLayout("متابعة التشغيل", `
     <div class="panel">
-      <label style="font-weight:800">اسم مسؤول التشغيل</label>
+      <label>اسم مسؤول التشغيل</label>
       <input id="operatorName" placeholder="اكتب اسم المسؤول">
     </div>
-
     <div id="operationRunBox" style="margin-top:16px"></div>
-  `, "renderHome()");
-
+  `,"renderHome()");
   drawOperationRunBox();
 }
 
 function getOperationPeriods(){
-  return [...new Set(operationTasks.map(t => t.period).filter(Boolean))];
+  return [...new Set(operationTasks.map(t=>t.period).filter(Boolean))];
+}
+
+function getLatestOperationLog(taskId){
+  const logs=operationLogs.filter(l=>l.taskId===taskId).sort((a,b)=>(a.timeMs||0)-(b.timeMs||0));
+  return logs.length ? logs[logs.length-1] : null;
 }
 
 function drawOperationRunBox(){
-  const box = document.getElementById("operationRunBox");
+  const box=document.getElementById("operationRunBox");
   if(!box) return;
 
-  if(operationTasks.length === 0){
-    box.innerHTML = `<div class="panel placeholder">لا توجد مهام تشغيل</div>`;
+  if(!operationTasks.length){
+    box.innerHTML=`<div class="panel placeholder">لا توجد مهام تشغيل</div>`;
     return;
   }
 
-  const periods = getOperationPeriods();
+  const periods=getOperationPeriods();
 
-  box.innerHTML = periods.map(period => {
-    const tasks = operationTasks.filter(t => t.period === period);
-
+  box.innerHTML=periods.map(period=>{
+    const tasks=operationTasks.filter(t=>t.period===period);
     return `
       <div class="panel" style="margin-bottom:14px">
         <h3>${period}</h3>
-
         <div style="margin-top:12px">
-          ${tasks.map(task => {
-            const latest = getLatestOperationLog(task.id);
-            const checked = latest && latest.done ? "checked" : "";
-            const timeText = latest && latest.done ? `<div style="color:#7b8674;font-weight:800;margin-top:4px">تم: ${latest.completedAtText || ""} - ${latest.operatorName || ""}</div>` : "";
-
+          ${tasks.map(t=>{
+            const latest=getLatestOperationLog(t.id);
+            const checked=latest&&latest.done?"checked":"";
+            const timeText=latest&&latest.done ? `<div style="color:#7b8674;font-weight:800;margin-top:4px">تم: ${latest.completedAtText||""} - ${latest.operatorName||""}</div>` : "";
             return `
               <label style="display:block;margin:14px 0;font-weight:900">
-                <input type="checkbox" ${checked} onchange="toggleOperationTask('${task.id}', this.checked)">
-                ${task.name}
+                <input type="checkbox" ${checked} onchange="toggleOperationTask('${t.id}',this.checked)">
+                ${t.name}
                 ${timeText}
               </label>
             `;
@@ -1078,39 +1203,23 @@ function drawOperationRunBox(){
   }).join("");
 }
 
-async function toggleOperationTask(taskId, done){
-  const operatorName = document.getElementById("operatorName")?.value.trim();
-
+async function toggleOperationTask(taskId,done){
+  const operatorName=document.getElementById("operatorName")?.value.trim();
   if(!operatorName){
     alert("اكتب اسم مسؤول التشغيل أولاً");
     drawOperationRunBox();
     return;
   }
 
-  const task = operationTasks.find(t => t.id === taskId);
+  const task=operationTasks.find(t=>t.id===taskId);
   if(!task) return;
 
-  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
-
-  await addDoc(collection(db, "operation_logs"), {
-    taskId:task.id,
-    taskName:task.name,
-    period:task.period,
-    done,
-    operatorName,
-    completedAtText:done ? new Date().toLocaleTimeString("ar-SA", { hour:"2-digit", minute:"2-digit" }) : "",
-    createdAtText:new Date().toLocaleString("ar-SA"),
-    timeMs:Date.now(),
-    createdAt:serverTimestamp()
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  await addDoc(collection(db,"operation_logs"),{
+    taskId:task.id,taskName:task.name,period:task.period,done,operatorName,
+    completedAtText:done?timeOnly():"",
+    createdAtText:nowText(),timeMs:Date.now(),createdAt:serverTimestamp()
   });
-}
-
-function getLatestOperationLog(taskId){
-  const logs = operationLogs.filter(log => log.taskId === taskId);
-  if(logs.length === 0) return null;
-
-  logs.sort((a,b) => (a.timeMs || 0) - (b.timeMs || 0));
-  return logs[logs.length - 1];
 }
 
 /* Admin */
@@ -1121,144 +1230,193 @@ function renderAdminGate(){
       <input id="adminPasswordInputGate" type="password" placeholder="كلمة مرور الإدارة">
       <button class="btn btn-main" onclick="checkAdminPassword()">دخول</button>
     </div>
-  `, "renderHome()");
+  `,"renderHome()");
 }
 
 function checkAdminPassword(){
-  const pass = document.getElementById("adminPasswordInputGate").value.trim();
-
-  if(pass !== String(systemSettings.adminPassword)){
+  const pass=document.getElementById("adminPasswordInputGate").value.trim();
+  if(pass!==String(systemSettings.adminPassword)){
     alert("كلمة المرور غير صحيحة");
     return;
   }
-
   renderAdmin();
-}
-
-function getAlert(order){
-  let text = "";
-
-  if(order.status === "جديد") text = `طلب جديد من ${order.section}`;
-  if(order.status === "قيد التجهيز") text = `طلب ${order.section} قيد التجهيز`;
-  if(order.status === "جاهز") text = `طلب ${order.section} جاهز للاستلام`;
-  if(order.status === "متأخر") text = `طلب ${order.section} متأخر`;
-  if(order.status === "تم الاستلام") text = `تم استلام طلب من ${order.section}`;
-
-  return {
-    key:`${order.id}-${order.status}`,
-    orderId:order.id,
-    text,
-    sub:`${order.chefName} - ${order.orderId || order.id}`
-  };
-}
-
-async function dismissAlert(key){
-  const { db, addDoc, collection, serverTimestamp } = window.firebaseDB;
-
-  if(dismissedAlerts.some(a => a.key === key)) return;
-
-  await addDoc(collection(db, "dismissed_alerts"), {
-    key,
-    createdAt:serverTimestamp()
-  });
 }
 
 function renderAdmin(){
   pageLayout("الإدارة", `
     <div class="panel">
-      <h3 style="margin-bottom:15px">🔔 التنبيهات</h3>
+      <h3>🔔 التنبيهات</h3>
       <div id="adminAlertsBox"></div>
     </div>
 
     <section class="grid" style="margin-top:16px">
-      <div class="card" onclick="renderAdminSection('الشيفات')"><div class="icon">👨‍🍳</div><div class="card-title">الشيفات</div></div>
-      <div class="card" onclick="renderAdminSection('المستودع')"><div class="icon">📦</div><div class="card-title">المستودع</div></div>
+      <div class="card" onclick="renderAdminProduction()"><div class="icon">📈</div><div class="card-title">الإنتاج</div></div>
+      <div class="card" onclick="renderAdminWarehouse()"><div class="icon">📦</div><div class="card-title">المستودع</div></div>
       <div class="card" onclick="renderAdminCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
       <div class="card" onclick="renderAdminOperations()"><div class="icon">🏭</div><div class="card-title">التشغيل</div></div>
       <div class="card" onclick="renderAdminSection('الجرد')"><div class="icon">📋</div><div class="card-title">الجرد</div></div>
       <div class="card" onclick="renderAdminSection('PDF')"><div class="icon">📄</div><div class="card-title">PDF</div></div>
     </section>
-  `, "renderHome()");
-
+  `,"renderHome()");
   drawAdminAlerts();
 }
 
+function getAlert(order){
+  let text="";
+  if(order.status==="جديد") text=`طلب جديد من ${order.section}`;
+  if(order.status==="قيد التجهيز") text=`طلب ${order.section} قيد التجهيز`;
+  if(order.status==="جاهز") text=`طلب ${order.section} جاهز للاستلام`;
+  if(order.status==="متأخر") text=`طلب ${order.section} متأخر`;
+  if(order.status==="تم الاستلام") text=`تم استلام طلب من ${order.section}`;
+  return {key:`${order.id}-${order.status}`,orderId:order.id,text,sub:`${order.chefName} - ${order.orderId||order.id}`};
+}
+
+async function dismissAlert(key){
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  if(dismissedAlerts.some(a=>a.key===key)) return;
+  await addDoc(collection(db,"dismissed_alerts"),{key,createdAt:serverTimestamp()});
+}
+
 function drawAdminAlerts(){
-  const box = document.getElementById("adminAlertsBox");
+  const box=document.getElementById("adminAlertsBox");
   if(!box) return;
+  const hidden=dismissedAlerts.map(a=>a.key);
+  const alerts=warehouseOrders.map(getAlert).filter(a=>a.text&&!hidden.includes(a.key));
 
-  const hiddenKeys = dismissedAlerts.map(a => a.key);
-
-  const alerts = warehouseOrders
-    .map(getAlert)
-    .filter(a => a.text && !hiddenKeys.includes(a.key));
-
-  box.innerHTML = alerts.length
-    ? alerts.map(alert => `
-      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:#f9fbf5;border:1px solid #e5eadb;border-radius:18px;padding:14px;margin-bottom:10px;">
-        <div onclick="renderOrderDetails('${alert.orderId}')" style="cursor:pointer">
-          <b>${alert.text}</b>
-          <div style="color:#7b8674;font-weight:700;margin-top:4px">${alert.sub}</div>
-        </div>
-        <button class="btn btn-light" onclick="dismissAlert('${alert.key}')">×</button>
+  box.innerHTML=alerts.length ? alerts.map(a=>`
+    <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:#f9fbf5;border:1px solid #e5eadb;border-radius:18px;padding:14px;margin-bottom:10px">
+      <div onclick="renderOrderDetails('${a.orderId}')" style="cursor:pointer">
+        <b>${a.text}</b>
+        <div style="color:#7b8674;font-weight:700;margin-top:4px">${a.sub}</div>
       </div>
-    `).join("")
-    : `<div class="placeholder">لا توجد تنبيهات</div>`;
+      <button class="btn btn-light" onclick="dismissAlert('${a.key}')">×</button>
+    </div>
+  `).join("") : `<div class="placeholder">لا توجد تنبيهات</div>`;
 }
 
 function renderOrderDetails(id){
-  const order = warehouseOrders.find(o => o.id === id);
+  const order=warehouseOrders.find(o=>o.id===id);
   if(!order) return renderAdmin();
+  pageLayout(order.orderId||order.id, `${renderOrderCard(order,false)}`,"renderAdmin()");
+}
 
-  pageLayout(order.orderId || order.id, `${renderOrderCard(order, false)}`, "renderAdmin()");
+function renderAdminProduction(){
+  pageLayout("تقرير الإنتاج", `<div id="productionAdminBox"></div>`,"renderAdmin()");
+  drawProductionAdmin();
+}
+
+function drawProductionAdmin(){
+  const box=document.getElementById("productionAdminBox");
+  if(!box) return;
+
+  if(!productionLogs.length){
+    box.innerHTML=`<div class="panel placeholder">لا يوجد إنتاج</div>`;
+    return;
+  }
+
+  const logs=[...productionLogs].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0));
+
+  box.innerHTML=logs.map(log=>`
+    <div class="panel" style="margin-bottom:14px">
+      <h3>${log.section} - ${log.chefName}</h3>
+      <p style="color:#7b8674;font-weight:800;margin-top:6px">${log.createdAtText||""}</p>
+
+      <div style="margin-top:12px">
+        ${(log.items||[]).map(i=>`
+          <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
+            <span>${i.name}</span>
+            <b>${i.qty}</b>
+          </div>
+        `).join("")}
+      </div>
+
+      ${log.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${log.note}</p>` : ""}
+    </div>
+  `).join("");
+}
+
+function renderAdminWarehouse(){
+  pageLayout("إدارة المستودع", `
+    <section class="grid">
+      <div class="card" onclick="renderAdminSection('طلبات المستودع')"><div class="icon">📦</div><div class="card-title">طلبات الشيفات</div></div>
+      <div class="card" onclick="renderAdminInternalIssue()"><div class="icon">📤</div><div class="card-title">الصرف الداخلي</div></div>
+    </section>
+  `,"renderAdmin()");
+}
+
+function renderAdminInternalIssue(){
+  pageLayout("الصرف الداخلي", `<div id="internalIssueAdminBox"></div>`,"renderAdminWarehouse()");
+  drawInternalIssueAdmin();
+}
+
+function drawInternalIssueAdmin(){
+  const box=document.getElementById("internalIssueAdminBox");
+  if(!box) return;
+
+  if(!internalIssues.length){
+    box.innerHTML=`<div class="panel placeholder">لا يوجد صرف داخلي</div>`;
+    return;
+  }
+
+  const logs=[...internalIssues].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0));
+
+  box.innerHTML=logs.map(log=>`
+    <div class="panel" style="margin-bottom:14px">
+      <h3>${log.destination}</h3>
+      <p style="color:#7b8674;font-weight:800;margin-top:6px">صرف بواسطة: ${log.staff || ""}</p>
+      <p style="color:#7b8674;font-weight:800">${log.createdAtText || ""}</p>
+
+      <div style="margin-top:12px">
+        ${(log.items||[]).map(i=>`
+          <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
+            <span>${i.name}</span>
+            <b>${i.qty} ${i.unit||""}</b>
+          </div>
+        `).join("")}
+      </div>
+
+      ${log.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${log.note}</p>` : ""}
+    </div>
+  `).join("");
 }
 
 function renderAdminCleaning(){
-  pageLayout("تقرير النظافة", `<div id="cleaningAdminBox"></div>`, "renderAdmin()");
+  pageLayout("تقرير النظافة", `<div id="cleaningAdminBox"></div>`,"renderAdmin()");
   drawCleaningAdmin();
 }
 
 function getLatestCleaningLog(shift){
-  const logs = cleaningLogs.filter(log => log.shift === shift);
-  if(logs.length === 0) return null;
-
-  logs.sort((a,b) => (a.timeMs || 0) - (b.timeMs || 0));
-  return logs[logs.length - 1];
+  const logs=cleaningLogs.filter(l=>l.shift===shift).sort((a,b)=>(a.timeMs||0)-(b.timeMs||0));
+  return logs.length ? logs[logs.length-1] : null;
 }
 
 function drawCleaningAdmin(){
-  const box = document.getElementById("cleaningAdminBox");
+  const box=document.getElementById("cleaningAdminBox");
   if(!box) return;
 
-  const shifts = ["morning","afternoon","night"];
+  const shifts=["morning","afternoon","night"];
 
-  box.innerHTML = shifts.map(shift => {
-    const log = getLatestCleaningLog(shift);
+  box.innerHTML=shifts.map(shift=>{
+    const log=getLatestCleaningLog(shift);
 
     if(!log){
-      return `
-        <div class="panel" style="margin-bottom:12px">
-          <h3>${shiftLabels[shift].ar}</h3>
-          <p style="font-weight:900;color:#b91c1c;margin-top:8px">لم يبدأ</p>
-        </div>
-      `;
+      return `<div class="panel" style="margin-bottom:12px"><h3>${shiftLabels[shift].ar}</h3><p style="font-weight:900;color:#b91c1c;margin-top:8px">لم يبدأ</p></div>`;
     }
 
-    const total = log.entries ? log.entries.length : 0;
-    const done = log.entries ? log.entries.filter(e => e.done).length : 0;
-    const status = total > 0 && done === total ? "مكتمل" : "ناقص";
+    const total=log.entries?log.entries.length:0;
+    const done=log.entries?log.entries.filter(e=>e.done).length:0;
+    const status=total>0&&done===total?"مكتمل":"ناقص";
 
     return `
       <div class="panel" style="margin-bottom:12px">
         <h3>${shiftLabels[shift].ar}</h3>
         <p style="font-weight:900;margin-top:8px">${status}</p>
-        <p style="color:#7b8674;font-weight:800">${log.createdAtText || ""}</p>
-
+        <p style="color:#7b8674;font-weight:800">${log.createdAtText||""}</p>
         <div style="margin-top:12px">
-          ${(log.entries || []).map(entry => `
+          ${(log.entries||[]).map(e=>`
             <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
-              <span>${entry.nameAr}</span>
-              <b>${entry.done ? "تم" : "لم يتم"}</b>
+              <span>${e.nameAr}</span>
+              <b>${e.done?"تم":"لم يتم"}</b>
             </div>
           `).join("")}
         </div>
@@ -1268,37 +1426,31 @@ function drawCleaningAdmin(){
 }
 
 function renderAdminOperations(){
-  pageLayout("تقرير التشغيل", `<div id="operationAdminBox"></div>`, "renderAdmin()");
+  pageLayout("تقرير التشغيل", `<div id="operationAdminBox"></div>`,"renderAdmin()");
   drawOperationAdmin();
 }
 
 function drawOperationAdmin(){
-  const box = document.getElementById("operationAdminBox");
+  const box=document.getElementById("operationAdminBox");
   if(!box) return;
 
-  if(operationTasks.length === 0){
-    box.innerHTML = `<div class="panel placeholder">لا توجد مهام تشغيل</div>`;
+  if(!operationTasks.length){
+    box.innerHTML=`<div class="panel placeholder">لا توجد مهام تشغيل</div>`;
     return;
   }
 
-  const periods = getOperationPeriods();
+  const periods=getOperationPeriods();
 
-  box.innerHTML = periods.map(period => {
-    const tasks = operationTasks.filter(t => t.period === period);
-
-    const rows = tasks.map(task => {
-      const latest = getLatestOperationLog(task.id);
-
-      return {
-        task,
-        latest,
-        done: latest && latest.done
-      };
+  box.innerHTML=periods.map(period=>{
+    const tasks=operationTasks.filter(t=>t.period===period);
+    const rows=tasks.map(task=>{
+      const latest=getLatestOperationLog(task.id);
+      return {task,latest,done:latest&&latest.done};
     });
 
-    const total = rows.length;
-    const doneCount = rows.filter(r => r.done).length;
-    const status = total > 0 && total === doneCount ? "مكتمل" : "ناقص";
+    const total=rows.length;
+    const doneCount=rows.filter(r=>r.done).length;
+    const status=total>0&&total===doneCount?"مكتمل":"ناقص";
 
     return `
       <div class="panel" style="margin-bottom:14px">
@@ -1306,17 +1458,13 @@ function drawOperationAdmin(){
         <p style="font-weight:900;margin-top:8px">${status}</p>
 
         <div style="margin-top:12px">
-          ${rows.map(row => `
+          ${rows.map(r=>`
             <div style="border-bottom:1px solid #e5eadb;padding:10px 0">
               <div style="display:flex;justify-content:space-between;gap:10px">
-                <span>${row.task.name}</span>
-                <b>${row.done ? "تم" : "لم يتم"}</b>
+                <span>${r.task.name}</span>
+                <b>${r.done?"تم":"لم يتم"}</b>
               </div>
-              ${
-                row.latest && row.latest.done
-                ? `<div style="color:#7b8674;font-weight:800;margin-top:4px">${row.latest.completedAtText || ""} - ${row.latest.operatorName || ""}</div>`
-                : ""
-              }
+              ${r.latest&&r.latest.done ? `<div style="color:#7b8674;font-weight:800;margin-top:4px">${r.latest.completedAtText||""} - ${r.latest.operatorName||""}</div>` : ""}
             </div>
           `).join("")}
         </div>
@@ -1326,7 +1474,14 @@ function drawOperationAdmin(){
 }
 
 function renderAdminSection(title){
-  pageLayout(title, `<div class="panel placeholder">${title}</div>`, "renderAdmin()");
+  pageLayout(title, `<div class="panel placeholder">${title}</div>`,"renderAdmin()");
+}
+
+/* Helpers */
+
+async function deleteDocByPath(collectionName,id){
+  const {db,doc,deleteDoc}=window.firebaseDB;
+  await deleteDoc(doc(db,collectionName,id));
 }
 
 /* Start */
