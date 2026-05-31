@@ -1713,4 +1713,3 @@ async function deleteDocByPath(collectionName,id){
 
 initCloud();
 renderHome();
-
