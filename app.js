@@ -32,6 +32,7 @@ let currentChef = null;
 let currentCart = [];
 let productionDraft = [];
 let internalIssueCart = [];
+let operationRunDraft = {};
 
 let currentBackFn = "renderHome()";
 let isPhoneBack = false;
@@ -121,7 +122,7 @@ function renderHome(){
       <section class="grid">
         <div class="card" onclick="renderOperations()"><div class="icon">🏭</div><div class="card-title">متابعة التشغيل</div></div>
         <div class="card" onclick="renderCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
-        <div class="card" onclick="renderChefs()"><div class="icon">🧑‍🍳</div><div class="card-title">الشيفات</div></div>
+        <div class="card" onclick="renderChefs()"><div class="icon">👨🍳</div><div class="card-title">الشيفات</div></div>
         <div class="card" onclick="renderWarehouseGate()"><div class="icon">📦</div><div class="card-title">المستودع ${newOrders ? `(${newOrders})` : ""}</div></div>
       </section>
     </main>
@@ -1296,47 +1297,81 @@ function drawOperationRunBox(){
 
   const periods=getOperationPeriods();
 
-  box.innerHTML=periods.map(period=>{
-    const tasks=operationTasks.filter(t=>t.period===period);
-    return `
-      <div class="panel" style="margin-bottom:14px">
-        <h3>${period}</h3>
-        <div style="margin-top:12px">
-          ${tasks.map(t=>{
-            const latest=getLatestOperationLog(t.id);
-            const checked=latest&&latest.done?"checked":"";
-            const timeText=latest&&latest.done ? `<div style="color:#7b8674;font-weight:800;margin-top:4px">تم: ${latest.completedAtText||""} - ${latest.operatorName||""}</div>` : "";
-            return `
+  box.innerHTML=`
+    ${periods.map(period=>{
+      const tasks=operationTasks.filter(t=>t.period===period);
+      return `
+        <div class="panel" style="margin-bottom:14px">
+          <h3>${period}</h3>
+          <div style="margin-top:12px">
+            ${tasks.map(t=>`
               <label style="display:block;margin:14px 0;font-weight:900">
-                <input type="checkbox" ${checked} onchange="toggleOperationTask('${t.id}',this.checked)">
+                <input type="checkbox" ${operationRunDraft[t.id] ? "checked" : ""} onchange="markOperationDraft('${t.id}',this.checked)">
                 ${t.name}
-                ${timeText}
               </label>
-            `;
-          }).join("")}
+            `).join("")}
+          </div>
         </div>
-      </div>
-    `;
-  }).join("");
+      `;
+    }).join("")}
+
+    <div class="panel" style="margin-bottom:14px">
+      <label>ملاحظات التشغيل</label>
+      <textarea id="operationNote" placeholder="اكتب ملاحظات التشغيل هنا (اختياري)"></textarea>
+    </div>
+
+    <button class="btn btn-main" onclick="submitOperationRun()">رفع للإدارة</button>
+  `;
 }
 
-async function toggleOperationTask(taskId,done){
+function markOperationDraft(taskId,checked){
+  if(checked) operationRunDraft[taskId]=true;
+  else delete operationRunDraft[taskId];
+}
+
+async function submitOperationRun(){
   const operatorName=document.getElementById("operatorName")?.value.trim();
+  const note=document.getElementById("operationNote")?.value.trim() || "";
+
   if(!operatorName){
     alert("اكتب اسم مسؤول التشغيل أولاً");
-    drawOperationRunBox();
     return;
   }
 
-  const task=operationTasks.find(t=>t.id===taskId);
-  if(!task) return;
+  const selectedIds=Object.keys(operationRunDraft).filter(id=>operationRunDraft[id]);
+  if(!selectedIds.length){
+    alert("حدد مهام التشغيل أولاً");
+    return;
+  }
 
   const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
-  await addDoc(collection(db,"operation_logs"),{
-    taskId:task.id,taskName:task.name,period:task.period,done,operatorName,
-    completedAtText:done?timeOnly():"",
-    createdAtText:nowText(),timeMs:Date.now(),createdAt:serverTimestamp()
-  });
+  const batchId=`OP-${Date.now()}`;
+  const timeMs=Date.now();
+  const createdAtText=nowText();
+  const completedAtText=timeOnly();
+
+  for(const taskId of selectedIds){
+    const task=operationTasks.find(t=>t.id===taskId);
+    if(!task) continue;
+
+    await addDoc(collection(db,"operation_logs"),{
+      batchId,
+      taskId:task.id,
+      taskName:task.name,
+      period:task.period,
+      done:true,
+      operatorName,
+      note,
+      completedAtText,
+      createdAtText,
+      timeMs,
+      createdAt:serverTimestamp()
+    });
+  }
+
+  alert("تم رفع التشغيل للإدارة");
+  operationRunDraft={};
+  renderOperations();
 }
 
 /* Admin */
@@ -1651,7 +1686,10 @@ function drawOperationAdmin(){
                 <span>${r.task.name}</span>
                 <b>${r.done?"تم":"لم يتم"}</b>
               </div>
-              ${r.latest&&r.latest.done ? `<div style="color:#7b8674;font-weight:800;margin-top:4px">${r.latest.completedAtText||""} - ${r.latest.operatorName||""}</div>` : ""}
+              ${r.latest&&r.latest.done ? `
+                <div style="color:#7b8674;font-weight:800;margin-top:4px">${r.latest.completedAtText||""} - ${r.latest.operatorName||""}</div>
+                ${r.latest.note ? `<div style="color:#7b8674;margin-top:6px">📝 ${r.latest.note}</div>` : ""}
+              ` : ""}
             </div>
           `).join("")}
         </div>
@@ -1675,3 +1713,4 @@ async function deleteDocByPath(collectionName,id){
 
 initCloud();
 renderHome();
+
