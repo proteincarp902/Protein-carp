@@ -1,4 +1,9 @@
-/* Protein & Carb Operations - Cloud Full Core */
+/* Protein & Carb Operations - Cloud Full Core
+   Added:
+   - Production input button + Enter support
+   - Warehouse order archive after received
+   - Warehouse archive view in admin
+*/
 
 const app = document.getElementById("app");
 
@@ -12,6 +17,7 @@ let cleaningLogs = [];
 let operationTasks = [];
 let operationLogs = [];
 let productionLogs = [];
+let wasteLogs = [];
 let warehouseStaff = [];
 let internalDestinations = [];
 let internalIssues = [];
@@ -115,7 +121,7 @@ function renderHome(){
       <section class="grid">
         <div class="card" onclick="renderOperations()"><div class="icon">🏭</div><div class="card-title">متابعة التشغيل</div></div>
         <div class="card" onclick="renderCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
-        <div class="card" onclick="renderChefs()"><div class="icon">👨‍🍳</div><div class="card-title">الشيفات</div></div>
+        <div class="card" onclick="renderChefs()"><div class="icon">👨🍳</div><div class="card-title">الشيفات</div></div>
         <div class="card" onclick="renderWarehouseGate()"><div class="icon">📦</div><div class="card-title">المستودع ${newOrders ? `(${newOrders})` : ""}</div></div>
       </section>
     </main>
@@ -158,6 +164,7 @@ async function initCloud(){
   listen("operation_tasks", v=>operationTasks=v);
   listen("operation_logs", v=>operationLogs=v);
   listen("production_logs", v=>productionLogs=v);
+  listen("waste_logs", v=>wasteLogs=v);
   listen("warehouse_staff", v=>warehouseStaff=v);
   listen("internal_destinations", v=>internalDestinations=v);
   listen("internal_issues", v=>internalIssues=v);
@@ -177,6 +184,7 @@ function refreshViews(){
   if(document.getElementById("operationAdminBox")) drawOperationAdmin();
   if(document.getElementById("operationRunBox")) drawOperationRunBox();
   if(document.getElementById("productionAdminBox")) drawProductionAdmin();
+  if(document.getElementById("wasteAdminBox")) drawWasteAdmin();
   if(document.getElementById("internalIssueAdminBox")) drawInternalIssueAdmin();
   if(document.getElementById("warehouseStaffBox")) drawWarehouseStaff();
   if(document.getElementById("internalDestinationsBox")) drawInternalDestinations();
@@ -194,7 +202,7 @@ function renderSettingsGate(){
 }
 
 function checkSettingsPassword(){
-  const pass = document.getElementById("settingsPasswordInput").value.trim();
+  const pass=document.getElementById("settingsPasswordInput").value.trim();
   if(pass !== String(systemSettings.adminPassword)){
     alert("كلمة المرور غير صحيحة");
     return;
@@ -205,8 +213,8 @@ function checkSettingsPassword(){
 function renderSettings(){
   pageLayout("الإعدادات", `
     <section class="grid">
-      <div class="card" onclick="renderSettingsSections()"><div class="icon">👨‍🍳</div><div class="card-title">أقسام الشيفات</div></div>
-      <div class="card" onclick="renderSettingsChefs()"><div class="icon">🧑‍🍳</div><div class="card-title">إدارة الشيفات</div></div>
+      <div class="card" onclick="renderSettingsSections()"><div class="icon">👨🍳</div><div class="card-title">أقسام الشيفات</div></div>
+      <div class="card" onclick="renderSettingsChefs()"><div class="icon">🧑🍳</div><div class="card-title">إدارة الشيفات</div></div>
       <div class="card" onclick="renderSettingsWarehouseItems()"><div class="icon">📦</div><div class="card-title">أصناف المستودع</div></div>
       <div class="card" onclick="renderSettingsCleaning()"><div class="icon">🧹</div><div class="card-title">عناصر النظافة</div></div>
       <div class="card" onclick="renderSettingsOperations()"><div class="icon">🏭</div><div class="card-title">مهام التشغيل</div></div>
@@ -304,7 +312,7 @@ function drawChefs(){
   if(!box) return;
   box.innerHTML = chefs.length ? chefs.map(c=>`
     <div class="card">
-      <div class="icon">👨‍🍳</div>
+      <div class="icon">👨🍳</div>
       <div class="card-title">${c.name}</div>
       <div style="margin-top:8px;color:#7b8674;font-weight:700">${c.section} - ${c.code}</div>
       <button class="btn btn-light" style="margin-top:12px" onclick="deleteDocByPath('chefs','${c.id}')">🗑 حذف</button>
@@ -605,13 +613,14 @@ function checkChefCode(sectionName){
 function renderChefDashboard(chef){
   pageLayout(chef.name, `
     <div class="panel" style="margin-bottom:16px;text-align:center">
-      <div style="font-size:48px">👨‍🍳</div>
+      <div style="font-size:48px">👨🍳</div>
       <h2>${chef.name}</h2>
       <div style="color:#7b8674;font-weight:700">${chef.section}</div>
     </div>
 
     <section class="grid">
       <div class="card" onclick="renderProduction()"><div class="icon">📈</div><div class="card-title">الإنتاج</div></div>
+      <div class="card" onclick="renderWaste()"><div class="icon">🗑️</div><div class="card-title">التالف والهدر</div></div>
       <div class="card" onclick="renderWarehouseRequest()"><div class="icon">📦</div><div class="card-title">طلب مستودع</div></div>
       <div class="card" onclick="renderMyOrders()"><div class="icon">📋</div><div class="card-title">طلباتي</div></div>
     </section>
@@ -625,8 +634,13 @@ function renderProduction(){
 
   pageLayout("الإنتاج", `
     <div class="panel">
-      <label>اكتب المنتج ثم اضغط Enter</label>
-      <input id="productionInput" placeholder="مثال: كرواسون" onkeydown="handleProductionInput(event)">
+      <label>اسم المنتج</label>
+      <input id="productionNameInput" placeholder="مثال: كرواسون" onkeydown="focusProductionQty(event)">
+
+      <label>الكمية</label>
+      <input id="productionQtyInput" type="number" min="1" placeholder="مثال: 20" onkeydown="handleProductionQtyInput(event)">
+
+      <button class="btn btn-main" onclick="addProductionFromInputs()">أضف الكمية</button>
       <textarea id="productionNote" placeholder="ملاحظة للإدارة"></textarea>
     </div>
 
@@ -641,22 +655,51 @@ function renderProduction(){
 
   drawProductionDraft();
   drawLastProductionForChef();
+
+  setTimeout(()=>{
+    const input=document.getElementById("productionNameInput");
+    if(input) input.focus();
+  },100);
 }
 
-function handleProductionInput(e){
+function focusProductionQty(e){
   if(e.key !== "Enter") return;
   e.preventDefault();
+  document.getElementById("productionQtyInput")?.focus();
+}
 
-  const input=document.getElementById("productionInput");
-  const name=input.value.trim();
-  if(!name) return;
+function handleProductionQtyInput(e){
+  if(e.key !== "Enter") return;
+  e.preventDefault();
+  addProductionFromInputs();
+}
+
+function addProductionFromInputs(){
+  const nameInput=document.getElementById("productionNameInput");
+  const qtyInput=document.getElementById("productionQtyInput");
+  if(!nameInput || !qtyInput) return;
+
+  const name=nameInput.value.trim();
+  const qty=Number(qtyInput.value);
+
+  if(!name){
+    nameInput.focus();
+    return;
+  }
+
+  if(!qty || qty<=0){
+    qtyInput.focus();
+    return;
+  }
 
   const existing=productionDraft.find(i=>i.name===name);
-  if(existing) existing.qty++;
-  else productionDraft.push({name,qty:1});
+  if(existing) existing.qty += qty;
+  else productionDraft.push({name,qty});
 
-  input.value="";
+  nameInput.value="";
+  qtyInput.value="";
   drawProductionDraft();
+  nameInput.focus();
 }
 
 function drawProductionDraft(){
@@ -759,6 +802,59 @@ function drawLastProductionForChef(){
       ${log.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${log.note}</p>` : ""}
     </div>
   `;
+}
+
+
+/* Waste */
+
+function renderWaste(){
+  if(!currentChef) return renderChefs();
+
+  pageLayout("التالف والهدر", `
+    <div class="panel">
+      <label>اسم المنتج</label>
+      <input id="wasteProductName" placeholder="مثال: كرواسون">
+
+      <label>الكمية</label>
+      <input id="wasteQty" type="number" min="1" placeholder="مثال: 5">
+
+      <label>سبب الهدر</label>
+      <textarea id="wasteReason" placeholder="اكتب سبب الهدر"></textarea>
+
+      <button class="btn btn-main" onclick="submitWaste()">رفع التالف للإدارة</button>
+    </div>
+  `,"renderChefDashboard(currentChef)");
+
+  setTimeout(()=>document.getElementById("wasteProductName")?.focus(),100);
+}
+
+async function submitWaste(){
+  if(!currentChef) return renderChefs();
+
+  const productName=document.getElementById("wasteProductName").value.trim();
+  const qty=Number(document.getElementById("wasteQty").value);
+  const reason=document.getElementById("wasteReason").value.trim();
+
+  if(!productName || !qty || qty<=0 || !reason){
+    alert("أكمل اسم المنتج والكمية وسبب الهدر");
+    return;
+  }
+
+  const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
+  await addDoc(collection(db,"waste_logs"),{
+    chefName:currentChef.name,
+    chefCode:currentChef.code,
+    section:currentChef.section,
+    productName,
+    qty,
+    reason,
+    createdAtText:nowText(),
+    timeMs:Date.now(),
+    createdAt:serverTimestamp()
+  });
+
+  alert("تم رفع التالف والهدر للإدارة");
+  renderChefDashboard(currentChef);
 }
 
 /* Warehouse Request */
@@ -876,7 +972,7 @@ async function sendWarehouseOrder(){
 
 function renderMyOrders(){
   if(!currentChef) return renderChefs();
-  const myOrders=warehouseOrders.filter(o=>o.chefCode===currentChef.code);
+  const myOrders=warehouseOrders.filter(o=>o.chefCode===currentChef.code && o.status!=="مؤرشف");
   pageLayout("طلباتي", `
     <div class="grid">
       ${myOrders.length ? myOrders.map(o=>renderOrderCard(o,true)).join("") : `<div class="panel placeholder">لا توجد طلبات</div>`}
@@ -921,14 +1017,15 @@ function renderWarehouseOrders(){
 function drawWarehouseOrders(){
   const box=document.getElementById("warehouseOrdersBox");
   if(!box) return;
-  box.innerHTML=warehouseOrders.length ? warehouseOrders.map(o=>renderOrderCard(o,false)).join("") : `<div class="panel placeholder">لا توجد طلبات</div>`;
+  const visibleOrders = warehouseOrders.filter(o=>o.status!=="مؤرشف");
+  box.innerHTML=visibleOrders.length ? visibleOrders.map(o=>renderOrderCard(o,false)).join("") : `<div class="panel placeholder">لا توجد طلبات</div>`;
 }
 
 function renderOrderCard(order,isChefView){
   return `
     <div class="panel">
       <h2>📦 طلبية من قسم ${order.section}</h2>
-      <p style="font-weight:800;margin-top:8px">👨‍🍳 الشيف: ${order.chefName}</p>
+      <p style="font-weight:800;margin-top:8px">👨🍳 الشيف: ${order.chefName}</p>
       <p style="color:#7b8674;margin-top:4px">🆔 ${order.orderId||order.id}</p>
       <p style="color:#7b8674;margin-top:4px">🕒 ${order.createdAtText||""}</p>
 
@@ -951,6 +1048,7 @@ function renderOrderCard(order,isChefView){
           <button class="btn btn-light" onclick="updateOrderStatus('${order.id}','قيد التجهيز')">قيد التجهيز</button>
           <button class="btn btn-main" onclick="updateOrderStatus('${order.id}','جاهز')">جاهز</button>
           <button class="btn btn-light" onclick="updateOrderStatus('${order.id}','متأخر')">متأخر</button>
+          <button class="btn btn-light" onclick="archiveWarehouseOrder('${order.id}')">📁 أرشفة</button>
         </div>
       ` : ""}
     </div>
@@ -966,6 +1064,25 @@ async function receiveOrder(id){
   const {db,doc,updateDoc}=window.firebaseDB;
   await updateDoc(doc(db,"warehouse_orders",id),{status:"تم الاستلام"});
   renderMyOrders();
+}
+
+async function archiveWarehouseOrder(id){
+  const order = warehouseOrders.find(o=>o.id===id);
+  if(!order) return;
+
+  if(order.status !== "تم الاستلام"){
+    alert("لا يمكن أرشفة الطلب قبل أن يستلمه الشيف");
+    return;
+  }
+
+  const {db,doc,updateDoc}=window.firebaseDB;
+  await updateDoc(doc(db,"warehouse_orders",id),{
+    status:"مؤرشف",
+    archivedAtText:nowText(),
+    archivedAtMs:Date.now()
+  });
+
+  alert("تمت أرشفة الطلب");
 }
 
 /* Internal Issue */
@@ -1251,6 +1368,7 @@ function renderAdmin(){
 
     <section class="grid" style="margin-top:16px">
       <div class="card" onclick="renderAdminProduction()"><div class="icon">📈</div><div class="card-title">الإنتاج</div></div>
+      <div class="card" onclick="renderAdminWaste()"><div class="icon">🗑️</div><div class="card-title">التالف والهدر</div></div>
       <div class="card" onclick="renderAdminWarehouse()"><div class="icon">📦</div><div class="card-title">المستودع</div></div>
       <div class="card" onclick="renderAdminCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
       <div class="card" onclick="renderAdminOperations()"><div class="icon">🏭</div><div class="card-title">التشغيل</div></div>
@@ -1335,13 +1453,82 @@ function drawProductionAdmin(){
   `).join("");
 }
 
+
+function renderAdminWaste(){
+  pageLayout("تقرير التالف والهدر", `<div id="wasteAdminBox"></div>`,"renderAdmin()");
+  drawWasteAdmin();
+}
+
+function drawWasteAdmin(){
+  const box=document.getElementById("wasteAdminBox");
+  if(!box) return;
+
+  if(!wasteLogs.length){
+    box.innerHTML=`<div class="panel placeholder">لا يوجد تالف أو هدر</div>`;
+    return;
+  }
+
+  const logs=[...wasteLogs].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0));
+
+  box.innerHTML=logs.map(log=>`
+    <div class="panel" style="margin-bottom:14px">
+      <h3>${log.section} - ${log.chefName}</h3>
+      <p style="color:#7b8674;font-weight:800;margin-top:6px">${log.createdAtText||""}</p>
+      <div style="margin-top:12px;border-bottom:1px solid #e5eadb;padding-bottom:8px">
+        <b>${log.productName}</b>
+        <div style="margin-top:6px">الكمية: <b>${log.qty}</b></div>
+      </div>
+      <p style="margin-top:12px;color:#7b8674"><b>السبب:</b> ${log.reason||""}</p>
+    </div>
+  `).join("");
+}
+
 function renderAdminWarehouse(){
   pageLayout("إدارة المستودع", `
     <section class="grid">
-      <div class="card" onclick="renderAdminSection('طلبات المستودع')"><div class="icon">📦</div><div class="card-title">طلبات الشيفات</div></div>
+      <div class="card" onclick="renderAdminWarehouseArchive()"><div class="icon">🗂️</div><div class="card-title">أرشيف المستودع</div></div>
       <div class="card" onclick="renderAdminInternalIssue()"><div class="icon">📤</div><div class="card-title">الصرف الداخلي</div></div>
     </section>
   `,"renderAdmin()");
+}
+
+function renderAdminWarehouseArchive(){
+  pageLayout("أرشيف المستودع", `<div id="warehouseArchiveBox"></div>`,"renderAdminWarehouse()");
+  drawWarehouseArchive();
+}
+
+function drawWarehouseArchive(){
+  const box=document.getElementById("warehouseArchiveBox");
+  if(!box) return;
+
+  const archived = warehouseOrders.filter(o=>o.status==="مؤرشف");
+
+  if(!archived.length){
+    box.innerHTML=`<div class="panel placeholder">لا يوجد طلبات مؤرشفة</div>`;
+    return;
+  }
+
+  box.innerHTML = archived
+    .sort((a,b)=>(b.archivedAtMs||0)-(a.archivedAtMs||0))
+    .map(order=>`
+      <div class="panel" style="margin-bottom:14px">
+        <h3>طلب مؤرشف - ${order.section}</h3>
+        <p style="color:#7b8674;font-weight:800">الشيف: ${order.chefName}</p>
+        <p style="color:#7b8674;font-weight:800">رقم الطلب: ${order.orderId||order.id}</p>
+        <p style="color:#7b8674;font-weight:800">وقت الأرشفة: ${order.archivedAtText||""}</p>
+
+        <div style="margin-top:12px">
+          ${(order.items||[]).map((item,i)=>`
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
+              <span>${i+1}- ${item.name}</span>
+              <b>${item.qty} ${item.unit||""}</b>
+            </div>
+          `).join("")}
+        </div>
+
+        ${order.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${order.note}</p>` : ""}
+      </div>
+    `).join("");
 }
 
 function renderAdminInternalIssue(){
