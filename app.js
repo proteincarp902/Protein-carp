@@ -121,7 +121,7 @@ function renderHome(){
       <section class="grid">
         <div class="card" onclick="renderOperations()"><div class="icon">🏭</div><div class="card-title">متابعة التشغيل</div></div>
         <div class="card" onclick="renderCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
-        <div class="card" onclick="renderChefs()"><div class="icon">👨🍳</div><div class="card-title">الشيفات</div></div>
+        <div class="card" onclick="renderChefs()"><div class="icon">🧑‍🍳</div><div class="card-title">الشيفات</div></div>
         <div class="card" onclick="renderWarehouseGate()"><div class="icon">📦</div><div class="card-title">المستودع ${newOrders ? `(${newOrders})` : ""}</div></div>
       </section>
     </main>
@@ -1011,7 +1011,7 @@ function renderWarehouseMenu(){
 
 function renderWarehouseOrders(){
   pageLayout("طلبات الشيفات", `<div id="warehouseOrdersBox" class="grid"></div>`,"renderWarehouseMenu()");
-  drawWarehouseOrders();
+  drawWarehouseOrders();}
  async function archiveWarehouseOrder(id){
   const order = warehouseOrders.find(o => o.id === id);
 
