@@ -122,7 +122,7 @@ function renderHome(){
       <section class="grid">
         <div class="card" onclick="renderOperations()"><div class="icon">🏭</div><div class="card-title">متابعة التشغيل</div></div>
         <div class="card" onclick="renderCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
-        <div class="card" onclick="renderChefs()"><div class="icon">🧑‍🍳</div><div class="card-title">الشيفات</div></div>
+        <div class="card" onclick="renderChefs()"><div class="icon">👨🍳</div><div class="card-title">الشيفات</div></div>
         <div class="card" onclick="renderWarehouseGate()"><div class="icon">📦</div><div class="card-title">المستودع ${newOrders ? `(${newOrders})` : ""}</div></div>
       </section>
     </main>
@@ -1049,6 +1049,7 @@ function renderOrderCard(order,isChefView){
           <button class="btn btn-light" onclick="updateOrderStatus('${order.id}','قيد التجهيز')">قيد التجهيز</button>
           <button class="btn btn-main" onclick="updateOrderStatus('${order.id}','جاهز')">جاهز</button>
           <button class="btn btn-light" onclick="updateOrderStatus('${order.id}','متأخر')">متأخر</button>
+          <button class="btn btn-light" onclick="printWarehouseOrder('${order.id}')">🖨 طباعة الطلب</button>
           <button class="btn btn-light" onclick="archiveWarehouseOrder('${order.id}')">📁 أرشفة</button>
         </div>
       ` : ""}
@@ -1407,8 +1408,7 @@ function renderAdmin(){
       <div class="card" onclick="renderAdminWarehouse()"><div class="icon">📦</div><div class="card-title">المستودع</div></div>
       <div class="card" onclick="renderAdminCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
       <div class="card" onclick="renderAdminOperations()"><div class="icon">🏭</div><div class="card-title">التشغيل</div></div>
-      <div class="card" onclick="renderAdminSection('الجرد')"><div class="icon">📋</div><div class="card-title">الجرد</div></div>
-      <div class="card" onclick="renderAdminSection('PDF')"><div class="icon">📄</div><div class="card-title">PDF</div></div>
+      <div class="card" onclick="renderAdminPDF()"><div class="icon">📄</div><div class="card-title">تصدير PDF</div></div>
     </section>
   `,"renderHome()");
   drawAdminAlerts();
@@ -1696,6 +1696,189 @@ function drawOperationAdmin(){
       </div>
     `;
   }).join("");
+}
+
+
+/* PDF / Print Reports */
+
+function renderAdminPDF(){
+  pageLayout("تصدير PDF", `
+    <section class="grid">
+      <div class="card" onclick="printReport('production')"><div class="icon">📈</div><div class="card-title">تقرير الإنتاج</div></div>
+      <div class="card" onclick="printReport('waste')"><div class="icon">🗑️</div><div class="card-title">تقرير التالف والهدر</div></div>
+      <div class="card" onclick="printReport('operations')"><div class="icon">🏭</div><div class="card-title">تقرير التشغيل</div></div>
+      <div class="card" onclick="printReport('internal')"><div class="icon">📤</div><div class="card-title">تقرير الصرف الداخلي</div></div>
+      <div class="card" onclick="printReport('summary')"><div class="icon">📄</div><div class="card-title">تقرير شامل</div></div>
+    </section>
+  `,"renderAdmin()");
+}
+
+function escapeHtml(value){
+  return String(value ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function openPrintReport(title, bodyHtml){
+  const html = `
+    <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <title>${escapeHtml(title)}</title>
+        <style>
+          body{font-family:Arial,Tahoma,sans-serif;direction:rtl;padding:24px;color:#111}
+          h1,h2,h3{text-align:center;margin:6px 0}
+          .meta{text-align:center;color:#666;margin:10px 0 20px;font-weight:bold}
+          .card{border:1px solid #ddd;border-radius:12px;padding:14px;margin:12px 0;page-break-inside:avoid}
+          table{width:100%;border-collapse:collapse;margin-top:10px}
+          th,td{border:1px solid #333;padding:7px;text-align:center}
+          .note{margin-top:10px;color:#444}
+        </style>
+      </head>
+      <body>
+        <h1>Protein & Carb</h1>
+        <h2>${escapeHtml(title)}</h2>
+        <div class="meta">${escapeHtml(nowText())}</div>
+        ${bodyHtml}
+        <script>window.print();<\/script>
+      </body>
+    </html>
+  `;
+  const win = window.open("", "_blank");
+  if(!win){
+    alert("المتصفح منع فتح نافذة الطباعة");
+    return;
+  }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
+
+function itemsTable(items, withUnit=true){
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>الصنف</th>
+          <th>الكمية</th>
+          ${withUnit ? "<th>الوحدة</th>" : ""}
+        </tr>
+      </thead>
+      <tbody>
+        ${(items||[]).map((item,i)=>`
+          <tr>
+            <td>${i+1}</td>
+            <td>${escapeHtml(item.name || item.productName || "")}</td>
+            <td>${escapeHtml(item.qty || "")}</td>
+            ${withUnit ? `<td>${escapeHtml(item.unit || "")}</td>` : ""}
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function buildProductionReport(){
+  if(!productionLogs.length) return `<div class="card">لا يوجد إنتاج</div>`;
+  return [...productionLogs].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0)).map(log=>`
+    <div class="card">
+      <h3>${escapeHtml(log.section)} - ${escapeHtml(log.chefName)}</h3>
+      <div class="meta">${escapeHtml(log.createdAtText||"")}</div>
+      ${itemsTable(log.items, false)}
+      ${log.note ? `<div class="note"><b>ملاحظة:</b> ${escapeHtml(log.note)}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+function buildWasteReport(){
+  if(!wasteLogs.length) return `<div class="card">لا يوجد تالف أو هدر</div>`;
+  return [...wasteLogs].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0)).map(log=>`
+    <div class="card">
+      <h3>${escapeHtml(log.section)} - ${escapeHtml(log.chefName)}</h3>
+      <div class="meta">${escapeHtml(log.createdAtText||"")}</div>
+      <table>
+        <thead><tr><th>الصنف</th><th>الكمية</th><th>السبب</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>${escapeHtml(log.productName||"")}</td>
+            <td>${escapeHtml(log.qty||"")}</td>
+            <td>${escapeHtml(log.reason||"")}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `).join("");
+}
+
+function buildOperationsReport(){
+  if(!operationLogs.length) return `<div class="card">لا يوجد تشغيل</div>`;
+  return [...operationLogs].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0)).map(log=>`
+    <div class="card">
+      <h3>${escapeHtml(log.period||"تشغيل")}</h3>
+      <table>
+        <tbody>
+          <tr><th>المهمة</th><td>${escapeHtml(log.taskName||"")}</td></tr>
+          <tr><th>المسؤول</th><td>${escapeHtml(log.operatorName||"")}</td></tr>
+          <tr><th>الوقت</th><td>${escapeHtml(log.createdAtText||log.completedAtText||"")}</td></tr>
+          <tr><th>الحالة</th><td>${log.done ? "تم" : "لم يتم"}</td></tr>
+          ${log.note ? `<tr><th>الملاحظات</th><td>${escapeHtml(log.note)}</td></tr>` : ""}
+        </tbody>
+      </table>
+    </div>
+  `).join("");
+}
+
+function buildInternalReport(){
+  if(!internalIssues.length) return `<div class="card">لا يوجد صرف داخلي</div>`;
+  return [...internalIssues].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0)).map(log=>`
+    <div class="card">
+      <h3>${escapeHtml(log.destination||"صرف داخلي")}</h3>
+      <div class="meta">بواسطة: ${escapeHtml(log.staff||"")} - ${escapeHtml(log.createdAtText||"")}</div>
+      ${itemsTable(log.items, true)}
+      ${log.note ? `<div class="note"><b>ملاحظة:</b> ${escapeHtml(log.note)}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+function printReport(type){
+  if(type==="production") return openPrintReport("تقرير الإنتاج", buildProductionReport());
+  if(type==="waste") return openPrintReport("تقرير التالف والهدر", buildWasteReport());
+  if(type==="operations") return openPrintReport("تقرير التشغيل", buildOperationsReport());
+  if(type==="internal") return openPrintReport("تقرير الصرف الداخلي", buildInternalReport());
+
+  const summary = `
+    <div class="card"><h3>الإنتاج</h3>${buildProductionReport()}</div>
+    <div class="card"><h3>التالف والهدر</h3>${buildWasteReport()}</div>
+    <div class="card"><h3>التشغيل</h3>${buildOperationsReport()}</div>
+    <div class="card"><h3>الصرف الداخلي</h3>${buildInternalReport()}</div>
+  `;
+  return openPrintReport("تقرير شامل", summary);
+}
+
+function printWarehouseOrder(id){
+  const order=warehouseOrders.find(o=>o.id===id);
+  if(!order) return;
+
+  const body = `
+    <div class="card">
+      <table>
+        <tbody>
+          <tr><th>رقم الطلب</th><td>${escapeHtml(order.orderId||order.id)}</td></tr>
+          <tr><th>القسم</th><td>${escapeHtml(order.section||"")}</td></tr>
+          <tr><th>الشيف</th><td>${escapeHtml(order.chefName||"")}</td></tr>
+          <tr><th>الوقت</th><td>${escapeHtml(order.createdAtText||"")}</td></tr>
+          <tr><th>الحالة</th><td>${escapeHtml(order.status||"")}</td></tr>
+        </tbody>
+      </table>
+      ${itemsTable(order.items, true)}
+      ${order.note ? `<div class="note"><b>ملاحظة:</b> ${escapeHtml(order.note)}</div>` : ""}
+    </div>
+  `;
+  openPrintReport("طلب مستودع", body);
 }
 
 function renderAdminSection(title){
