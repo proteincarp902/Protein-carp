@@ -1012,13 +1012,46 @@ function renderWarehouseMenu(){
 function renderWarehouseOrders(){
   pageLayout("طلبات الشيفات", `<div id="warehouseOrdersBox" class="grid"></div>`,"renderWarehouseMenu()");
   drawWarehouseOrders();
-}
+ async function archiveWarehouseOrder(id){
+  const order = warehouseOrders.find(o => o.id === id);
 
-function drawWarehouseOrders(){
-  const box=document.getElementById("warehouseOrdersBox");
-  if(!box) return;
-  const visibleOrders = warehouseOrders.filter(o=>o.status!=="مؤرشف");
-  box.innerHTML=visibleOrders.length ? visibleOrders.map(o=>renderOrderCard(o,false)).join("") : `<div class="panel placeholder">لا توجد طلبات</div>`;
+  if(!order){
+    alert("الطلب غير موجود");
+    return;
+  }
+
+  if(order.status !== "تم الاستلام"){
+    alert("لا يمكن أرشفة الطلب قبل استلامه من الشيف");
+    return;
+  }
+
+  const {db,doc,updateDoc}=window.firebaseDB;
+
+  await updateDoc(
+    doc(db,"warehouse_orders",id),
+    {
+      status:"مؤرشف",
+      archivedAtText: nowText(),
+      archivedAtMs: Date.now()
+    }
+  );
+
+  alert("تمت أرشفة الطلب");
+
+  // تحديث الشاشة فوراً
+  if(typeof drawWarehouseOrders === "function"){
+    drawWarehouseOrders();
+  }
+
+  // إعادة رسم صفحة المستودع إذا كانت مفتوحة
+  const box = document.getElementById("warehouseOrdersBox");
+  if(box){
+    const activeOrders = warehouseOrders.filter(o => o.status !== "مؤرشف");
+
+    box.innerHTML = activeOrders.length
+      ? activeOrders.map(o => renderOrderCard(o,false)).join("")
+      : `<div class="panel placeholder">لا توجد طلبات</div>`;
+  }
 }
 
 function renderOrderCard(order,isChefView){
