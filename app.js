@@ -107,23 +107,45 @@ function renderHome(){
   const newOrders = warehouseOrders.filter(o=>o.status==="جديد").length;
 
   app.innerHTML = `
-    <main class="app">
-      <div class="topbar">
-        <button class="btn btn-light" onclick="renderSettingsGate()">الإعدادات</button>
-        <button class="btn btn-main" onclick="renderAdminGate()">الإدارة</button>
+    <main class="app home-app">
+      <div class="topbar home-topbar">
+        <button class="btn btn-light" onclick="renderSettingsGate()"><i class="fa-solid fa-gear"></i> الإعدادات</button>
+        <button class="btn btn-main" onclick="renderAdminGate()"><i class="fa-solid fa-chart-line"></i> الإدارة</button>
       </div>
 
-      <section class="hero">
-        <img src="assets/logo.png" class="logo" alt="Protein & Carb">
+      <section class="hero home-hero">
+        <div class="logo-wrap">
+          <img src="assets/logo.png" class="logo" alt="Protein & Carb" onerror="this.onerror=null;this.src='logo.png';setTimeout(()=>{if(!this.complete||this.naturalWidth===0){this.style.display='none';}},300);">
+        </div>
+        <p class="welcome-text">مرحباً بك في نظام</p>
         <h1 class="hero-title">Protein & Carb Operations</h1>
         <p class="hero-date">${todayDate()}</p>
       </section>
 
-      <section class="grid">
-        <div class="card home-card" onclick="renderOperations()"><div class="icon"><i class="fa-solid fa-industry"></i></div><div class="card-title">متابعة التشغيل</div><div class="card-sub">مهام التشغيل اليومية</div></div>
-        <div class="card home-card" onclick="renderCleaning()"><div class="icon"><i class="fa-solid fa-broom"></i></div><div class="card-title">النظافة</div><div class="card-sub">متابعة الورديات</div></div>
-        <div class="card home-card" onclick="renderChefs()"><div class="icon"><i class="fa-solid fa-utensils"></i></div><div class="card-title">الشيفات</div><div class="card-sub">الإنتاج والطلبات</div></div>
-        <div class="card home-card" onclick="renderWarehouseGate()"><div class="icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="card-title">المستودع ${newOrders ? `(${newOrders})` : ""}</div><div class="card-sub">طلبات وصرف داخلي</div></div>
+      <section class="home-launcher">
+        <div class="home-circle-card" onclick="renderChefs()">
+          <div class="home-circle"><i class="fa-solid fa-utensils"></i></div>
+          <h3>الشيفات</h3>
+          <p>الإنتاج والطلبات</p>
+        </div>
+
+        <div class="home-circle-card" onclick="renderWarehouseGate()">
+          <div class="home-circle"><i class="fa-solid fa-boxes-stacked"></i></div>
+          <h3>المستودع ${newOrders ? `(${newOrders})` : ""}</h3>
+          <p>طلبات وصرف داخلي</p>
+        </div>
+
+        <div class="home-circle-card" onclick="renderOperations()">
+          <div class="home-circle"><i class="fa-solid fa-industry"></i></div>
+          <h3>التشغيل</h3>
+          <p>مهام التشغيل اليومية</p>
+        </div>
+
+        <div class="home-circle-card" onclick="renderCleaning()">
+          <div class="home-circle"><i class="fa-solid fa-broom"></i></div>
+          <h3>النظافة</h3>
+          <p>متابعة الورديات</p>
+        </div>
       </section>
     </main>
   `;
