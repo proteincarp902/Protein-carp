@@ -120,10 +120,10 @@ function renderHome(){
       </section>
 
       <section class="grid">
-        <div class="card" onclick="renderOperations()"><div class="icon">🏭</div><div class="card-title">متابعة التشغيل</div></div>
-        <div class="card" onclick="renderCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
-        <div class="card" onclick="renderChefs()"><div class="icon">🧑‍🍳</div><div class="card-title">الشيفات</div></div>
-        <div class="card" onclick="renderWarehouseGate()"><div class="icon">📦</div><div class="card-title">المستودع ${newOrders ? `(${newOrders})` : ""}</div></div>
+        <div class="card home-card" onclick="renderOperations()"><div class="icon"><i class="fa-solid fa-industry"></i></div><div class="card-title">متابعة التشغيل</div><div class="card-sub">مهام التشغيل اليومية</div></div>
+        <div class="card home-card" onclick="renderCleaning()"><div class="icon"><i class="fa-solid fa-broom"></i></div><div class="card-title">النظافة</div><div class="card-sub">متابعة الورديات</div></div>
+        <div class="card home-card" onclick="renderChefs()"><div class="icon"><i class="fa-solid fa-utensils"></i></div><div class="card-title">الشيفات</div><div class="card-sub">الإنتاج والطلبات</div></div>
+        <div class="card home-card" onclick="renderWarehouseGate()"><div class="icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="card-title">المستودع ${newOrders ? `(${newOrders})` : ""}</div><div class="card-sub">طلبات وصرف داخلي</div></div>
       </section>
     </main>
   `;
@@ -214,13 +214,13 @@ function checkSettingsPassword(){
 function renderSettings(){
   pageLayout("الإعدادات", `
     <section class="grid">
-      <div class="card" onclick="renderSettingsSections()"><div class="icon">👨🍳</div><div class="card-title">أقسام الشيفات</div></div>
-      <div class="card" onclick="renderSettingsChefs()"><div class="icon">🧑🍳</div><div class="card-title">إدارة الشيفات</div></div>
-      <div class="card" onclick="renderSettingsWarehouseItems()"><div class="icon">📦</div><div class="card-title">أصناف المستودع</div></div>
-      <div class="card" onclick="renderSettingsCleaning()"><div class="icon">🧹</div><div class="card-title">عناصر النظافة</div></div>
-      <div class="card" onclick="renderSettingsOperations()"><div class="icon">🏭</div><div class="card-title">مهام التشغيل</div></div>
-      <div class="card" onclick="renderSettingsInternalIssue()"><div class="icon">📤</div><div class="card-title">إعدادات الصرف الداخلي</div></div>
-      <div class="card" onclick="renderSettingsPasswords()"><div class="icon">🔐</div><div class="card-title">كلمات المرور</div></div>
+      <div class="card" onclick="renderSettingsSections()"><div class="icon"><i class="fa-solid fa-utensils"></i></div><div class="card-title">أقسام الشيفات</div></div>
+      <div class="card" onclick="renderSettingsChefs()"><div class="icon"><i class="fa-solid fa-utensils"></i></div><div class="card-title">إدارة الشيفات</div></div>
+      <div class="card" onclick="renderSettingsWarehouseItems()"><div class="icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="card-title">أصناف المستودع</div></div>
+      <div class="card" onclick="renderSettingsCleaning()"><div class="icon"><i class="fa-solid fa-broom"></i></div><div class="card-title">عناصر النظافة</div></div>
+      <div class="card" onclick="renderSettingsOperations()"><div class="icon"><i class="fa-solid fa-industry"></i></div><div class="card-title">مهام التشغيل</div></div>
+      <div class="card" onclick="renderSettingsInternalIssue()"><div class="icon"><i class="fa-solid fa-arrow-up-from-bracket"></i></div><div class="card-title">إعدادات الصرف الداخلي</div></div>
+      <div class="card" onclick="renderSettingsPasswords()"><div class="icon"><i class="fa-solid fa-lock"></i></div><div class="card-title">كلمات المرور</div></div>
     </section>
   `,"renderHome()");
 }
@@ -313,7 +313,7 @@ function drawChefs(){
   if(!box) return;
   box.innerHTML = chefs.length ? chefs.map(c=>`
     <div class="card">
-      <div class="icon">👨🍳</div>
+      <div class="icon"><i class="fa-solid fa-utensils"></i></div>
       <div class="card-title">${c.name}</div>
       <div style="margin-top:8px;color:#7b8674;font-weight:700">${c.section} - ${c.code}</div>
       <button class="btn btn-light" style="margin-top:12px" onclick="deleteDocByPath('chefs','${c.id}')">🗑 حذف</button>
@@ -620,10 +620,10 @@ function renderChefDashboard(chef){
     </div>
 
     <section class="grid">
-      <div class="card" onclick="renderProduction()"><div class="icon">📈</div><div class="card-title">الإنتاج</div></div>
-      <div class="card" onclick="renderWaste()"><div class="icon">🗑️</div><div class="card-title">التالف والهدر</div></div>
-      <div class="card" onclick="renderWarehouseRequest()"><div class="icon">📦</div><div class="card-title">طلب مستودع</div></div>
-      <div class="card" onclick="renderMyOrders()"><div class="icon">📋</div><div class="card-title">طلباتي</div></div>
+      <div class="card" onclick="renderProduction()"><div class="icon"><i class="fa-solid fa-chart-line"></i></div><div class="card-title">الإنتاج</div></div>
+      <div class="card" onclick="renderWaste()"><div class="icon"><i class="fa-solid fa-trash-can"></i></div><div class="card-title">التالف والهدر</div></div>
+      <div class="card" onclick="renderWarehouseRequest()"><div class="icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="card-title">طلب مستودع</div></div>
+      <div class="card" onclick="renderMyOrders()"><div class="icon"><i class="fa-solid fa-clipboard-list"></i></div><div class="card-title">طلباتي</div></div>
     </section>
   `,"renderChefs()");
 }
@@ -1004,8 +1004,8 @@ function checkWarehousePassword(){
 function renderWarehouseMenu(){
   pageLayout("المستودع", `
     <section class="grid">
-      <div class="card" onclick="renderWarehouseOrders()"><div class="icon">📦</div><div class="card-title">طلبات الشيفات</div></div>
-      <div class="card" onclick="renderInternalIssue()"><div class="icon">📤</div><div class="card-title">صرف داخلي</div></div>
+      <div class="card" onclick="renderWarehouseOrders()"><div class="icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="card-title">طلبات الشيفات</div></div>
+      <div class="card" onclick="renderInternalIssue()"><div class="icon"><i class="fa-solid fa-arrow-up-from-bracket"></i></div><div class="card-title">صرف داخلي</div></div>
     </section>
   `,"renderHome()");
 }
@@ -1213,8 +1213,8 @@ async function saveInternalIssue(){
 function renderCleaning(){
   pageLayout("النظافة", `
     <section class="grid">
-      <div class="card" onclick="renderCleaningLang('ar')"><div class="icon">🇸🇦</div><div class="card-title">العربية</div></div>
-      <div class="card" onclick="renderCleaningLang('bn')"><div class="icon">🇧🇩</div><div class="card-title">বাংলা</div></div>
+      <div class="card" onclick="renderCleaningLang('ar')"><div class="icon"><i class="fa-solid fa-language"></i></div><div class="card-title">العربية</div></div>
+      <div class="card" onclick="renderCleaningLang('bn')"><div class="icon"><i class="fa-solid fa-globe"></i></div><div class="card-title">বাংলা</div></div>
     </section>
   `,"renderHome()");
 }
@@ -1403,12 +1403,12 @@ function renderAdmin(){
     </div>
 
     <section class="grid" style="margin-top:16px">
-      <div class="card" onclick="renderAdminProduction()"><div class="icon">📈</div><div class="card-title">الإنتاج</div></div>
-      <div class="card" onclick="renderAdminWaste()"><div class="icon">🗑️</div><div class="card-title">التالف والهدر</div></div>
-      <div class="card" onclick="renderAdminWarehouse()"><div class="icon">📦</div><div class="card-title">المستودع</div></div>
-      <div class="card" onclick="renderAdminCleaning()"><div class="icon">🧹</div><div class="card-title">النظافة</div></div>
-      <div class="card" onclick="renderAdminOperations()"><div class="icon">🏭</div><div class="card-title">التشغيل</div></div>
-      <div class="card" onclick="renderAdminPDF()"><div class="icon">📄</div><div class="card-title">تصدير PDF</div></div>
+      <div class="card" onclick="renderAdminProduction()"><div class="icon"><i class="fa-solid fa-chart-line"></i></div><div class="card-title">الإنتاج</div></div>
+      <div class="card" onclick="renderAdminWaste()"><div class="icon"><i class="fa-solid fa-trash-can"></i></div><div class="card-title">التالف والهدر</div></div>
+      <div class="card" onclick="renderAdminWarehouse()"><div class="icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="card-title">المستودع</div></div>
+      <div class="card" onclick="renderAdminCleaning()"><div class="icon"><i class="fa-solid fa-broom"></i></div><div class="card-title">النظافة</div></div>
+      <div class="card" onclick="renderAdminOperations()"><div class="icon"><i class="fa-solid fa-industry"></i></div><div class="card-title">التشغيل</div></div>
+      <div class="card" onclick="renderAdminPDF()"><div class="icon"><i class="fa-solid fa-file-pdf"></i></div><div class="card-title">تصدير PDF</div></div>
     </section>
   `,"renderHome()");
   drawAdminAlerts();
@@ -1521,8 +1521,8 @@ function drawWasteAdmin(){
 function renderAdminWarehouse(){
   pageLayout("إدارة المستودع", `
     <section class="grid">
-      <div class="card" onclick="renderAdminWarehouseArchive()"><div class="icon">🗂️</div><div class="card-title">أرشيف المستودع</div></div>
-      <div class="card" onclick="renderAdminInternalIssue()"><div class="icon">📤</div><div class="card-title">الصرف الداخلي</div></div>
+      <div class="card" onclick="renderAdminWarehouseArchive()"><div class="icon"><i class="fa-solid fa-folder-open"></i></div><div class="card-title">أرشيف المستودع</div></div>
+      <div class="card" onclick="renderAdminInternalIssue()"><div class="icon"><i class="fa-solid fa-arrow-up-from-bracket"></i></div><div class="card-title">الصرف الداخلي</div></div>
     </section>
   `,"renderAdmin()");
 }
@@ -1704,11 +1704,11 @@ function drawOperationAdmin(){
 function renderAdminPDF(){
   pageLayout("تصدير PDF", `
     <section class="grid">
-      <div class="card" onclick="printReport('production')"><div class="icon">📈</div><div class="card-title">تقرير الإنتاج</div></div>
-      <div class="card" onclick="printReport('waste')"><div class="icon">🗑️</div><div class="card-title">تقرير التالف والهدر</div></div>
-      <div class="card" onclick="printReport('operations')"><div class="icon">🏭</div><div class="card-title">تقرير التشغيل</div></div>
-      <div class="card" onclick="printReport('internal')"><div class="icon">📤</div><div class="card-title">تقرير الصرف الداخلي</div></div>
-      <div class="card" onclick="printReport('summary')"><div class="icon">📄</div><div class="card-title">تقرير شامل</div></div>
+      <div class="card" onclick="printReport('production')"><div class="icon"><i class="fa-solid fa-chart-line"></i></div><div class="card-title">تقرير الإنتاج</div></div>
+      <div class="card" onclick="printReport('waste')"><div class="icon"><i class="fa-solid fa-trash-can"></i></div><div class="card-title">تقرير التالف والهدر</div></div>
+      <div class="card" onclick="printReport('operations')"><div class="icon"><i class="fa-solid fa-industry"></i></div><div class="card-title">تقرير التشغيل</div></div>
+      <div class="card" onclick="printReport('internal')"><div class="icon"><i class="fa-solid fa-arrow-up-from-bracket"></i></div><div class="card-title">تقرير الصرف الداخلي</div></div>
+      <div class="card" onclick="printReport('summary')"><div class="icon"><i class="fa-solid fa-file-pdf"></i></div><div class="card-title">تقرير شامل</div></div>
     </section>
   `,"renderAdmin()");
 }
