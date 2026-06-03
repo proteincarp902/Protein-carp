@@ -112,43 +112,19 @@ function renderHome(){
         <button class="btn btn-light" onclick="renderSettingsGate()"><i class="fa-solid fa-gear"></i> الإعدادات</button>
         <button class="btn btn-main" onclick="renderAdminGate()"><i class="fa-solid fa-chart-line"></i> الإدارة</button>
       </div>
-
       <section class="hero home-hero">
-        <div class="logo-wrap">
-          <img src="assets/logo.png" class="logo" alt="Protein & Carb" onerror="this.onerror=null;this.src='logo.png';setTimeout(()=>{if(!this.complete||this.naturalWidth===0){this.style.display='none';}},300);">
-        </div>
+        <div class="logo-wrap"><img src="assets/logo.png" class="logo" alt="Protein & Carb" onerror="this.onerror=null;this.src='logo.png';setTimeout(()=>{if(!this.complete||this.naturalWidth===0){this.style.display='none';}},300);"></div>
         <p class="welcome-text">مرحباً بك في نظام</p>
         <h1 class="hero-title">Protein & Carb Operations</h1>
         <p class="hero-date">${todayDate()}</p>
       </section>
-
       <section class="home-launcher">
-        <div class="home-circle-card" onclick="renderChefs()">
-          <div class="home-circle"><i class="fa-solid fa-utensils"></i></div>
-          <h3>الشيفات</h3>
-          <p>الإنتاج والطلبات</p>
-        </div>
-
-        <div class="home-circle-card" onclick="renderWarehouseGate()">
-          <div class="home-circle"><i class="fa-solid fa-boxes-stacked"></i></div>
-          <h3>المستودع ${newOrders ? `(${newOrders})` : ""}</h3>
-          <p>طلبات وصرف داخلي</p>
-        </div>
-
-        <div class="home-circle-card" onclick="renderOperations()">
-          <div class="home-circle"><i class="fa-solid fa-industry"></i></div>
-          <h3>التشغيل</h3>
-          <p>مهام التشغيل اليومية</p>
-        </div>
-
-        <div class="home-circle-card" onclick="renderCleaning()">
-          <div class="home-circle"><i class="fa-solid fa-broom"></i></div>
-          <h3>النظافة</h3>
-          <p>متابعة الورديات</p>
-        </div>
+        <div class="home-circle-card" onclick="renderChefs()"><div class="home-circle"><i class="fa-solid fa-utensils"></i></div><h3>الشيفات</h3><p>الإنتاج والطلبات</p></div>
+        <div class="home-circle-card" onclick="renderWarehouseGate()"><div class="home-circle"><i class="fa-solid fa-boxes-stacked"></i></div><h3>المستودع ${newOrders ? `(${newOrders})` : ""}</h3><p>طلبات وصرف داخلي</p></div>
+        <div class="home-circle-card" onclick="renderOperations()"><div class="home-circle"><i class="fa-solid fa-industry"></i></div><h3>التشغيل</h3><p>مهام التشغيل اليومية</p></div>
+        <div class="home-circle-card" onclick="renderCleaning()"><div class="home-circle"><i class="fa-solid fa-broom"></i></div><h3>النظافة</h3><p>متابعة الورديات</p></div>
       </section>
-    </main>
-  `;
+    </main>`;
 }
 
 function renderEmpty(title){
@@ -1044,44 +1020,67 @@ function drawWarehouseOrders(){
   box.innerHTML=visibleOrders.length ? visibleOrders.map(o=>renderOrderCard(o,false)).join("") : `<div class="panel placeholder">لا توجد طلبات</div>`;
 }
 
+function getOrderIssueSummary(order){
+  const items = order.items || [];
+  const totalRequested = items.reduce((sum,item)=>sum + Number(item.qty || 0),0);
+  const totalIssued = items.reduce((sum,item)=>sum + Number(item.issuedQty ?? item.qty ?? 0),0);
+  if(items.length && totalIssued === 0) return "لم يصرف";
+  if(totalIssued < totalRequested) return "صرف جزئي";
+  return "صرف كامل";
+}
+
+function getOrderItemDisplay(item){
+  if(item.issuedQty === undefined || item.issuedQty === null) return `<b>${item.issuedQty !== undefined ? `مطلوب: ${item.qty} / مصروف: ${item.issuedQty}` : `${item.qty} ${item.unit||""}`}</b>`;
+  return `<div style="text-align:left;display:grid;gap:4px"><b>مطلوب: ${item.qty} ${item.unit||""}</b><b style="color:#2E7D32">مصروف: ${item.issuedQty} ${item.unit||""}</b></div>`;
+}
+
 function renderOrderCard(order,isChefView){
+  const issueSummary = order.issueStatus || getOrderIssueSummary(order);
   return `
     <div class="panel">
-      <h2>📦 طلبية من قسم ${order.section}</h2>
-      <p style="font-weight:800;margin-top:8px">👨🍳 الشيف: ${order.chefName}</p>
+      <h2><i class="fa-solid fa-boxes-stacked"></i> طلبية من قسم ${order.section}</h2>
+      <p style="font-weight:800;margin-top:8px"><i class="fa-solid fa-utensils"></i> الشيف: ${order.chefName}</p>
       <p style="color:#7b8674;margin-top:4px">🆔 ${order.orderId||order.id}</p>
       <p style="color:#7b8674;margin-top:4px">🕒 ${order.createdAtText||""}</p>
-
       <div style="margin-top:12px">
-        ${(order.items||[]).map((item,i)=>`
-          <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
-            <span>${i+1}- ${item.name}</span>
-            <b>${item.qty} ${item.unit||""}</b>
-          </div>
-        `).join("")}
+        ${(order.items||[]).map((item,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e5eadb;padding:8px 0;gap:12px"><span>${i+1}- ${item.name}</span>${getOrderItemDisplay(item)}</div>`).join("")}
       </div>
-
       ${order.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${order.note}</p>` : ""}
+      ${order.issuedAtText ? `<p style="margin-top:8px;color:#7b8674;font-weight:800">اعتماد الصرف: ${order.issuedAtText}</p>` : ""}
       <h3 style="margin-top:12px">الحالة: ${order.status}</h3>
-
+      ${(order.status==="جاهز" || order.status==="تم الاستلام" || order.status==="مؤرشف") ? `<h3 style="margin-top:8px">${issueSummary}</h3>` : ""}
       ${isChefView && order.status==="جاهز" ? `<button class="btn btn-main" style="margin-top:12px" onclick="receiveOrder('${order.id}')">تم الاستلام</button>` : ""}
-
       ${!isChefView ? `
+        ${order.status !== "جاهز" && order.status !== "تم الاستلام" && order.status !== "مؤرشف" ? `<div class="panel" style="margin-top:14px;background:rgba(234,246,238,.55)"><h3>اعتماد المصروف الفعلي</h3>${(order.items||[]).map((item,i)=>`<label>${item.name} — مطلوب: ${item.qty} ${item.unit||""}</label><input id="issued_${order.id}_${i}" type="number" min="0" step="any" value="${item.issuedQty ?? item.qty ?? 0}" placeholder="الكمية المصروفة فعلياً">`).join("")}<button class="btn btn-main" onclick="approveWarehouseIssue('${order.id}')">اعتماد الصرف</button></div>` : ""}
         <div style="margin-top:12px;display:grid;gap:8px">
-          <button class="btn btn-light" onclick="updateOrderStatus('${order.id}','قيد التجهيز')">قيد التجهيز</button>
-          <button class="btn btn-main" onclick="updateOrderStatus('${order.id}','جاهز')">جاهز</button>
-          <button class="btn btn-light" onclick="updateOrderStatus('${order.id}','متأخر')">متأخر</button>
+          ${order.status !== "جاهز" && order.status !== "تم الاستلام" && order.status !== "مؤرشف" ? `<button class="btn btn-light" onclick="updateOrderStatus('${order.id}','قيد التجهيز')">قيد التجهيز</button><button class="btn btn-light" onclick="updateOrderStatus('${order.id}','متأخر')">متأخر</button>` : ""}
           <button class="btn btn-light" onclick="printWarehouseOrder('${order.id}')">🖨 طباعة الطلب</button>
-          <button class="btn btn-light" onclick="archiveWarehouseOrder('${order.id}')">📁 أرشفة</button>
-        </div>
-      ` : ""}
-    </div>
-  `;
+          ${order.status !== "مؤرشف" ? `<button class="btn btn-light" onclick="archiveWarehouseOrder('${order.id}')">📁 أرشفة</button>` : ""}
+        </div>` : ""}
+    </div>`;
 }
 
 async function updateOrderStatus(id,status){
   const {db,doc,updateDoc}=window.firebaseDB;
   await updateDoc(doc(db,"warehouse_orders",id),{status});
+}
+
+async function approveWarehouseIssue(id){
+  const order = warehouseOrders.find(o=>o.id===id);
+  if(!order) return;
+  const issuedItems = (order.items||[]).map((item,index)=>{
+    const input = document.getElementById(`issued_${id}_${index}`);
+    const issuedQty = Number(input?.value || 0);
+    return {...item, issuedQty: issuedQty < 0 ? 0 : issuedQty};
+  });
+  const requestedTotal = issuedItems.reduce((sum,item)=>sum + Number(item.qty || 0),0);
+  const issuedTotal = issuedItems.reduce((sum,item)=>sum + Number(item.issuedQty || 0),0);
+  let issueStatus = "صرف كامل";
+  if(issuedTotal === 0) issueStatus = "لم يصرف";
+  else if(issuedTotal < requestedTotal) issueStatus = "صرف جزئي";
+  const {db,doc,updateDoc}=window.firebaseDB;
+  await updateDoc(doc(db,"warehouse_orders",id),{items:issuedItems,issueStatus,status:"جاهز",issuedAtText:nowText(),issuedAtMs:Date.now()});
+  alert("تم اعتماد الصرف الفعلي");
 }
 
 async function receiveOrder(id){
@@ -1106,6 +1105,8 @@ async function archiveWarehouseOrder(id){
     archivedAtMs:Date.now()
   });
 
+  warehouseOrders = warehouseOrders.map(o=>o.id===id ? {...o,status:"مؤرشف",archivedAtText:nowText(),archivedAtMs:Date.now()} : o);
+  drawWarehouseOrders();
   alert("تمت أرشفة الطلب");
 }
 
@@ -1578,7 +1579,7 @@ function drawWarehouseArchive(){
           ${(order.items||[]).map((item,i)=>`
             <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
               <span>${i+1}- ${item.name}</span>
-              <b>${item.qty} ${item.unit||""}</b>
+              <b>${item.issuedQty !== undefined ? `مطلوب: ${item.qty} / مصروف: ${item.issuedQty}` : `${item.qty} ${item.unit||""}`}</b>
             </div>
           `).join("")}
         </div>
@@ -1780,28 +1781,14 @@ function openPrintReport(title, bodyHtml){
 }
 
 function itemsTable(items, withUnit=true){
+  const hasIssued = (items||[]).some(item=>item.issuedQty !== undefined && item.issuedQty !== null);
   return `
     <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>الصنف</th>
-          <th>الكمية</th>
-          ${withUnit ? "<th>الوحدة</th>" : ""}
-        </tr>
-      </thead>
+      <thead><tr><th>#</th><th>الصنف</th>${hasIssued ? "<th>المطلوب</th><th>المصروف</th>" : "<th>الكمية</th>"}${withUnit ? "<th>الوحدة</th>" : ""}</tr></thead>
       <tbody>
-        ${(items||[]).map((item,i)=>`
-          <tr>
-            <td>${i+1}</td>
-            <td>${escapeHtml(item.name || item.productName || "")}</td>
-            <td>${escapeHtml(item.qty || "")}</td>
-            ${withUnit ? `<td>${escapeHtml(item.unit || "")}</td>` : ""}
-          </tr>
-        `).join("")}
+        ${(items||[]).map((item,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(item.name || item.productName || "")}</td>${hasIssued ? `<td>${escapeHtml(item.qty || "")}</td><td>${escapeHtml(item.issuedQty ?? item.qty ?? "")}</td>` : `<td>${escapeHtml(item.qty || "")}</td>`}${withUnit ? `<td>${escapeHtml(item.unit || "")}</td>` : ""}</tr>`).join("")}
       </tbody>
-    </table>
-  `;
+    </table>`;
 }
 
 function buildProductionReport(){
@@ -1893,7 +1880,7 @@ function printWarehouseOrder(id){
           <tr><th>القسم</th><td>${escapeHtml(order.section||"")}</td></tr>
           <tr><th>الشيف</th><td>${escapeHtml(order.chefName||"")}</td></tr>
           <tr><th>الوقت</th><td>${escapeHtml(order.createdAtText||"")}</td></tr>
-          <tr><th>الحالة</th><td>${escapeHtml(order.status||"")}</td></tr>
+          <tr><th>الحالة</th><td>${escapeHtml(order.status||"")}</td></tr><tr><th>حالة الصرف</th><td>${escapeHtml(order.issueStatus || getOrderIssueSummary(order))}</td></tr>
         </tbody>
       </table>
       ${itemsTable(order.items, true)}
