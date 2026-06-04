@@ -37,6 +37,90 @@ let operationRunDraft = {};
 let currentBackFn = "renderHome()";
 let isPhoneBack = false;
 
+let lastWarehouseNewCount = null;
+let uxAudioContext = null;
+
+function ensureUxStyle(){
+  if(document.getElementById("proteinUxStyle")) return;
+  const style=document.createElement("style");
+  style.id="proteinUxStyle";
+  style.textContent=`
+    .order-badge{position:absolute;top:17px;right:50%;transform:translateX(43px);min-width:28px;height:28px;padding:0 8px;border-radius:999px;background:#E53935;color:#fff;border:3px solid #fff;box-shadow:0 10px 20px rgba(229,57,53,.28);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;z-index:5}
+    .warehouse-home-card{overflow:visible!important}
+    #toastHost{position:fixed;top:18px;left:18px;z-index:99999;display:grid;gap:10px;max-width:min(360px,calc(100vw - 36px))}
+    .toast-item{display:flex;gap:10px;align-items:center;background:rgba(255,255,255,.96);border:1px solid rgba(255,255,255,.8);box-shadow:0 18px 45px rgba(18,51,37,.18);border-radius:20px;padding:12px 14px;transform:translateY(-12px);opacity:0;transition:.25s ease;backdrop-filter:blur(14px)}
+    .toast-item.show{transform:translateY(0);opacity:1}
+    .toast-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#43A94D;color:white;font-weight:900;flex:none}
+    .toast-warn .toast-icon{background:#F4C542;color:#1B4D32}
+    .toast-error .toast-icon{background:#E53935}
+    .toast-text{font-weight:900;color:#1B4D32;line-height:1.6}
+    .task-list{display:grid;gap:12px}
+    .task-check-card{display:grid!important;grid-template-columns:auto 1fr;gap:12px;align-items:center;background:rgba(255,255,255,.94);border:1px solid rgba(255,255,255,.78);border-radius:24px;padding:16px;box-shadow:0 10px 28px rgba(18,51,37,.10);margin:0!important;color:#1B4D32}
+    .task-check-card input{display:none}
+    .task-check-ui{width:28px;height:28px;border-radius:9px;border:2px solid #43A94D;display:inline-flex;align-items:center;justify-content:center;background:white}
+    .task-check-card input:checked + .task-check-ui{background:#43A94D;border-color:#43A94D}
+    .task-check-card input:checked + .task-check-ui::after{content:"✓";color:white;font-weight:900}
+    .task-text{display:grid;gap:3px}
+    .task-text small{color:#72806D;font-weight:800;font-size:14px}
+    .issue-box{background:rgba(255,246,214,.55)!important;border:1px solid rgba(244,197,66,.32)!important}
+    .issue-row{display:grid;grid-template-columns:1fr 120px;gap:10px;align-items:center;border-bottom:1px solid #e5eadb;padding:10px 0}
+    .issue-row input{margin:0!important;text-align:center}
+    .issued-display{text-align:left;display:grid;gap:4px}
+    .issued-display b:last-child{color:#2E7D32}
+    @media(max-width:700px){.issue-row{grid-template-columns:1fr}.issue-row input{text-align:right}}
+  `;
+  document.head.appendChild(style);
+}
+
+function showToast(message, type="success"){
+  ensureUxStyle();
+  let host=document.getElementById("toastHost");
+  if(!host){host=document.createElement("div");host.id="toastHost";document.body.appendChild(host);}
+  const item=document.createElement("div");
+  item.className=`toast-item toast-${type}`;
+  item.innerHTML=`<div class="toast-icon">${type==="error"?"!":type==="warn"?"⚠":"✓"}</div><div class="toast-text">${message}</div>`;
+  host.appendChild(item);
+  setTimeout(()=>item.classList.add("show"),20);
+  setTimeout(()=>{item.classList.remove("show");setTimeout(()=>item.remove(),280);},2600);
+}
+
+function notifyWarehouseNewOrder(order){
+  showToast(`📦 طلب جديد للمستودع${order?.section ? " - "+order.section : ""}${order?.chefName ? " / "+order.chefName : ""}`,"warn");
+  try{if(navigator.vibrate) navigator.vibrate([140,60,140]);}catch(e){}
+  try{
+    uxAudioContext = uxAudioContext || new (window.AudioContext||window.webkitAudioContext)();
+    const ctx=uxAudioContext, osc=ctx.createOscillator(), gain=ctx.createGain();
+    osc.type="sine"; osc.frequency.value=880;
+    gain.gain.setValueAtTime(0.0001,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.16,ctx.currentTime+0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.28);
+    osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+0.3);
+  }catch(e){}
+}
+
+function checkWarehouseNewOrdersNotify(){
+  const count = warehouseOrders.filter(o=>o.status==="جديد").length;
+  if(lastWarehouseNewCount === null){lastWarehouseNewCount = count; return;}
+  if(count > lastWarehouseNewCount){
+    const newest = [...warehouseOrders].filter(o=>o.status==="جديد").sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0))[0];
+    notifyWarehouseNewOrder(newest);
+  }
+  lastWarehouseNewCount = count;
+}
+
+function getCleaningBnText(text){return cleaningBn[text] || "বাংলা অনুবাদ";}
+
+function getProductionPlaceholder(){
+  const section = currentChef?.section || "";
+  if(section.includes("حلا") || section.includes("حلويات")) return "مثال: تشيز كيك";
+  if(section.includes("مخبوز")) return "مثال: كرواسون زبدة";
+  if(section.includes("لحم") || section.includes("مشوي")) return "مثال: ستيك لحم";
+  if(section.includes("منيو")) return "مثال: وجبة دجاج";
+  if(section.includes("بوفيه")) return "مثال: أرز أبيض";
+  return "مثال: صنف الإنتاج";
+}
+
+
 function isStandaloneApp(){
   return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 }
@@ -130,6 +214,7 @@ function pageLayout(title, content, backFn="renderHome()"){
 }
 
 function renderHome(){
+  ensureUxStyle();
   currentBackFn = "renderHome()";
   const newOrders = warehouseOrders.filter(o=>o.status==="جديد").length;
 
@@ -159,7 +244,7 @@ function renderHome(){
       </section>
       <section class="home-launcher">
         <div class="home-circle-card" onclick="renderChefs()"><div class="home-circle"><i class="fa-solid fa-utensils"></i></div><h3>الشيفات</h3><p>الإنتاج والطلبات</p></div>
-        <div class="home-circle-card" onclick="renderWarehouseGate()"><div class="home-circle"><i class="fa-solid fa-boxes-stacked"></i></div><h3>المستودع ${newOrders ? `(${newOrders})` : ""}</h3><p>طلبات وصرف داخلي</p></div>
+        <div class="home-circle-card warehouse-home-card" onclick="renderWarehouseGate()">${newOrders ? `<span class="order-badge">${newOrders}</span>` : ""}<div class="home-circle"><i class="fa-solid fa-boxes-stacked"></i></div><h3>المستودع</h3><p>طلبات وصرف داخلي</p></div>
         <div class="home-circle-card" onclick="renderOperations()"><div class="home-circle"><i class="fa-solid fa-industry"></i></div><h3>التشغيل</h3><p>مهام التشغيل اليومية</p></div>
         <div class="home-circle-card" onclick="renderCleaning()"><div class="home-circle"><i class="fa-solid fa-broom"></i></div><h3>النظافة</h3><p>متابعة الورديات</p></div>
       </section>
@@ -209,6 +294,7 @@ async function initCloud(){
 }
 
 function refreshViews(){
+  checkWarehouseNewOrdersNotify();
   if(document.getElementById("sectionsContainer")) drawSections();
   if(document.getElementById("chefSection")) drawChefSectionOptions();
   if(document.getElementById("chefsContainer")) drawChefs();
@@ -242,7 +328,7 @@ function renderSettingsGate(){
 function checkSettingsPassword(){
   const pass=document.getElementById("settingsPasswordInput").value.trim();
   if(pass !== String(systemSettings.adminPassword)){
-    alert("كلمة المرور غير صحيحة");
+    showToast("كلمة المرور غير صحيحة","error");
     return;
   }
   renderSettings();
@@ -335,7 +421,7 @@ async function addChef(){
   if(!name||!code||!section) return;
 
   if(chefs.some(c=>c.code===code)){
-    alert("الكود مستخدم");
+    showToast("الكود مستخدم","error");
     return;
   }
 
@@ -390,7 +476,7 @@ async function addWarehouseItem(){
   if(!name||!code) return;
 
   if(warehouseItems.some(i=>i.code===code)){
-    alert("كود الصنف مستخدم");
+    showToast("كود الصنف مستخدم","error");
     return;
   }
 
@@ -603,7 +689,7 @@ async function savePasswords(){
     warehousePassword:warehousePassword||systemSettings.warehousePassword,
     orderCounter:systemSettings.orderCounter||1001
   },{merge:true});
-  alert("تم حفظ كلمات المرور");
+  showToast("تم حفظ كلمات المرور");
 }
 
 /* Chefs */
@@ -673,7 +759,7 @@ function renderProduction(){
   pageLayout("الإنتاج", `
     <div class="panel">
       <label>اسم المنتج</label>
-      <input id="productionNameInput" placeholder="مثال: كرواسون" onkeydown="focusProductionQty(event)">
+      <input id="productionNameInput" placeholder="${getProductionPlaceholder()}" onkeydown="focusProductionQty(event)">
 
       <label>الكمية</label>
       <input id="productionQtyInput" type="number" min="1" placeholder="مثال: 20" onkeydown="handleProductionQtyInput(event)">
@@ -790,7 +876,7 @@ async function submitProduction(){
     createdAt:serverTimestamp()
   });
 
-  alert("تم رفع الإنتاج للإدارة");
+  showToast("تم رفع الإنتاج للإدارة");
   productionDraft=[];
   renderProduction();
 }
@@ -874,7 +960,7 @@ async function submitWaste(){
   const reason=document.getElementById("wasteReason").value.trim();
 
   if(!productName || !qty || qty<=0 || !reason){
-    alert("أكمل اسم المنتج والكمية وسبب الهدر");
+    showToast("أكمل اسم المنتج والكمية وسبب الهدر","error");
     return;
   }
 
@@ -891,7 +977,7 @@ async function submitWaste(){
     createdAt:serverTimestamp()
   });
 
-  alert("تم رفع التالف والهدر للإدارة");
+  showToast("تم رفع التالف والهدر للإدارة");
   renderChefDashboard(currentChef);
 }
 
@@ -1010,7 +1096,7 @@ async function sendWarehouseOrder(){
 
 function renderMyOrders(){
   if(!currentChef) return renderChefs();
-  const myOrders=warehouseOrders.filter(o=>o.chefCode===currentChef.code && o.status!=="مؤرشف");
+  const myOrders=warehouseOrders.filter(o=>o.chefCode===currentChef.code && !["مؤرشف","محذوف"].includes(o.status));
   pageLayout("طلباتي", `
     <div class="grid">
       ${myOrders.length ? myOrders.map(o=>renderOrderCard(o,true)).join("") : `<div class="panel placeholder">لا توجد طلبات</div>`}
@@ -1032,7 +1118,7 @@ function renderWarehouseGate(){
 function checkWarehousePassword(){
   const pass=document.getElementById("warehousePasswordInputGate").value.trim();
   if(pass !== String(systemSettings.warehousePassword)){
-    alert("كلمة المرور غير صحيحة");
+    showToast("كلمة المرور غير صحيحة","error");
     return;
   }
   renderWarehouseMenu();
@@ -1055,7 +1141,7 @@ function renderWarehouseOrders(){
 function drawWarehouseOrders(){
   const box=document.getElementById("warehouseOrdersBox");
   if(!box) return;
-  const visibleOrders = warehouseOrders.filter(o=>o.status!=="مؤرشف");
+  const visibleOrders = warehouseOrders.filter(o=>!["تم الاستلام","مؤرشف","محذوف"].includes(o.status));
   box.innerHTML=visibleOrders.length ? visibleOrders.map(o=>renderOrderCard(o,false)).join("") : `<div class="panel placeholder">لا توجد طلبات</div>`;
 }
 
@@ -1069,34 +1155,64 @@ function getOrderIssueSummary(order){
 }
 
 function getOrderItemDisplay(item){
-  if(item.issuedQty === undefined || item.issuedQty === null) return `<b>${item.issuedQty !== undefined ? `مطلوب: ${item.qty} / مصروف: ${item.issuedQty}` : `${item.qty} ${item.unit||""}`}</b>`;
-  return `<div style="text-align:left;display:grid;gap:4px"><b>مطلوب: ${item.qty} ${item.unit||""}</b><b style="color:#2E7D32">مصروف: ${item.issuedQty} ${item.unit||""}</b></div>`;
+  if(item.issuedQty === undefined || item.issuedQty === null){
+    return `<b>${item.qty} ${item.unit||""}</b>`;
+  }
+  return `<div class="issued-display"><b>مطلوب: ${item.qty} ${item.unit||""}</b><b>مصروف: ${item.issuedQty} ${item.unit||""}</b></div>`;
 }
 
 function renderOrderCard(order,isChefView){
   const issueSummary = order.issueStatus || getOrderIssueSummary(order);
+  const isDone = order.status==="تم الاستلام" || order.status==="مؤرشف";
+
   return `
     <div class="panel">
       <h2><i class="fa-solid fa-boxes-stacked"></i> طلبية من قسم ${order.section}</h2>
       <p style="font-weight:800;margin-top:8px"><i class="fa-solid fa-utensils"></i> الشيف: ${order.chefName}</p>
       <p style="color:#7b8674;margin-top:4px">🆔 ${order.orderId||order.id}</p>
       <p style="color:#7b8674;margin-top:4px">🕒 ${order.createdAtText||""}</p>
+
       <div style="margin-top:12px">
-        ${(order.items||[]).map((item,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e5eadb;padding:8px 0;gap:12px"><span>${i+1}- ${item.name}</span>${getOrderItemDisplay(item)}</div>`).join("")}
+        ${(order.items||[]).map((item,i)=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e5eadb;padding:8px 0;gap:12px">
+            <span>${i+1}- ${item.name}</span>
+            ${getOrderItemDisplay(item)}
+          </div>
+        `).join("")}
       </div>
+
       ${order.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${order.note}</p>` : ""}
       ${order.issuedAtText ? `<p style="margin-top:8px;color:#7b8674;font-weight:800">اعتماد الصرف: ${order.issuedAtText}</p>` : ""}
+
       <h3 style="margin-top:12px">الحالة: ${order.status}</h3>
       ${(order.status==="جاهز" || order.status==="تم الاستلام" || order.status==="مؤرشف") ? `<h3 style="margin-top:8px">${issueSummary}</h3>` : ""}
+
       ${isChefView && order.status==="جاهز" ? `<button class="btn btn-main" style="margin-top:12px" onclick="receiveOrder('${order.id}')">تم الاستلام</button>` : ""}
-      ${!isChefView ? `
-        ${order.status !== "جاهز" && order.status !== "تم الاستلام" && order.status !== "مؤرشف" ? `<div class="panel" style="margin-top:14px;background:rgba(234,246,238,.55)"><h3>اعتماد المصروف الفعلي</h3>${(order.items||[]).map((item,i)=>`<label>${item.name} — مطلوب: ${item.qty} ${item.unit||""}</label><input id="issued_${order.id}_${i}" type="number" min="0" step="any" value="${item.issuedQty ?? item.qty ?? 0}" placeholder="الكمية المصروفة فعلياً">`).join("")}<button class="btn btn-main" onclick="approveWarehouseIssue('${order.id}')">اعتماد الصرف</button></div>` : ""}
-        <div style="margin-top:12px;display:grid;gap:8px">
-          ${order.status !== "جاهز" && order.status !== "تم الاستلام" && order.status !== "مؤرشف" ? `<button class="btn btn-light" onclick="updateOrderStatus('${order.id}','قيد التجهيز')">قيد التجهيز</button><button class="btn btn-light" onclick="updateOrderStatus('${order.id}','متأخر')">متأخر</button>` : ""}
-          <button class="btn btn-light" onclick="printWarehouseOrder('${order.id}')">🖨 طباعة الطلب</button>
-          ${order.status !== "مؤرشف" ? `<button class="btn btn-light" onclick="archiveWarehouseOrder('${order.id}')">📁 أرشفة</button>` : ""}
-        </div>` : ""}
-    </div>`;
+
+      ${!isChefView && !isDone ? `
+        ${order.status !== "جاهز" ? `
+          <div class="panel issue-box" style="margin-top:14px">
+            <h3><i class="fa-solid fa-clipboard-check"></i> المصروف الفعلي</h3>
+            <p style="color:#7b8674;font-weight:800;margin:8px 0 12px">اكتب الكمية التي خرجت فعلياً من المستودع، وليس الكمية المطلوبة.</p>
+            ${(order.items||[]).map((item,i)=>`
+              <div class="issue-row">
+                <div>
+                  <b>${item.name}</b>
+                  <div style="color:#7b8674;font-weight:800;margin-top:4px">المطلوب: ${item.qty} ${item.unit||""}</div>
+                </div>
+                <input id="issued_${order.id}_${i}" type="number" min="0" step="any" value="${item.issuedQty ?? item.qty ?? 0}" placeholder="مصروف">
+              </div>
+            `).join("")}
+            <button class="btn btn-main" style="margin-top:12px" onclick="approveWarehouseIssue('${order.id}')">اعتماد الصرف الفعلي</button>
+          </div>
+        ` : `
+          <div style="margin-top:12px;display:grid;gap:8px">
+            <button class="btn btn-light" onclick="printWarehouseOrder('${order.id}')">🖨 طباعة الطلب</button>
+          </div>
+        `}
+      ` : ""}
+    </div>
+  `;
 }
 
 async function updateOrderStatus(id,status){
@@ -1119,7 +1235,7 @@ async function approveWarehouseIssue(id){
   else if(issuedTotal < requestedTotal) issueStatus = "صرف جزئي";
   const {db,doc,updateDoc}=window.firebaseDB;
   await updateDoc(doc(db,"warehouse_orders",id),{items:issuedItems,issueStatus,status:"جاهز",issuedAtText:nowText(),issuedAtMs:Date.now()});
-  alert("تم اعتماد الصرف الفعلي");
+  showToast("تم اعتماد الصرف الفعلي");
 }
 
 async function receiveOrder(id){
@@ -1133,7 +1249,7 @@ async function archiveWarehouseOrder(id){
   if(!order) return;
 
   if(order.status !== "تم الاستلام"){
-    alert("لا يمكن أرشفة الطلب قبل أن يستلمه الشيف");
+    showToast("لا يمكن حذف الطلب قبل أن يستلمه الشيف","error");
     return;
   }
 
@@ -1146,7 +1262,15 @@ async function archiveWarehouseOrder(id){
 
   warehouseOrders = warehouseOrders.map(o=>o.id===id ? {...o,status:"مؤرشف",archivedAtText:nowText(),archivedAtMs:Date.now()} : o);
   drawWarehouseOrders();
-  alert("تمت أرشفة الطلب");
+  showToast("تمت أرشفة الطلب");
+}
+
+async function deleteWarehouseOrder(id){
+  const {db,doc,updateDoc}=window.firebaseDB;
+  await updateDoc(doc(db,"warehouse_orders",id),{status:"محذوف",deletedAtText:nowText(),deletedAtMs:Date.now()});
+  warehouseOrders = warehouseOrders.map(o=>o.id===id ? {...o,status:"محذوف"} : o);
+  drawWarehouseOrders();
+  showToast("تم حذف الطلب من شاشة المستودع");
 }
 
 /* Internal Issue */
@@ -1265,7 +1389,7 @@ async function saveInternalIssue(){
     createdAt:serverTimestamp()
   });
 
-  alert("تم حفظ الصرف الداخلي");
+  showToast("تم حفظ الصرف الداخلي");
   internalIssueCart=[];
   renderWarehouseMenu();
 }
@@ -1292,16 +1416,20 @@ function renderCleaningLang(lang){
 }
 
 function renderCleaningShift(lang,shift){
+  ensureUxStyle();
   const tasks=cleaningTasks.filter(t=>t[shift]);
   pageLayout(lang==="bn"?`${shiftLabels[shift].bn} - পরিষ্কার`:`${shiftLabels[shift].ar} - النظافة`, `
-    <div class="panel">
+    <div class="task-list">
       ${tasks.length ? tasks.map(t=>`
-        <label style="display:flex;align-items:center;gap:10px;margin:14px 0;font-weight:900">
+        <label class="task-check-card">
           <input type="checkbox" class="cleanTaskCheck" value="${t.id}">
-          ${lang==="bn"?translateCleaning(t.nameAr):t.nameAr}
+          <span class="task-check-ui"></span>
+          <span class="task-text">
+            <b>${t.nameAr}</b>
+            <small>${getCleaningBnText(t.nameAr)}</small>
+          </span>
         </label>
-      `).join("") : `<div class="placeholder">${lang==="bn"?"কোনো কাজ নেই":"لا توجد مهام لهذه الوردية"}</div>`}
-
+      `).join("") : `<div class="panel placeholder">${lang==="bn"?"কোনো কাজ নেই":"لا توجد مهام لهذه الوردية"}</div>`}
       <button class="btn btn-main" onclick="submitCleaning('${shift}')">${lang==="bn"?"সম্পন্ন":"✅ تم التنفيذ"}</button>
     </div>
   `,`renderCleaningLang('${lang}')`);
@@ -1323,7 +1451,7 @@ async function submitCleaning(shift){
     shift,entries,createdAtText:nowText(),timeMs:Date.now(),createdAt:serverTimestamp()
   });
 
-  alert("تم حفظ النظافة");
+  showToast("تم حفظ النظافة");
   renderCleaning();
 }
 
@@ -1350,6 +1478,7 @@ function getLatestOperationLog(taskId){
 }
 
 function drawOperationRunBox(){
+  ensureUxStyle();
   const box=document.getElementById("operationRunBox");
   if(!box) return;
 
@@ -1368,9 +1497,10 @@ function drawOperationRunBox(){
           <h3>${period}</h3>
           <div style="margin-top:12px">
             ${tasks.map(t=>`
-              <label style="display:block;margin:14px 0;font-weight:900">
+              <label class="task-check-card">
                 <input type="checkbox" ${operationRunDraft[t.id] ? "checked" : ""} onchange="markOperationDraft('${t.id}',this.checked)">
-                ${t.name}
+                <span class="task-check-ui"></span>
+                <span class="task-text"><b>${t.name}</b><small>${period}</small></span>
               </label>
             `).join("")}
           </div>
@@ -1397,13 +1527,13 @@ async function submitOperationRun(){
   const note=document.getElementById("operationNote")?.value.trim() || "";
 
   if(!operatorName){
-    alert("اكتب اسم مسؤول التشغيل أولاً");
+    showToast("اكتب اسم مسؤول التشغيل أولاً","error");
     return;
   }
 
   const selectedIds=Object.keys(operationRunDraft).filter(id=>operationRunDraft[id]);
   if(!selectedIds.length){
-    alert("حدد مهام التشغيل أولاً");
+    showToast("حدد مهام التشغيل أولاً","error");
     return;
   }
 
@@ -1432,7 +1562,7 @@ async function submitOperationRun(){
     });
   }
 
-  alert("تم رفع التشغيل للإدارة");
+  showToast("تم رفع التشغيل للإدارة");
   operationRunDraft={};
   renderOperations();
 }
@@ -1451,7 +1581,7 @@ function renderAdminGate(){
 function checkAdminPassword(){
   const pass=document.getElementById("adminPasswordInputGate").value.trim();
   if(pass!==String(systemSettings.adminPassword)){
-    alert("كلمة المرور غير صحيحة");
+    showToast("كلمة المرور غير صحيحة","error");
     return;
   }
   renderAdmin();
@@ -1583,14 +1713,14 @@ function drawWasteAdmin(){
 function renderAdminWarehouse(){
   pageLayout("إدارة المستودع", `
     <section class="grid">
-      <div class="card" onclick="renderAdminWarehouseArchive()"><div class="icon"><i class="fa-solid fa-folder-open"></i></div><div class="card-title">أرشيف المستودع</div></div>
+      <div class="card" onclick="renderAdminWarehouseArchive()"><div class="icon"><i class="fa-solid fa-folder-open"></i></div><div class="card-title">طلبات الشيفات</div></div>
       <div class="card" onclick="renderAdminInternalIssue()"><div class="icon"><i class="fa-solid fa-arrow-up-from-bracket"></i></div><div class="card-title">الصرف الداخلي</div></div>
     </section>
   `,"renderAdmin()");
 }
 
 function renderAdminWarehouseArchive(){
-  pageLayout("أرشيف المستودع", `<div id="warehouseArchiveBox"></div>`,"renderAdminWarehouse()");
+  pageLayout("طلبات الشيفات", `<div id="warehouseArchiveBox"></div>`,"renderAdminWarehouse()");
   drawWarehouseArchive();
 }
 
@@ -1598,10 +1728,10 @@ function drawWarehouseArchive(){
   const box=document.getElementById("warehouseArchiveBox");
   if(!box) return;
 
-  const archived = warehouseOrders.filter(o=>o.status==="مؤرشف");
+  const archived = warehouseOrders.filter(o=>["جاهز","تم الاستلام","مؤرشف","محذوف"].includes(o.status) || o.issuedAtText);
 
   if(!archived.length){
-    box.innerHTML=`<div class="panel placeholder">لا يوجد طلبات مؤرشفة</div>`;
+    box.innerHTML=`<div class="panel placeholder">لا توجد طلبات شيفات</div>`;
     return;
   }
 
@@ -1609,10 +1739,10 @@ function drawWarehouseArchive(){
     .sort((a,b)=>(b.archivedAtMs||0)-(a.archivedAtMs||0))
     .map(order=>`
       <div class="panel" style="margin-bottom:14px">
-        <h3>طلب مؤرشف - ${order.section}</h3>
+        <h3>طلب شيفات - ${order.section}</h3>
         <p style="color:#7b8674;font-weight:800">الشيف: ${order.chefName}</p>
         <p style="color:#7b8674;font-weight:800">رقم الطلب: ${order.orderId||order.id}</p>
-        <p style="color:#7b8674;font-weight:800">وقت الأرشفة: ${order.archivedAtText||""}</p>
+        <p style="color:#7b8674;font-weight:800">وقت الاستلام: ${order.archivedAtText||order.issuedAtText||""}</p>
 
         <div style="margin-top:12px">
           ${(order.items||[]).map((item,i)=>`
@@ -1811,7 +1941,7 @@ function openPrintReport(title, bodyHtml){
   `;
   const win = window.open("", "_blank");
   if(!win){
-    alert("المتصفح منع فتح نافذة الطباعة");
+    showToast("المتصفح منع فتح نافذة الطباعة");
     return;
   }
   win.document.open();
