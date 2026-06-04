@@ -108,7 +108,7 @@ function checkWarehouseNewOrdersNotify(){
   lastWarehouseNewCount = count;
 }
 
-function getCleaningBnText(text){return cleaningBn[text] || "বাংলা অনুবাদ";}
+function getCleaningBnText(text){return cleaningBn[text] || "";}
 
 function getProductionPlaceholder(){
   const section = currentChef?.section || "";
@@ -520,6 +520,8 @@ function renderSettingsCleaning(){
       <h3>إضافة مهمة نظافة</h3>
       <label>اسم المهمة بالعربي</label>
       <input id="cleaningTaskName" placeholder="مثال: دورات المياه">
+      <label>ترجمة المهمة بالبنغالي</label>
+      <input id="cleaningTaskBn" placeholder="مثال: টয়লেট পরিষ্কার">
       <label>الورديات</label>
       <label><input id="cleanMorning" type="checkbox" checked> صباح</label>
       <label><input id="cleanAfternoon" type="checkbox" checked> ظهر</label>
@@ -533,16 +535,19 @@ function renderSettingsCleaning(){
 
 async function addCleaningTask(){
   const nameAr=document.getElementById("cleaningTaskName").value.trim();
+  const nameBn=document.getElementById("cleaningTaskBn")?.value.trim() || "";
   if(!nameAr) return;
   const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
   await addDoc(collection(db,"cleaning_tasks"),{
     nameAr,
+    nameBn,
     morning:document.getElementById("cleanMorning").checked,
     afternoon:document.getElementById("cleanAfternoon").checked,
     night:document.getElementById("cleanNight").checked,
     createdAt:serverTimestamp()
   });
   document.getElementById("cleaningTaskName").value="";
+  if(document.getElementById("cleaningTaskBn")) document.getElementById("cleaningTaskBn").value="";
 }
 
 function drawCleaningTasks(){
@@ -737,7 +742,7 @@ function checkChefCode(sectionName){
 function renderChefDashboard(chef){
   pageLayout(chef.name, `
     <div class="panel" style="margin-bottom:16px;text-align:center">
-      <div style="font-size:48px">👨🍳</div>
+      <div class="icon" style="margin:0 auto 10px"><i class="fa-solid fa-user"></i></div>
       <h2>${chef.name}</h2>
       <div style="color:#7b8674;font-weight:700">${chef.section}</div>
     </div>
@@ -1426,7 +1431,7 @@ function renderCleaningShift(lang,shift){
           <span class="task-check-ui"></span>
           <span class="task-text">
             <b>${t.nameAr}</b>
-            <small>${getCleaningBnText(t.nameAr)}</small>
+            ${(t.nameBn || getCleaningBnText(t.nameAr)) ? `<small>${t.nameBn || getCleaningBnText(t.nameAr)}</small>` : ""}
           </span>
         </label>
       `).join("") : `<div class="panel placeholder">${lang==="bn"?"কোনো কাজ নেই":"لا توجد مهام لهذه الوردية"}</div>`}
@@ -1676,6 +1681,7 @@ function drawProductionAdmin(){
       </div>
 
       ${log.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${log.note}</p>` : ""}
+      <button class="btn btn-light" style="margin-top:12px" onclick="printInternalIssue('${log.id}')">🖨 طباعة</button>
     </div>
   `).join("");
 }
@@ -1754,6 +1760,7 @@ function drawWarehouseArchive(){
         </div>
 
         ${order.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${order.note}</p>` : ""}
+        <button class="btn btn-light" style="margin-top:12px" onclick="printWarehouseOrder('${order.id}')">🖨 طباعة</button>
       </div>
     `).join("");
 }
@@ -2057,6 +2064,26 @@ function printWarehouseOrder(id){
     </div>
   `;
   openPrintReport("طلب مستودع", body);
+}
+
+
+function printInternalIssue(id){
+  const log=internalIssues.find(i=>i.id===id);
+  if(!log) return;
+  const body = `
+    <div class="card">
+      <table>
+        <tbody>
+          <tr><th>جهة الصرف</th><td>${escapeHtml(log.destination||"")}</td></tr>
+          <tr><th>صرف بواسطة</th><td>${escapeHtml(log.staff||"")}</td></tr>
+          <tr><th>الوقت</th><td>${escapeHtml(log.createdAtText||"")}</td></tr>
+        </tbody>
+      </table>
+      ${itemsTable(log.items, true)}
+      ${log.note ? `<div class="note"><b>ملاحظة:</b> ${escapeHtml(log.note)}</div>` : ""}
+    </div>
+  `;
+  openPrintReport("صرف داخلي", body);
 }
 
 function renderAdminSection(title){
