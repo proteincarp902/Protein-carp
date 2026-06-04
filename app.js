@@ -113,14 +113,19 @@ function renderHome(){
         <button class="btn btn-main" onclick="renderAdminGate()"><i class="fa-solid fa-chart-line"></i> الإدارة</button>
       </div>
       <section class="hero home-hero">
-        <img src="assets/logo.png" class="logo" alt="Protein & Carb" onerror="this.onerror=null;this.src='logo.png';">
+        <div class="logo-wrap"><img src="assets/logo.png" class="logo" alt="Protein & Carb" onerror="this.onerror=null;this.src='logo.png';setTimeout(()=>{if(!this.complete||this.naturalWidth===0){this.style.display='none';}},300);"></div>
         <p class="welcome-text">مرحباً بك في نظام</p>
         <h1 class="hero-title">Protein & Carb Operations</h1>
         <p class="hero-date">${todayDate()}</p>
       </section>
       <section class="home-launcher">
         <div class="home-circle-card" onclick="renderChefs()"><div class="home-circle"><i class="fa-solid fa-utensils"></i></div><h3>الشيفات</h3><p>الإنتاج والطلبات</p></div>
-        <div class="home-circle-card" onclick="renderWarehouseGate()"><div class="home-circle"><i class="fa-solid fa-boxes-stacked"></i></div><h3>المستودع ${newOrders ? `(${newOrders})` : ""}</h3><p>طلبات وصرف داخلي</p></div>
+                <div class="home-circle-card warehouse-home-card" onclick="renderWarehouseGate()">
+          ${newOrders ? `<span class="order-badge">${newOrders}</span>` : ""}
+          <div class="home-circle"><i class="fa-solid fa-boxes-stacked"></i></div>
+          <h3>المستودع</h3>
+          <p>طلبات وصرف داخلي</p>
+        </div>
         <div class="home-circle-card" onclick="renderOperations()"><div class="home-circle"><i class="fa-solid fa-industry"></i></div><h3>التشغيل</h3><p>مهام التشغيل اليومية</p></div>
         <div class="home-circle-card" onclick="renderCleaning()"><div class="home-circle"><i class="fa-solid fa-broom"></i></div><h3>النظافة</h3><p>متابعة الورديات</p></div>
       </section>
@@ -1051,32 +1056,7 @@ function renderOrderCard(order,isChefView){
       ${(order.status==="جاهز" || order.status==="تم الاستلام" || order.status==="مؤرشف") ? `<h3 style="margin-top:8px">${issueSummary}</h3>` : ""}
       ${isChefView && order.status==="جاهز" ? `<button class="btn btn-main" style="margin-top:12px" onclick="receiveOrder('${order.id}')">تم الاستلام</button>` : ""}
       ${!isChefView ? `
-        ${order.status !== "جاهز" && order.status !== "تم الاستلام" && order.status !== "مؤرشف" ? `
-          <div class="panel issue-box" style="margin-top:14px">
-            <h3><i class="fa-solid fa-clipboard-check"></i> المصروف الفعلي</h3>
-            <p style="color:#7b8674;font-weight:800;margin:8px 0 12px">
-              اكتب الكمية التي خرجت فعلياً من المستودع، وليس الكمية المطلوبة.
-            </p>
-            ${(order.items||[]).map((item,i)=>`
-              <div style="display:grid;grid-template-columns:1fr 120px;gap:10px;align-items:center;border-bottom:1px solid #e5eadb;padding:10px 0">
-                <div>
-                  <b>${item.name}</b>
-                  <div style="color:#7b8674;font-weight:800;margin-top:4px">المطلوب: ${item.qty} ${item.unit||""}</div>
-                </div>
-                <input
-                  id="issued_${order.id}_${i}"
-                  type="number"
-                  min="0"
-                  step="any"
-                  value="${item.issuedQty ?? item.qty ?? 0}"
-                  placeholder="مصروف"
-                  style="margin:0;text-align:center">
-              </div>
-            `).join("")}
-            <button class="btn btn-main" style="margin-top:12px" onclick="approveWarehouseIssue('${order.id}')">
-              اعتماد الصرف الفعلي
-            </button>
-          </div>` : ""}
+        ${order.status !== "جاهز" && order.status !== "تم الاستلام" && order.status !== "مؤرشف" ? `<div class="panel" style="margin-top:14px;background:rgba(234,246,238,.55)"><h3>اعتماد المصروف الفعلي</h3>${(order.items||[]).map((item,i)=>`<label>${item.name} — مطلوب: ${item.qty} ${item.unit||""}</label><input id="issued_${order.id}_${i}" type="number" min="0" step="any" value="${item.issuedQty ?? item.qty ?? 0}" placeholder="الكمية المصروفة فعلياً">`).join("")}<button class="btn btn-main" onclick="approveWarehouseIssue('${order.id}')">اعتماد الصرف</button></div>` : ""}
         <div style="margin-top:12px;display:grid;gap:8px">
           ${order.status !== "جاهز" && order.status !== "تم الاستلام" && order.status !== "مؤرشف" ? `<button class="btn btn-light" onclick="updateOrderStatus('${order.id}','قيد التجهيز')">قيد التجهيز</button><button class="btn btn-light" onclick="updateOrderStatus('${order.id}','متأخر')">متأخر</button>` : ""}
           <button class="btn btn-light" onclick="printWarehouseOrder('${order.id}')">🖨 طباعة الطلب</button>
