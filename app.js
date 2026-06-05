@@ -69,12 +69,12 @@ function ensureUxStyle(){
     .issued-display{text-align:left;display:grid;gap:4px}
     .issued-display b:last-child{color:#2E7D32}
 
-    .admin-actions{position:relative;margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end;direction:ltr;width:100%}
-    .admin-menu-wrap{position:relative;display:inline-block;direction:rtl}
-    .admin-menu-btn{width:auto!important;min-width:44px!important;padding:8px 12px!important;font-size:20px!important;line-height:1!important}
-    .admin-menu{display:none;position:absolute;left:0;top:48px;min-width:190px;background:rgba(255,255,255,.98);border:1px solid rgba(18,51,37,.12);box-shadow:0 18px 45px rgba(18,51,37,.18);border-radius:18px;padding:8px;z-index:50;direction:rtl}
-    .admin-menu.show{display:grid;gap:6px}
-    .admin-menu .btn{width:100%;min-height:40px;font-size:14px;padding:8px 12px;text-align:right}
+    .admin-actions{position:relative;margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .admin-menu-wrap{position:relative;display:inline-block}
+    .admin-menu-btn{min-width:44px!important;padding:8px 12px!important;font-size:20px!important;line-height:1!important}
+    .admin-menu{display:none;position:fixed;left:14px;right:14px;bottom:18px;top:auto;width:auto;max-width:420px;margin:auto;background:rgba(255,255,255,.98);border:1px solid rgba(18,51,37,.12);box-shadow:0 22px 60px rgba(18,51,37,.25);border-radius:22px;padding:10px;z-index:999999}
+    .admin-menu.show{display:grid;gap:8px}
+    .admin-menu .btn{width:100%;min-height:44px;font-size:15px;padding:10px 14px;text-align:right}
     .printed-chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;background:#EFF9F0;color:#1B4D32;font-weight:900;padding:6px 10px;font-size:12px}
     .danger-btn{color:#B91C1C!important}
     @media(max-width:700px){.issue-row{grid-template-columns:1fr}.issue-row input{text-align:right}}
@@ -176,6 +176,17 @@ function sortNewest(list){
   return [...(list||[])].sort((a,b)=>getTimeValue(b)-getTimeValue(a));
 }
 
+
+function closeAdminMenus(){
+  document.querySelectorAll('.admin-menu').forEach(m=>m.classList.remove('show'));
+}
+
+document.addEventListener("click",function(e){
+  if(!e.target.closest(".admin-menu-wrap")){
+    closeAdminMenus();
+  }
+});
+
 function toggleAdminMenu(id){
   document.querySelectorAll('.admin-menu').forEach(m=>{if(m.id!==id)m.classList.remove('show')});
   const el=document.getElementById(id);
@@ -187,7 +198,7 @@ function adminActionMenu(collectionName,id,printFn,printed=false,afterFn="render
   return `
     <div class="admin-actions">
       ${printed ? `<span class="printed-chip">✓ مطبوع</span>` : ``}
-      <div class="admin-menu-wrap">
+      <div class="admin-menu-wrap" onclick="event.stopPropagation()">
         <button class="btn btn-light admin-menu-btn" onclick="toggleAdminMenu('${menuId}')">⋮</button>
         <div class="admin-menu" id="${menuId}">
           <button class="btn btn-light" onclick="${printFn}">🖨 طباعة</button>
@@ -198,7 +209,12 @@ function adminActionMenu(collectionName,id,printFn,printed=false,afterFn="render
   `;
 }
 
-function getCollectionArray(collectionName){
+async function markPrinted(collectionName,id){
+  const {db,doc,updateDoc}=window.firebaseDB;
+  await updateDoc(doc(db,collectionName,id),{printed:true,printedAtText:nowText(),printedAtMs:Date.now()});
+}
+
+async function deletePrintedItem(collectionName,id,afterFn="renderAdmin"){
   const sourceMap={
     production_logs:productionLogs,
     waste_logs:wasteLogs,
@@ -207,53 +223,7 @@ function getCollectionArray(collectionName){
     cleaning_logs:cleaningLogs,
     operation_logs:operationLogs
   };
-  return sourceMap[collectionName] || [];
-}
-
-function setLocalPrinted(collectionName,id){
-  const list=getCollectionArray(collectionName);
-  const item=list.find(x=>x.id===id);
-  if(item){
-    item.printed=true;
-    item.printedAtText=nowText();
-    item.printedAtMs=Date.now();
-  }
-}
-
-function refreshAdminAfterPrint(collectionName){
-  if(collectionName==="production_logs" && document.getElementById("productionAdminBox")) drawProductionAdmin();
-  if(collectionName==="waste_logs" && document.getElementById("wasteAdminBox")) drawWasteAdmin();
-  if(collectionName==="warehouse_orders" && document.getElementById("warehouseArchiveBox")) drawWarehouseArchive();
-  if(collectionName==="internal_issues" && document.getElementById("internalIssueAdminBox")) drawInternalIssueAdmin();
-  if(collectionName==="cleaning_logs" && document.getElementById("cleaningAdminBox")) drawCleaningAdmin();
-  if(collectionName==="operation_logs" && document.getElementById("operationAdminBox")) drawOperationAdmin();
-}
-
-async function markPrinted(collectionName,id){
-  setLocalPrinted(collectionName,id);
-  refreshAdminAfterPrint(collectionName);
-  const {db,doc,updateDoc}=window.firebaseDB;
-  await updateDoc(doc(db,collectionName,id),{printed:true,printedAtText:nowText(),printedAtMs:Date.now()});
-}
-
-function markPrintedNoWait(collectionName,id){
-  setLocalPrinted(collectionName,id);
-  refreshAdminAfterPrint(collectionName);
-  markPrinted(collectionName,id).catch(()=>showToast("تعذر حفظ علامة الطباعة","error"));
-}
-
-function markManyPrinted(collectionName,items){
-  (items||[]).forEach(item=>{
-    if(item?.id) setLocalPrinted(collectionName,item.id);
-  });
-  refreshAdminAfterPrint(collectionName);
-  (items||[]).forEach(item=>{
-    if(item?.id) markPrinted(collectionName,item.id).catch(()=>{});
-  });
-}
-
-async function deletePrintedItem(collectionName,id,afterFn="renderAdmin"){
-  const item=getCollectionArray(collectionName).find(x=>x.id===id);
+  const item=(sourceMap[collectionName]||[]).find(x=>x.id===id);
   if(!item?.printed){
     showToast("اطبع العملية أولاً قبل الحذف","error");
     return;
@@ -266,7 +236,15 @@ async function deletePrintedItem(collectionName,id,afterFn="renderAdmin"){
 }
 
 async function deleteAllPrinted(collectionName,afterFn="renderAdmin"){
-  const list=getCollectionArray(collectionName).filter(x=>x.printed);
+  const sourceMap={
+    production_logs:productionLogs,
+    waste_logs:wasteLogs,
+    warehouse_orders:warehouseOrders,
+    internal_issues:internalIssues,
+    cleaning_logs:cleaningLogs,
+    operation_logs:operationLogs
+  };
+  const list=(sourceMap[collectionName]||[]).filter(x=>x.printed);
   if(!list.length){showToast("لا توجد عمليات مطبوعة للحذف","warn");return;}
   if(!confirm(`سيتم حذف ${list.length} عملية مطبوعة فقط. هل أنت متأكد؟`)) return;
   const {db,doc,deleteDoc}=window.firebaseDB;
@@ -289,22 +267,22 @@ function buildCleaningLogReport(log){
 
 function printProductionLog(id){
   const log=productionLogs.find(x=>x.id===id); if(!log)return;
-  markPrintedNoWait('production_logs',id);
+  markPrinted('production_logs',id);
   openPrintReport("تقرير إنتاج", buildProductionReport([log]));
 }
 function printWasteLog(id){
   const log=wasteLogs.find(x=>x.id===id); if(!log)return;
-  markPrintedNoWait('waste_logs',id);
+  markPrinted('waste_logs',id);
   openPrintReport("تقرير تالف وهدر", buildWasteReport([log]));
 }
 function printOperationLog(id){
   const log=operationLogs.find(x=>x.id===id); if(!log)return;
-  markPrintedNoWait('operation_logs',id);
+  markPrinted('operation_logs',id);
   openPrintReport("تقرير تشغيل", buildOperationsReport([log]));
 }
 function printCleaningLog(id){
   const log=cleaningLogs.find(x=>x.id===id); if(!log)return;
-  markPrintedNoWait('cleaning_logs',id);
+  markPrinted('cleaning_logs',id);
   openPrintReport("تقرير نظافة", buildCleaningLogReport(log));
 }
 
@@ -2228,26 +2206,10 @@ function buildInternalReport(source=internalIssues){
 }
 
 function printReport(type){
-  if(type==="production"){
-    openPrintReport("تقرير الإنتاج", buildProductionReport());
-    markManyPrinted("production_logs", productionLogs);
-    return;
-  }
-  if(type==="waste"){
-    openPrintReport("تقرير التالف والهدر", buildWasteReport());
-    markManyPrinted("waste_logs", wasteLogs);
-    return;
-  }
-  if(type==="operations"){
-    openPrintReport("تقرير التشغيل", buildOperationsReport());
-    markManyPrinted("operation_logs", operationLogs);
-    return;
-  }
-  if(type==="internal"){
-    openPrintReport("تقرير الصرف الداخلي", buildInternalReport());
-    markManyPrinted("internal_issues", internalIssues);
-    return;
-  }
+  if(type==="production") return openPrintReport("تقرير الإنتاج", buildProductionReport());
+  if(type==="waste") return openPrintReport("تقرير التالف والهدر", buildWasteReport());
+  if(type==="operations") return openPrintReport("تقرير التشغيل", buildOperationsReport());
+  if(type==="internal") return openPrintReport("تقرير الصرف الداخلي", buildInternalReport());
 
   const summary = `
     <div class="card"><h3>الإنتاج</h3>${buildProductionReport()}</div>
@@ -2255,17 +2217,13 @@ function printReport(type){
     <div class="card"><h3>التشغيل</h3>${buildOperationsReport()}</div>
     <div class="card"><h3>الصرف الداخلي</h3>${buildInternalReport()}</div>
   `;
-  openPrintReport("تقرير شامل", summary);
-  markManyPrinted("production_logs", productionLogs);
-  markManyPrinted("waste_logs", wasteLogs);
-  markManyPrinted("operation_logs", operationLogs);
-  markManyPrinted("internal_issues", internalIssues);
+  return openPrintReport("تقرير شامل", summary);
 }
 
 function printWarehouseOrder(id){
   const order=warehouseOrders.find(o=>o.id===id);
   if(!order) return;
-  markPrintedNoWait("warehouse_orders",id);
+  markPrinted("warehouse_orders",id);
 
   const body = `
     <div class="card">
@@ -2289,7 +2247,7 @@ function printWarehouseOrder(id){
 function printInternalIssue(id){
   const log=internalIssues.find(i=>i.id===id);
   if(!log) return;
-  markPrintedNoWait("internal_issues",id);
+  markPrinted("internal_issues",id);
   const body = `
     <div class="card">
       <table>
