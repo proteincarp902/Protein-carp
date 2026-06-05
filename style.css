@@ -1,4 +1,4 @@
-:root{
+:جذر{
   --green:#43A94D;
   --green-dark:#1B4D32;
   --green-soft:#EFF9F0;
@@ -17,41 +17,41 @@
 
 *{
   margin:0;
-  padding:0;
+  الحشو: 0؛
   box-sizing:border-box;
   font-family:'Cairo',sans-serif;
 }
 
 html{
-  scroll-behavior:smooth;
+  سلوك التمرير: سلس؛
 }
 
-body{
-  min-height:100vh;
-  color:var(--text);
-  background:
+جسم{
+  الحد الأدنى للارتفاع: 100vh؛
+  اللون: متغير(--نص)؛
+  خلفية:
     radial-gradient(circle at top right,rgba(244,197,66,.25),transparent 28%),
     radial-gradient(circle at bottom left,rgba(67,169,77,.22),transparent 36%),
     linear-gradient(rgba(246,248,239,.86),rgba(246,248,239,.92)),
     url("assets/background.jpg");
-  background-size:cover;
+  حجم الخلفية: يغطي كامل المساحة؛
   background-position:center;
   background-attachment:fixed;
 }
 
 body::before{
-  content:"";
-  position:fixed;
+  محتوى:""؛
+  الوضع: ثابت؛
   inset:0;
   pointer-events:none;
-  background:linear-gradient(135deg,rgba(255,255,255,.35),rgba(255,255,255,.04));
+  الخلفية: تدرج خطي (135 درجة، rgba(255،255،255،.35)، rgba(255،255،255،.04))؛
   z-index:-1;
 }
 
-.app{
-  width:min(1180px,100%);
+.برنامج{
+  العرض: الحد الأدنى (1180 بكسل، 100٪)؛
   margin:auto;
-  padding:22px;
+  الحشو: 22 بكسل؛
 }
 
 .topbar,
@@ -60,34 +60,34 @@ body::before{
   justify-content:space-between;
   align-items:center;
   margin-bottom:22px;
-  gap:12px;
+  الفجوة: 12 بكسل؛
 }
 
 .page-head{
-  background:rgba(255,255,255,.80);
+  الخلفية: rgba(255,255,255,.80)؛
   border:1px solid rgba(255,255,255,.72);
   backdrop-filter:blur(16px);
-  border-radius:var(--radius-md);
-  padding:15px 17px;
+  نصف قطر الحدود:var(--radius-md);
+  الحشو: 15 بكسل 17 بكسل؛
   box-shadow:var(--shadow-soft);
 }
 
 .page-head h2{
-  font-size:34px;
-  font-weight:900;
-  color:var(--green-dark);
-  letter-spacing:-.5px;
+  حجم الخط: 34 بكسل؛
+  وزن الخط: 900؛
+  اللون: متغير (--أخضر داكن)؛
+  تباعد الأحرف: -0.5 بكسل؛
 }
 
 .btn{
   border:none;
-  cursor:pointer;
+  المؤشر: مؤشر؛
   border-radius:999px;
-  padding:12px 22px;
-  font-weight:900;
-  font-size:16px;
-  transition:.25s ease;
-  min-height:48px;
+  الحشو: 12 بكسل 22 بكسل؛
+  وزن الخط: 900؛
+  حجم الخط: 16 بكسل؛
+  انتقال: 0.25 ثانية، سهولة؛
+  الحد الأدنى للارتفاع: 48 بكسل؛
 }
 
 .btn:hover{
@@ -99,15 +99,15 @@ body::before{
 }
 
 .btn-main{
-  background:linear-gradient(135deg,var(--green),var(--green-dark));
-  color:white;
+  الخلفية: التدرج الخطي (135 درجة، فار (--أخضر)، فار (--أخضر-داكن))؛
+  اللون: أبيض؛
   box-shadow:0 12px 24px rgba(67,169,77,.28);
 }
 
 .btn-light{
-  background:rgba(255,255,255,.95);
-  color:var(--green-dark);
-  border:1px solid var(--border);
+  الخلفية: rgba(255,255,255,.95)؛
+  اللون: متغير (--أخضر داكن)؛
+  الحدود: 1 بكسل الصلبة var(--border);
   box-shadow:0 8px 18px rgba(18,51,37,.08);
 }
 
@@ -115,86 +115,86 @@ body::before{
   margin-left:6px;
 }
 
-.hero{
-  position:relative;
+.بطل{
+  الموضع: نسبي؛
   overflow:hidden;
-  background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(255,255,255,.74));
+  الخلفية: تدرج خطي (145 درجة، rgba(255،255،255،.94)، rgba(255،255،255،.74))؛
   border:1px solid rgba(255,255,255,.72);
   backdrop-filter:blur(18px);
   border-radius:40px;
-  padding:34px 26px 30px;
+  الحشو: 34 بكسل 26 بكسل 30 بكسل؛
   text-align:center;
   margin-bottom:24px;
   box-shadow:var(--shadow);
 }
 
 .hero::before{
-  content:"";
-  position:absolute;
-  width:220px;
-  height:220px;
+  محتوى:""؛
+  الموضع: مطلق؛
+  العرض: 220 بكسل؛
+  الارتفاع: 220 بكسل؛
   border-radius:50%;
-  background:rgba(244,197,66,.24);
-  top:-100px;
-  right:-82px;
+  الخلفية: rgba(244,197,66,.24)؛
+  أعلى: -100 بكسل؛
+  يمين: -82 بكسل؛
 }
 
 .hero::after{
-  content:"";
-  position:absolute;
-  width:160px;
-  height:160px;
+  محتوى:""؛
+  الموضع: مطلق؛
+  العرض: 160 بكسل؛
+  الارتفاع: 160 بكسل؛
   border-radius:50%;
-  background:rgba(67,169,77,.15);
-  bottom:-82px;
-  left:-52px;
+  الخلفية: rgba(67,169,77,.15)؛
+  أسفل: -82 بكسل؛
+  اليسار: -52 بكسل؛
 }
 
 .logo-wrap{
-  display:contents;
+  عرض: المحتويات؛
 }
 
 .logo{
-  position:relative;
+  الموضع: نسبي؛
   z-index:1;
-  width:148px;
-  height:148px;
+  العرض: 148 بكسل؛
+  الارتفاع: 148 بكسل؛
   object-fit:contain;
   border:none;
-  background:transparent;
-  padding:0;
+  الخلفية: شفافة؛
+  الحشو: 0؛
   box-shadow:none;
   margin:0 auto 10px;
   display:block;
 }
 
 .welcome-text{
-  position:relative;
+  الموضع: نسبي؛
   z-index:1;
-  color:var(--muted);
-  font-weight:900;
+  اللون: متغير (--muted)؛
+  وزن الخط: 900؛
   margin-bottom:4px;
 }
 
 .hero-title{
-  position:relative;
+  الموضع: نسبي؛
   z-index:1;
-  font-size:34px;
-  font-weight:900;
-  color:var(--green-dark);
-  letter-spacing:-.7px;
+  حجم الخط: 34 بكسل؛
+  وزن الخط: 900؛
+  اللون: متغير (--أخضر داكن)؛
+  تباعد الأحرف: -0.7 بكسل؛
 }
 
 .hero-date{
-  position:relative;
+  الموضع: نسبي؛
   z-index:1;
-  color:var(--muted);
+  اللون: متغير (--muted)؛
   margin-top:6px;
-  font-weight:800;
+  وزن الخط: 800؛
 }
 
 .home-app{
-  max-width:1100px;
+  الحد الأقصى للعرض: 1100 بكسل؛
 }
 
 .home-topbar{
@@ -202,46 +202,46 @@ body::before{
 }
 
 .home-hero{
-  padding:26px 20px 28px;
+  الحشو: 26 بكسل 20 بكسل 28 بكسل؛
   margin-bottom:26px;
 }
 
 .home-launcher{
   display:grid;
   grid-template-columns:repeat(4,1fr);
-  gap:22px;
+  الفجوة: 22 بكسل؛
   align-items:stretch;
 }
 
 .home-circle-card{
-  position:relative;
-  min-height:210px;
-  padding:26px 18px 22px;
+  الموضع: نسبي؛
+  الحد الأدنى للارتفاع: 210 بكسل؛
+  الحشو: 26 بكسل 18 بكسل 22 بكسل؛
   border-radius:36px;
-  background:rgba(255,255,255,.93);
+  الخلفية: rgba(255,255,255,.93)؛
   border:1px solid rgba(255,255,255,.82);
   box-shadow:var(--shadow);
   backdrop-filter:blur(16px);
-  cursor:pointer;
+  المؤشر: مؤشر؛
   display:flex;
   flex-direction:column;
   align-items:center;
   justify-content:center;
   text-align:center;
-  transition:.28s ease;
+  انتقال: 0.28 ثانية سهولة؛
   overflow:visible;
 }
 
 .home-circle-card::after{
-  content:"";
-  position:absolute;
-  bottom:14px;
-  left:22px;
-  right:22px;
-  height:4px;
+  محتوى:""؛
+  الموضع: مطلق؛
+  أسفل: 14 بكسل؛
+  اليسار: 22 بكسل؛
+  يمين: 22 بكسل؛
+  الارتفاع: 4 بكسل؛
   border-radius:999px;
-  background:linear-gradient(90deg,var(--gold),var(--green));
-  opacity:.88;
+  الخلفية: التدرج الخطي (90 درجة، فار (--ذهبي)، فار (--أخضر))؛
+  الشفافية: 0.88؛
 }
 
 .home-circle-card:hover{
@@ -250,108 +250,108 @@ body::before{
 }
 
 .home-circle{
-  position:relative;
-  width:104px;
-  height:104px;
+  الموضع: نسبي؛
+  العرض: 104 بكسل؛
+  الارتفاع: 104 بكسل؛
   border-radius:50%;
   display:flex;
   align-items:center;
   justify-content:center;
-  background:
+  خلفية:
     radial-gradient(circle at 30% 25%,rgba(255,255,255,.42),transparent 32%),
-    linear-gradient(145deg,var(--green),var(--green-dark));
+    التدرج الخطي (145 درجة، فار (-- أخضر)، فار (- أخضر- داكن))؛
   border:5px solid rgba(244,197,66,.88);
-  box-shadow:
+  ظل الصندوق:
     0 16px 34px rgba(18,51,37,.22),
     0 0 0 8px rgba(244,197,66,.11);
   margin-bottom:18px;
-  color:white;
+  اللون: أبيض؛
 }
 
 .home-circle i{
-  font-size:42px;
-  color:white;
+  حجم الخط: 42 بكسل؛
+  اللون: أبيض؛
 }
 
 .order-badge{
-  position:absolute;
-  top:22px;
-  right:50%;
+  الموضع: مطلق؛
+  أعلى: 22 بكسل؛
+  اليمين: 50%؛
   transform:translateX(54px);
-  min-width:30px;
-  height:30px;
-  padding:0 8px;
+  الحد الأدنى للعرض: 30 بكسل؛
+  الارتفاع: 30 بكسل؛
+  الحشو: 0 8 بكسل؛
   border-radius:999px;
-  background:var(--red);
-  color:#fff;
+  الخلفية: متغير(--أحمر)؛
+  اللون:#fff;
   border:3px solid #fff;
   box-shadow:0 10px 20px rgba(229,57,53,.28);
   display:flex;
   align-items:center;
   justify-content:center;
-  font-size:14px;
-  font-weight:900;
-  z-index:5;
+  حجم الخط: 14 بكسل؛
+  وزن الخط: 900؛
+  مؤشر z: 5؛
 }
 
 .home-circle-card h3{
-  font-size:25px;
-  font-weight:900;
-  color:var(--green-dark);
+  حجم الخط: 25 بكسل؛
+  وزن الخط: 900؛
+  اللون: متغير (--أخضر داكن)؛
   margin-bottom:4px;
 }
 
 .home-circle-card p{
-  color:var(--muted);
-  font-weight:800;
-  font-size:14px;
+  اللون: متغير (--muted)؛
+  وزن الخط: 800؛
+  حجم الخط: 14 بكسل؛
 }
 
-.grid{
+.شبكة{
   display:grid;
   grid-template-columns:1fr;
-  gap:18px;
+  الفجوة: 18 بكسل؛
 }
 
-.card{
-  position:relative;
+.بطاقة{
+  الموضع: نسبي؛
   overflow:hidden;
-  background:var(--card);
+  الخلفية: متغير(--card)؛
   border:1px solid rgba(255,255,255,.78);
-  border-radius:var(--radius-lg);
-  min-height:168px;
+  نصف قطر الحدود:var(--radius-lg);
+  الحد الأدنى للارتفاع: 168 بكسل؛
   box-shadow:var(--shadow);
   display:flex;
   flex-direction:column;
   justify-content:center;
   align-items:center;
-  cursor:pointer;
-  padding:23px;
+  المؤشر: مؤشر؛
+  الحشو: 23 بكسل؛
   text-align:center;
-  transition:.28s ease;
+  انتقال: 0.28 ثانية سهولة؛
   backdrop-filter:blur(15px);
 }
 
 .card::before{
-  content:"";
-  width:84px;
-  height:84px;
+  محتوى:""؛
+  العرض: 84 بكسل؛
+  الارتفاع: 84 بكسل؛
   border-radius:50%;
-  position:absolute;
-  top:22px;
-  background:linear-gradient(145deg,var(--green-soft),#fff);
+  الموضع: مطلق؛
+  أعلى: 22 بكسل؛
+  الخلفية: تدرج خطي (145 درجة، متغير (--أخضر ناعم)، #fff)؛
   box-shadow:inset 0 0 0 1px rgba(67,169,77,.10);
   z-index:0;
 }
 
 .card::after{
-  content:"";
-  position:absolute;
+  محتوى:""؛
+  الموضع: مطلق؛
   inset:auto 18px 14px 18px;
-  height:4px;
+  الارتفاع: 4 بكسل؛
   border-radius:999px;
-  background:linear-gradient(90deg,var(--gold),var(--green));
-  opacity:.72;
+  الخلفية: التدرج الخطي (90 درجة، فار (--ذهبي)، فار (--أخضر))؛
+  الشفافية: 0.72؛
 }
 
 .card:hover{
@@ -359,148 +359,148 @@ body::before{
   box-shadow:0 26px 60px rgba(18,51,37,.19);
 }
 
-.panel{
-  background:rgba(255,255,255,.94);
+.لوحة{
+  الخلفية: rgba(255,255,255,.94)؛
   border:1px solid rgba(255,255,255,.78);
-  border-radius:var(--radius-lg);
-  padding:22px;
+  نصف قطر الحدود:var(--radius-lg);
+  الحشو: 22 بكسل؛
   box-shadow:var(--shadow);
-  width:100%;
+  العرض: 100%؛
   backdrop-filter:blur(15px);
 }
 
 .issue-box{
-  background:rgba(255,246,214,.55)!important;
+  الخلفية: rgba(255,246,214,.55)!مهم؛
   border:1px solid rgba(244,197,66,.32);
 }
 
-.icon{
-  position:relative;
+.رمز{
+  الموضع: نسبي؛
   z-index:1;
-  width:72px;
-  height:72px;
+  العرض: 72 بكسل؛
+  الارتفاع: 72 بكسل؛
   border-radius:50%;
   display:flex;
   align-items:center;
   justify-content:center;
-  font-size:34px;
+  حجم الخط: 34 بكسل؛
   margin-bottom:16px;
-  color:var(--green-dark);
-  background:linear-gradient(145deg,#fff,var(--green-soft));
+  اللون: متغير (--أخضر داكن)؛
+  الخلفية: تدرج خطي (145 درجة، #fff، متغير (--أخضر ناعم))؛
   border:1px solid rgba(67,169,77,.12);
   box-shadow:0 13px 26px rgba(18,51,37,.13);
 }
 
 .icon i{
-  font-size:32px;
-  color:var(--green-dark);
+  حجم الخط: 32 بكسل؛
+  اللون: متغير (--أخضر داكن)؛
 }
 
 .card-title{
-  position:relative;
+  الموضع: نسبي؛
   z-index:1;
-  font-size:21px;
-  font-weight:900;
-  line-height:1.45;
-  color:var(--green-dark);
+  حجم الخط: 21 بكسل؛
+  وزن الخط: 900؛
+  ارتفاع السطر: 1.45؛
+  اللون: متغير (--أخضر داكن)؛
 }
 
-input,
-select,
-textarea{
-  width:100%;
-  padding:15px 18px;
-  border-radius:var(--radius-sm);
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.96);
+مدخل،
+يختار،
+منطقة نصية {
+  العرض: 100%؛
+  الحشو: 15 بكسل 18 بكسل؛
+  نصف قطر الحدود:var(--radius-sm);
+  الحدود: 1 بكسل الصلبة var(--border);
+  الخلفية: rgba(255,255,255,.96)؛
   margin-top:8px;
   margin-bottom:14px;
-  font-size:16px;
-  font-weight:800;
-  color:var(--text);
-  outline:none;
-  transition:.22s ease;
+  حجم الخط: 16 بكسل؛
+  وزن الخط: 800؛
+  اللون: متغير(--نص)؛
+  مخطط تفصيلي: لا شيء؛
+  انتقال: 0.22 ثانية سهولة؛
 }
 
-textarea{
-  min-height:112px;
-  resize:vertical;
-  line-height:1.8;
+منطقة نصية {
+  الحد الأدنى للارتفاع: 112 بكسل؛
+  تغيير الحجم: عمودي؛
+  ارتفاع السطر: 1.8؛
 }
 
 input:focus,
-select:focus,
+تحديد: التركيز،
 textarea:focus{
-  border-color:var(--green);
+  لون الحدود: متغير (--أخضر)؛
   box-shadow:0 0 0 4px rgba(67,169,77,.13);
-  background:white;
+  الخلفية: بيضاء؛
 }
 
-label{
+ملصق{
   display:block;
   margin-top:8px;
-  color:var(--green-dark);
-  font-weight:900;
+  اللون: متغير (--أخضر داكن)؛
+  وزن الخط: 900؛
 }
 
 .placeholder{
   text-align:center;
-  color:var(--muted);
-  font-weight:900;
-  padding:20px;
-  background:rgba(234,246,238,.58);
+  اللون: متغير (--muted)؛
+  وزن الخط: 900؛
+  الحشو: 20 بكسل؛
+  الخلفية: rgba(234,246,238,.58)؛
   border:1px dashed rgba(67,169,77,.22);
-  border-radius:var(--radius-md);
+  نصف قطر الحدود:var(--radius-md);
 }
 
 h2,h3{
-  color:var(--green-dark);
-  font-weight:900;
+  اللون: متغير (--أخضر داكن)؛
+  وزن الخط: 900؛
 }
 
 h3{
-  font-size:22px;
+  حجم الخط: 22 بكسل؛
 }
 
 .panel > h2:first-child,
 .panel > h3:first-child{
   padding-bottom:8px;
-  border-bottom:1px solid var(--border);
+  الحد السفلي: 1 بكسل صلب var(-border);
   margin-bottom:8px;
 }
 
 .panel p{
-  line-height:1.8;
+  ارتفاع السطر: 1.8؛
 }
 
 .panel h3[style*="margin-top:12px"]{
-  background:var(--green-soft);
+  الخلفية: متغير (--أخضر ناعم)؛
   border-radius:999px;
-  padding:8px 12px;
+  الحشو: 8 بكسل 12 بكسل؛
   display:inline-block;
 }
 
 .panel .btn{
-  width:100%;
+  العرض: 100%؛
 }
 
 @media(min-width:760px){
-  .grid{
+  .شبكة{
     grid-template-columns:repeat(2,1fr);
   }
 
   .panel .btn{
-    width:auto;
+    العرض: تلقائي؛
   }
 }
 
 @media(min-width:1100px){
-  .grid{
+  .شبكة{
     grid-template-columns:repeat(4,1fr);
   }
 
-  .card{
-    min-height:176px;
+  .بطاقة{
+    الحد الأدنى للارتفاع: 176 بكسل؛
   }
 }
 
@@ -511,117 +511,117 @@ h3{
 }
 
 @media(max-width:700px){
-  .app{
-    padding:14px;
+  .برنامج{
+    الحشو: 14 بكسل؛
   }
 
   .topbar{
-    gap:10px;
+    الفجوة: 10 بكسل؛
   }
 
   .topbar .btn,
   .page-head .btn{
-    padding:10px 16px;
-    font-size:14px;
+    الحشو: 10 بكسل 16 بكسل؛
+    حجم الخط: 14 بكسل؛
   }
 
   .page-head h2{
-    font-size:26px;
+    حجم الخط: 26 بكسل؛
   }
 
-  .hero{
-    padding:23px 16px 24px;
+  .بطل{
+    الحشو: 23 بكسل 16 بكسل 24 بكسل؛
     border-radius:30px;
   }
 
   .logo{
-    width:126px;
-    height:126px;
+    العرض: 126 بكسل؛
+    الارتفاع: 126 بكسل؛
   }
 
   .hero-title{
-    font-size:24px;
+    حجم الخط: 24 بكسل؛
   }
 
   .home-launcher{
     grid-template-columns:repeat(2,1fr);
-    gap:14px;
+    الفجوة: 14 بكسل؛
   }
 
   .home-circle-card{
-    min-height:168px;
-    padding:20px 12px 18px;
+    الحد الأدنى للارتفاع: 168 بكسل؛
+    الحشو: 20 بكسل 12 بكسل 18 بكسل؛
     border-radius:28px;
   }
 
   .home-circle{
-    width:78px;
-    height:78px;
+    العرض: 78 بكسل؛
+    الارتفاع: 78 بكسل؛
     margin-bottom:12px;
     border-width:4px;
   }
 
   .home-circle i{
-    font-size:31px;
+    حجم الخط: 31 بكسل؛
   }
 
   .order-badge{
-    top:17px;
+    أعلى: 17 بكسل؛
     transform:translateX(43px);
-    min-width:28px;
-    height:28px;
-    font-size:13px;
+    الحد الأدنى للعرض: 28 بكسل؛
+    الارتفاع: 28 بكسل؛
+    حجم الخط: 13 بكسل؛
     border-width:3px;
   }
 
   .home-circle-card h3{
-    font-size:20px;
+    حجم الخط: 20 بكسل؛
   }
 
   .home-circle-card p{
-    font-size:12px;
+    حجم الخط: 12 بكسل؛
   }
 
-  .grid{
-    gap:14px;
+  .شبكة{
+    الفجوة: 14 بكسل؛
   }
 
-  .card{
-    min-height:150px;
+  .بطاقة{
+    الحد الأدنى للارتفاع: 150 بكسل؛
     border-radius:28px;
   }
 
   .card::before{
-    width:68px;
-    height:68px;
-    top:20px;
+    العرض: 68 بكسل؛
+    الارتفاع: 68 بكسل؛
+    أعلى: 20 بكسل؛
   }
 
-  .icon{
-    width:60px;
-    height:60px;
-    font-size:30px;
+  .رمز{
+    العرض: 60 بكسل؛
+    الارتفاع: 60 بكسل؛
+    حجم الخط: 30 بكسل؛
     margin-bottom:12px;
   }
 
   .icon i{
-    font-size:28px;
+    حجم الخط: 28 بكسل؛
   }
 
   .card-title{
-    font-size:18px;
+    حجم الخط: 18 بكسل؛
   }
 
-  .panel{
-    padding:18px;
+  .لوحة{
+    الحشو: 18 بكسل؛
     border-radius:26px;
   }
 
-  input,
-  select,
-  textarea{
-    font-size:15px;
-    padding:13px 15px;
+  مدخل،
+  يختار،
+  منطقة نصية {
+    حجم الخط: 15 بكسل؛
+    الحشو: 13 بكسل 15 بكسل؛
   }
 }
 
@@ -631,7 +631,7 @@ h3{
   }
 
   .home-circle-card{
-    min-height:158px;
+    الحد الأدنى للارتفاع: 158 بكسل؛
   }
 }
 
@@ -644,103 +644,144 @@ h3{
 
   .topbar .btn,
   .page-head .btn{
-    width:100%;
+    العرض: 100%؛
   }
 }
 
 
-/* بطاقة تثبيت صغيرة بدون تغيير شكل الصفحة */
+/* ط¨ط·ط§ظ‚ط© طھط«ط¨ظٹطھ طμط;ظٹط±ط© ط¨ط¯ظˆظ† طھط;ظٹظٹط± ط´ظƒظ‹ ط§ظ„طظپطط© */
 .install-mini-card{
-  position:relative;
-  z-index:3;
-  width:min(520px,100%);
+  الموضع: نسبي؛
+  مؤشر z: 3؛
+  العرض: الحد الأدنى (520 بكسل، 100٪)؛
   margin:14px auto 0;
-  padding:12px 14px;
+  الحشو: 12 بكسل 14 بكسل؛
   border-radius:22px;
-  background:rgba(255,246,214,.72);
+  الخلفية: rgba(255,246,214,.72)؛
   border:1px solid rgba(244,197,66,.45);
   box-shadow:0 10px 28px rgba(18,51,37,.10);
   display:grid;
-  gap:6px;
+  الفجوة: 6 بكسل؛
   text-align:center;
 }
 
 .install-mini-card b{
-  color:var(--green-dark);
-  font-weight:900;
-  font-size:15px;
+  اللون: متغير (--أخضر داكن)؛
+  وزن الخط: 900؛
+  حجم الخط: 15 بكسل؛
 }
 
 .install-mini-card span,
 .install-steps{
-  color:var(--muted);
-  font-weight:800;
-  font-size:13px;
-  line-height:1.7;
+  اللون: متغير (--muted)؛
+  وزن الخط: 800؛
+  حجم الخط: 13 بكسل؛
+  ارتفاع السطر: 1.7؛
 }
 
 .install-mini-actions{
   display:flex;
   justify-content:center;
-  gap:8px;
+  الفجوة: 8 بكسل؛
   flex-wrap:wrap;
   margin-top:4px;
 }
 
 .install-mini-actions .btn{
-  min-height:38px;
-  padding:8px 14px;
-  font-size:13px;
+  الحد الأدنى للارتفاع: 38 بكسل؛
+  الحشو: 8 بكسل 14 بكسل؛
+  حجم الخط: 13 بكسل؛
 }
 
-.panel,
-.card,
-.admin-actions,
-.admin-menu-wrap{
+
+/* ==============================
+   إصلاح: قائمة النقاط الثلاث للمسؤول
+   ظٹظ…ظ†ط¹ ط§ظ„ظ‚ط§ط¦ظ…ط© ظ…ظ† ط§ظ„ط§ط®طھظپط§ط، ط®ظ„ظپ ط§ظ„ظƒط±ظˆطھ ط £ظˆ طط§ظپط© ط§ظ„ط´ط§ط´ط©
+   ============================== */
+
+.بطاقة،
+.لوحة{
   overflow:visible !important;
+  الموضع: نسبي؛
 }
 
 .admin-actions{
-  position:relative;
+  الموضع: نسبي؛
   z-index:20;
+  margin-top:12px;
+  display:flex;
+  الفجوة: 8 بكسل؛
+  flex-wrap:wrap;
+  align-items:center;
 }
 
 .admin-menu-wrap{
-  position:relative;
+  الموضع: نسبي؛
+  مؤشر z: 99999؛
   display:inline-block;
 }
 
+.admin-menu-btn{
+  الحد الأدنى للعرض: 44 بكسل !مهم؛
+  padding:8px 12px !important;
+  حجم الخط: 20 بكسل !مهم؛
+  ارتفاع السطر: 1 !مهم؛
+}
+
+/* ط§ظ„ظ‚ط§ط¦ظ…ط© طھظپطھط ط¯ط§ط®ظ„ ط§ظ„ط´ط§ط´ط© ظˆظ„ظٹط³ ط®ظ„ظپ ط§ظ„ظƒط±ظˆطھ */
 .admin-menu{
   display:none;
-  position:absolute;
-  top:48px;
-  right:0;
-  left:auto;
-  min-width:190px;
-  background:rgba(255,255,255,.98);
+  position:fixed !important;
+  left:14px !important;
+  يمين: 14 بكسل !مهم؛
+  أسفل: 18 بكسل !مهم؛
+  أعلى: تلقائي !مهم؛
+  العرض: تلقائي !مهم؛
+  أقصى عرض: 420 بكسل؛
+  margin:auto;
+  الخلفية: rgba(255,255,255,.98)؛
   border:1px solid rgba(18,51,37,.12);
-  box-shadow:0 18px 45px rgba(18,51,37,.18);
-  border-radius:18px;
-  padding:8px;
-  z-index:99999;
+  box-shadow:0 22px 60px rgba(18,51,37,.25);
+  border-radius:22px;
+  الحشو: 10 بكسل؛
+  z-index:999999 !important;
+  backdrop-filter:blur(14px);
 }
 
 .admin-menu.show{
   display:grid;
-  gap:6px;
+  الفجوة: 8 بكسل؛
 }
 
 .admin-menu .btn{
-  width:100%;
+  العرض: 100%؛
+  الحد الأدنى للارتفاع: 44 بكسل؛
+  حجم الخط: 15 بكسل؛
+  الحشو: 10 بكسل 14 بكسل؛
   text-align:right;
 }
 
+.printed-chip{
+  display:inline-flex;
+  align-items:center;
+  الفجوة: 5 بكسل؛
+  border-radius:999px;
+  الخلفية: #EFF9F0;
+  اللون: #1B4D32؛
+  وزن الخط: 900؛
+  الحشو: 6 بكسل 10 بكسل؛
+  حجم الخط: 12 بكسل؛
+}
+
+.danger-btn{
+  اللون: #B91C1C !مهم؛
+}
+
 @media(max-width:700px){
-
   .admin-menu{
-    right:auto;
-    left:0;
-    min-width:170px;
+    left:12px !important;
+    right:12px !important;
+    أسفل: 14 بكسل !مهم؛
+    الحد الأقصى للعرض: لا شيء؛
   }
-
 }
