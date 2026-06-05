@@ -38,6 +38,7 @@ let currentBackFn = "renderHome()";
 let isPhoneBack = false;
 
 let lastWarehouseNewCount = null;
+let lastSystemCounts = null;
 let uxAudioContext = null;
 
 function ensureUxStyle(){
@@ -67,6 +68,15 @@ function ensureUxStyle(){
     .issue-row input{margin:0!important;text-align:center}
     .issued-display{text-align:left;display:grid;gap:4px}
     .issued-display b:last-child{color:#2E7D32}
+
+    .admin-actions{position:relative;margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .admin-menu-wrap{position:relative;display:inline-block}
+    .admin-menu-btn{min-width:44px!important;padding:8px 12px!important;font-size:20px!important;line-height:1!important}
+    .admin-menu{display:none;position:absolute;left:0;top:48px;min-width:190px;background:rgba(255,255,255,.98);border:1px solid rgba(18,51,37,.12);box-shadow:0 18px 45px rgba(18,51,37,.18);border-radius:18px;padding:8px;z-index:50}
+    .admin-menu.show{display:grid;gap:6px}
+    .admin-menu .btn{width:100%;min-height:40px;font-size:14px;padding:8px 12px;text-align:right}
+    .printed-chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;background:#EFF9F0;color:#1B4D32;font-weight:900;padding:6px 10px;font-size:12px}
+    .danger-btn{color:#B91C1C!important}
     @media(max-width:700px){.issue-row{grid-template-columns:1fr}.issue-row input{text-align:right}}
   `;
   document.head.appendChild(style);
@@ -120,6 +130,150 @@ function getProductionPlaceholder(){
   return "مثال: صنف الإنتاج";
 }
 
+
+
+function notifySystem(message,type="warn"){
+  showToast(message,type);
+  try{if(navigator.vibrate) navigator.vibrate([100,50,100]);}catch(e){}
+  try{
+    uxAudioContext = uxAudioContext || new (window.AudioContext||window.webkitAudioContext)();
+    const ctx=uxAudioContext, osc=ctx.createOscillator(), gain=ctx.createGain();
+    osc.type="sine"; osc.frequency.value=740;
+    gain.gain.setValueAtTime(0.0001,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.12,ctx.currentTime+0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.22);
+    osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+0.24);
+  }catch(e){}
+}
+
+function checkSystemNotifications(){
+  const counts={
+    warehouse: warehouseOrders.filter(o=>o.status==="جديد").length,
+    production: productionLogs.length,
+    waste: wasteLogs.length,
+    internal: internalIssues.length,
+    cleaning: cleaningLogs.length,
+    operations: operationLogs.length
+  };
+  if(lastSystemCounts===null){lastSystemCounts={...counts};return;}
+  if(counts.warehouse>lastSystemCounts.warehouse){
+    const newest=[...warehouseOrders].filter(o=>o.status==="جديد").sort((a,b)=>getTimeValue(b)-getTimeValue(a))[0];
+    notifyWarehouseNewOrder(newest);
+  }
+  if(counts.production>lastSystemCounts.production) notifySystem("🍽️ إنتاج جديد مرفوع للإدارة","warn");
+  if(counts.waste>lastSystemCounts.waste) notifySystem("⚠️ تالف / هدر جديد","warn");
+  if(counts.internal>lastSystemCounts.internal) notifySystem("📤 صرف داخلي جديد","warn");
+  if(counts.cleaning>lastSystemCounts.cleaning) notifySystem("🧹 تقرير نظافة جديد","warn");
+  if(counts.operations>lastSystemCounts.operations) notifySystem("⚙️ تقرير تشغيل جديد","warn");
+  lastSystemCounts={...counts};
+}
+
+function getTimeValue(x){
+  return Number(x?.timeMs || x?.issuedAtMs || x?.archivedAtMs || x?.deletedAtMs || x?.createdAtMs || (x?.createdAt?.seconds ? x.createdAt.seconds*1000 : 0) || 0);
+}
+
+function sortNewest(list){
+  return [...(list||[])].sort((a,b)=>getTimeValue(b)-getTimeValue(a));
+}
+
+function toggleAdminMenu(id){
+  document.querySelectorAll('.admin-menu').forEach(m=>{if(m.id!==id)m.classList.remove('show')});
+  const el=document.getElementById(id);
+  if(el) el.classList.toggle('show');
+}
+
+function adminActionMenu(collectionName,id,printFn,printed=false,afterFn="renderAdmin"){
+  const menuId=`menu_${collectionName}_${id}`.replace(/[^a-zA-Z0-9_]/g,"_");
+  return `
+    <div class="admin-actions">
+      ${printed ? `<span class="printed-chip">✓ مطبوع</span>` : ``}
+      <div class="admin-menu-wrap">
+        <button class="btn btn-light admin-menu-btn" onclick="toggleAdminMenu('${menuId}')">⋮</button>
+        <div class="admin-menu" id="${menuId}">
+          <button class="btn btn-light" onclick="${printFn}">🖨 طباعة</button>
+          <button class="btn btn-light danger-btn" onclick="deletePrintedItem('${collectionName}','${id}','${afterFn}')">🗑 حذف بعد الطباعة</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function markPrinted(collectionName,id){
+  const {db,doc,updateDoc}=window.firebaseDB;
+  await updateDoc(doc(db,collectionName,id),{printed:true,printedAtText:nowText(),printedAtMs:Date.now()});
+}
+
+async function deletePrintedItem(collectionName,id,afterFn="renderAdmin"){
+  const sourceMap={
+    production_logs:productionLogs,
+    waste_logs:wasteLogs,
+    warehouse_orders:warehouseOrders,
+    internal_issues:internalIssues,
+    cleaning_logs:cleaningLogs,
+    operation_logs:operationLogs
+  };
+  const item=(sourceMap[collectionName]||[]).find(x=>x.id===id);
+  if(!item?.printed){
+    showToast("اطبع العملية أولاً قبل الحذف","error");
+    return;
+  }
+  if(!confirm("سيتم حذف العملية المطبوعة فقط. هل أنت متأكد؟")) return;
+  const {db,doc,deleteDoc}=window.firebaseDB;
+  await deleteDoc(doc(db,collectionName,id));
+  showToast("تم حذف العملية المطبوعة");
+  try{ new Function(afterFn+"()")(); }catch(e){ renderAdmin(); }
+}
+
+async function deleteAllPrinted(collectionName,afterFn="renderAdmin"){
+  const sourceMap={
+    production_logs:productionLogs,
+    waste_logs:wasteLogs,
+    warehouse_orders:warehouseOrders,
+    internal_issues:internalIssues,
+    cleaning_logs:cleaningLogs,
+    operation_logs:operationLogs
+  };
+  const list=(sourceMap[collectionName]||[]).filter(x=>x.printed);
+  if(!list.length){showToast("لا توجد عمليات مطبوعة للحذف","warn");return;}
+  if(!confirm(`سيتم حذف ${list.length} عملية مطبوعة فقط. هل أنت متأكد؟`)) return;
+  const {db,doc,deleteDoc}=window.firebaseDB;
+  for(const item of list){ await deleteDoc(doc(db,collectionName,item.id)); }
+  showToast("تم حذف جميع العمليات المطبوعة");
+  try{ new Function(afterFn+"()")(); }catch(e){ renderAdmin(); }
+}
+
+function buildCleaningLogReport(log){
+  return `
+    <div class="card">
+      <h3>${escapeHtml(shiftLabels[log.shift]?.ar || "النظافة")}</h3>
+      <div class="meta">${escapeHtml(log.createdAtText||"")}</div>
+      <table>
+        <thead><tr><th>المهمة</th><th>الحالة</th></tr></thead>
+        <tbody>${(log.entries||[]).map(e=>`<tr><td>${escapeHtml(e.nameAr||"")}</td><td>${e.done?"تم":"لم يتم"}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>`;
+}
+
+function printProductionLog(id){
+  const log=productionLogs.find(x=>x.id===id); if(!log)return;
+  markPrinted('production_logs',id);
+  openPrintReport("تقرير إنتاج", buildProductionReport([log]));
+}
+function printWasteLog(id){
+  const log=wasteLogs.find(x=>x.id===id); if(!log)return;
+  markPrinted('waste_logs',id);
+  openPrintReport("تقرير تالف وهدر", buildWasteReport([log]));
+}
+function printOperationLog(id){
+  const log=operationLogs.find(x=>x.id===id); if(!log)return;
+  markPrinted('operation_logs',id);
+  openPrintReport("تقرير تشغيل", buildOperationsReport([log]));
+}
+function printCleaningLog(id){
+  const log=cleaningLogs.find(x=>x.id===id); if(!log)return;
+  markPrinted('cleaning_logs',id);
+  openPrintReport("تقرير نظافة", buildCleaningLogReport(log));
+}
 
 function isStandaloneApp(){
   return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
@@ -294,7 +448,7 @@ async function initCloud(){
 }
 
 function refreshViews(){
-  checkWarehouseNewOrdersNotify();
+  checkSystemNotifications();
   if(document.getElementById("sectionsContainer")) drawSections();
   if(document.getElementById("chefSection")) drawChefSectionOptions();
   if(document.getElementById("chefsContainer")) drawChefs();
@@ -1101,7 +1255,7 @@ async function sendWarehouseOrder(){
 
 function renderMyOrders(){
   if(!currentChef) return renderChefs();
-  const myOrders=warehouseOrders.filter(o=>o.chefCode===currentChef.code && !["مؤرشف","محذوف"].includes(o.status));
+  const myOrders=sortNewest(warehouseOrders.filter(o=>o.chefCode===currentChef.code && !["مؤرشف","محذوف"].includes(o.status)));
   pageLayout("طلباتي", `
     <div class="grid">
       ${myOrders.length ? myOrders.map(o=>renderOrderCard(o,true)).join("") : `<div class="panel placeholder">لا توجد طلبات</div>`}
@@ -1146,7 +1300,7 @@ function renderWarehouseOrders(){
 function drawWarehouseOrders(){
   const box=document.getElementById("warehouseOrdersBox");
   if(!box) return;
-  const visibleOrders = warehouseOrders.filter(o=>!["تم الاستلام","مؤرشف","محذوف"].includes(o.status));
+  const visibleOrders = sortNewest(warehouseOrders.filter(o=>!["تم الاستلام","مؤرشف","محذوف"].includes(o.status)));
   box.innerHTML=visibleOrders.length ? visibleOrders.map(o=>renderOrderCard(o,false)).join("") : `<div class="panel placeholder">لا توجد طلبات</div>`;
 }
 
@@ -1631,17 +1785,21 @@ function drawAdminAlerts(){
   const box=document.getElementById("adminAlertsBox");
   if(!box) return;
   const hidden=dismissedAlerts.map(a=>a.key);
-  const alerts=warehouseOrders.map(getAlert).filter(a=>a.text&&!hidden.includes(a.key));
-
-  box.innerHTML=alerts.length ? alerts.map(a=>`
+  const alerts=[];
+  warehouseOrders.forEach(order=>{const a=getAlert(order); if(a.text) alerts.push({...a,time:getTimeValue(order)});});
+  productionLogs.forEach(l=>alerts.push({key:`production-${l.id}`,text:"إنتاج جديد",sub:`${l.section||""} - ${l.chefName||""}`,time:getTimeValue(l),action:`renderAdminProduction()`}));
+  wasteLogs.forEach(l=>alerts.push({key:`waste-${l.id}`,text:"تالف / هدر",sub:`${l.section||""} - ${l.chefName||""}`,time:getTimeValue(l),action:`renderAdminWaste()`}));
+  internalIssues.forEach(l=>alerts.push({key:`internal-${l.id}`,text:"صرف داخلي",sub:`${l.destination||""} - ${l.staff||""}`,time:getTimeValue(l),action:`renderAdminInternalIssue()`}));
+  cleaningLogs.forEach(l=>alerts.push({key:`cleaning-${l.id}`,text:"تقرير نظافة",sub:`${shiftLabels[l.shift]?.ar||""}`,time:getTimeValue(l),action:`renderAdminCleaning()`}));
+  operationLogs.forEach(l=>alerts.push({key:`operation-${l.id}`,text:"تقرير تشغيل",sub:`${l.period||""} - ${l.operatorName||""}`,time:getTimeValue(l),action:`renderAdminOperations()`}));
+  const visible=sortNewest(alerts).filter(a=>!hidden.includes(a.key)).slice(0,20);
+  box.innerHTML=visible.length ? visible.map(a=>`
     <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:#f9fbf5;border:1px solid #e5eadb;border-radius:18px;padding:14px;margin-bottom:10px">
-      <div onclick="renderOrderDetails('${a.orderId}')" style="cursor:pointer">
-        <b>${a.text}</b>
-        <div style="color:#7b8674;font-weight:700;margin-top:4px">${a.sub}</div>
+      <div onclick="${a.orderId ? `renderOrderDetails('${a.orderId}')` : (a.action||'renderAdmin()')}" style="cursor:pointer">
+        <b>${a.text}</b><div style="color:#7b8674;font-weight:700;margin-top:4px">${a.sub||""}</div>
       </div>
       <button class="btn btn-light" onclick="dismissAlert('${a.key}')">×</button>
-    </div>
-  `).join("") : `<div class="placeholder">لا توجد تنبيهات</div>`;
+    </div>`).join("") : `<div class="placeholder">لا توجد تنبيهات</div>`;
 }
 
 function renderOrderDetails(id){
@@ -1664,26 +1822,30 @@ function drawProductionAdmin(){
     return;
   }
 
-  const logs=[...productionLogs].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0));
+  const logs=sortNewest(productionLogs);
 
-  box.innerHTML=logs.map(log=>`
-    <div class="panel" style="margin-bottom:14px">
-      <h3>${log.section} - ${log.chefName}</h3>
-      <p style="color:#7b8674;font-weight:800;margin-top:6px">${log.createdAtText||""}</p>
-
-      <div style="margin-top:12px">
-        ${(log.items||[]).map(i=>`
-          <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
-            <span>${i.name}</span>
-            <b>${i.qty}</b>
-          </div>
-        `).join("")}
+  box.innerHTML=`
+    <div class="panel" style="margin-bottom:14px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">
+      <h3>تقرير الإنتاج</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-main" onclick="printReport('production')">🖨 طباعة التقرير</button>
+        <button class="btn btn-light danger-btn" onclick="deleteAllPrinted('production_logs','renderAdminProduction')">🗑 حذف جميع العمليات المطبوعة</button>
       </div>
-
-      ${log.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${log.note}</p>` : ""}
-      <button class="btn btn-light" style="margin-top:12px" onclick="printInternalIssue('${log.id}')">🖨 طباعة</button>
     </div>
-  `).join("");
+    ${logs.map(log=>`
+      <div class="panel" style="margin-bottom:14px">
+        <h3>${log.section} - ${log.chefName}</h3>
+        <p style="color:#7b8674;font-weight:800;margin-top:6px">${log.createdAtText||""}</p>
+        <div style="margin-top:12px">
+          ${(log.items||[]).map(i=>`
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
+              <span>${i.name}</span><b>${i.qty}</b>
+            </div>`).join("")}
+        </div>
+        ${log.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${log.note}</p>` : ""}
+        ${adminActionMenu('production_logs',log.id,`printProductionLog('${log.id}')`,!!log.printed,'renderAdminProduction')}
+      </div>`).join("")}
+  `;
 }
 
 
@@ -1701,19 +1863,27 @@ function drawWasteAdmin(){
     return;
   }
 
-  const logs=[...wasteLogs].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0));
+  const logs=sortNewest(wasteLogs);
 
-  box.innerHTML=logs.map(log=>`
-    <div class="panel" style="margin-bottom:14px">
-      <h3>${log.section} - ${log.chefName}</h3>
-      <p style="color:#7b8674;font-weight:800;margin-top:6px">${log.createdAtText||""}</p>
-      <div style="margin-top:12px;border-bottom:1px solid #e5eadb;padding-bottom:8px">
-        <b>${log.productName}</b>
-        <div style="margin-top:6px">الكمية: <b>${log.qty}</b></div>
+  box.innerHTML=`
+    <div class="panel" style="margin-bottom:14px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">
+      <h3>تقرير التالف والهدر</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-main" onclick="printReport('waste')">🖨 طباعة التقرير</button>
+        <button class="btn btn-light danger-btn" onclick="deleteAllPrinted('waste_logs','renderAdminWaste')">🗑 حذف جميع العمليات المطبوعة</button>
       </div>
-      <p style="margin-top:12px;color:#7b8674"><b>السبب:</b> ${log.reason||""}</p>
     </div>
-  `).join("");
+    ${logs.map(log=>`
+      <div class="panel" style="margin-bottom:14px">
+        <h3>${log.section} - ${log.chefName}</h3>
+        <p style="color:#7b8674;font-weight:800;margin-top:6px">${log.createdAtText||""}</p>
+        <div style="margin-top:12px;border-bottom:1px solid #e5eadb;padding-bottom:8px">
+          <b>${log.productName}</b><div style="margin-top:6px">الكمية: <b>${log.qty}</b></div>
+        </div>
+        <p style="margin-top:12px;color:#7b8674"><b>السبب:</b> ${log.reason||""}</p>
+        ${adminActionMenu('waste_logs',log.id,`printWasteLog('${log.id}')`,!!log.printed,'renderAdminWaste')}
+      </div>`).join("")}
+  `;
 }
 
 function renderAdminWarehouse(){
@@ -1734,35 +1904,37 @@ function drawWarehouseArchive(){
   const box=document.getElementById("warehouseArchiveBox");
   if(!box) return;
 
-  const archived = warehouseOrders.filter(o=>["جاهز","تم الاستلام","مؤرشف","محذوف"].includes(o.status) || o.issuedAtText);
+  const archived = sortNewest(warehouseOrders.filter(o=>["جاهز","تم الاستلام","مؤرشف","محذوف"].includes(o.status) || o.issuedAtText));
 
   if(!archived.length){
     box.innerHTML=`<div class="panel placeholder">لا توجد طلبات شيفات</div>`;
     return;
   }
 
-  box.innerHTML = archived
-    .sort((a,b)=>(b.archivedAtMs||0)-(a.archivedAtMs||0))
-    .map(order=>`
+  box.innerHTML = `
+    <div class="panel" style="margin-bottom:14px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">
+      <h3>طلبات الشيفات</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-light danger-btn" onclick="deleteAllPrinted('warehouse_orders','renderAdminWarehouseArchive')">🗑 حذف جميع العمليات المطبوعة</button>
+      </div>
+    </div>
+    ${archived.map(order=>`
       <div class="panel" style="margin-bottom:14px">
         <h3>طلب شيفات - ${order.section}</h3>
         <p style="color:#7b8674;font-weight:800">الشيف: ${order.chefName}</p>
         <p style="color:#7b8674;font-weight:800">رقم الطلب: ${order.orderId||order.id}</p>
-        <p style="color:#7b8674;font-weight:800">وقت الاستلام: ${order.archivedAtText||order.issuedAtText||""}</p>
-
+        <p style="color:#7b8674;font-weight:800">وقت الاستلام: ${order.archivedAtText||order.issuedAtText||order.createdAtText||""}</p>
         <div style="margin-top:12px">
           ${(order.items||[]).map((item,i)=>`
             <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
               <span>${i+1}- ${item.name}</span>
               <b>${item.issuedQty !== undefined ? `مطلوب: ${item.qty} / مصروف: ${item.issuedQty}` : `${item.qty} ${item.unit||""}`}</b>
-            </div>
-          `).join("")}
+            </div>`).join("")}
         </div>
-
         ${order.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${order.note}</p>` : ""}
-        <button class="btn btn-light" style="margin-top:12px" onclick="printWarehouseOrder('${order.id}')">🖨 طباعة</button>
-      </div>
-    `).join("");
+        ${adminActionMenu('warehouse_orders',order.id,`printWarehouseOrder('${order.id}')`,!!order.printed,'renderAdminWarehouseArchive')}
+      </div>`).join("")}
+  `;
 }
 
 function renderAdminInternalIssue(){
@@ -1779,26 +1951,31 @@ function drawInternalIssueAdmin(){
     return;
   }
 
-  const logs=[...internalIssues].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0));
+  const logs=sortNewest(internalIssues);
 
-  box.innerHTML=logs.map(log=>`
-    <div class="panel" style="margin-bottom:14px">
-      <h3>${log.destination}</h3>
-      <p style="color:#7b8674;font-weight:800;margin-top:6px">صرف بواسطة: ${log.staff || ""}</p>
-      <p style="color:#7b8674;font-weight:800">${log.createdAtText || ""}</p>
-
-      <div style="margin-top:12px">
-        ${(log.items||[]).map(i=>`
-          <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
-            <span>${i.name}</span>
-            <b>${i.qty} ${i.unit||""}</b>
-          </div>
-        `).join("")}
+  box.innerHTML=`
+    <div class="panel" style="margin-bottom:14px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">
+      <h3>الصرف الداخلي</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-main" onclick="printReport('internal')">🖨 طباعة التقرير</button>
+        <button class="btn btn-light danger-btn" onclick="deleteAllPrinted('internal_issues','renderAdminInternalIssue')">🗑 حذف جميع العمليات المطبوعة</button>
       </div>
-
-      ${log.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${log.note}</p>` : ""}
     </div>
-  `).join("");
+    ${logs.map(log=>`
+      <div class="panel" style="margin-bottom:14px">
+        <h3>${log.destination}</h3>
+        <p style="color:#7b8674;font-weight:800;margin-top:6px">صرف بواسطة: ${log.staff || ""}</p>
+        <p style="color:#7b8674;font-weight:800">${log.createdAtText || ""}</p>
+        <div style="margin-top:12px">
+          ${(log.items||[]).map(i=>`
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
+              <span>${i.name}</span><b>${i.qty} ${i.unit||""}</b>
+            </div>`).join("")}
+        </div>
+        ${log.note ? `<p style="margin-top:12px;color:#7b8674">ملاحظة: ${log.note}</p>` : ""}
+        ${adminActionMenu('internal_issues',log.id,`printInternalIssue('${log.id}')`,!!log.printed,'renderAdminInternalIssue')}
+      </div>`).join("")}
+  `;
 }
 
 function renderAdminCleaning(){
@@ -1815,35 +1992,37 @@ function drawCleaningAdmin(){
   const box=document.getElementById("cleaningAdminBox");
   if(!box) return;
 
-  const shifts=["morning","afternoon","night"];
+  if(!cleaningLogs.length){
+    box.innerHTML=`<div class="panel placeholder">لا يوجد تقارير نظافة</div>`;
+    return;
+  }
 
-  box.innerHTML=shifts.map(shift=>{
-    const log=getLatestCleaningLog(shift);
+  const logs=sortNewest(cleaningLogs);
 
-    if(!log){
-      return `<div class="panel" style="margin-bottom:12px"><h3>${shiftLabels[shift].ar}</h3><p style="font-weight:900;color:#b91c1c;margin-top:8px">لم يبدأ</p></div>`;
-    }
-
-    const total=log.entries?log.entries.length:0;
-    const done=log.entries?log.entries.filter(e=>e.done).length:0;
-    const status=total>0&&done===total?"مكتمل":"ناقص";
-
-    return `
-      <div class="panel" style="margin-bottom:12px">
-        <h3>${shiftLabels[shift].ar}</h3>
-        <p style="font-weight:900;margin-top:8px">${status}</p>
-        <p style="color:#7b8674;font-weight:800">${log.createdAtText||""}</p>
-        <div style="margin-top:12px">
-          ${(log.entries||[]).map(e=>`
-            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
-              <span>${e.nameAr}</span>
-              <b>${e.done?"تم":"لم يتم"}</b>
-            </div>
-          `).join("")}
-        </div>
-      </div>
-    `;
-  }).join("");
+  box.innerHTML=`
+    <div class="panel" style="margin-bottom:14px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">
+      <h3>تقرير النظافة</h3>
+      <button class="btn btn-light danger-btn" onclick="deleteAllPrinted('cleaning_logs','renderAdminCleaning')">🗑 حذف جميع العمليات المطبوعة</button>
+    </div>
+    ${logs.map(log=>{
+      const total=log.entries?log.entries.length:0;
+      const done=log.entries?log.entries.filter(e=>e.done).length:0;
+      const status=total>0&&done===total?"مكتمل":"ناقص";
+      return `
+        <div class="panel" style="margin-bottom:12px">
+          <h3>${shiftLabels[log.shift]?.ar || "النظافة"}</h3>
+          <p style="font-weight:900;margin-top:8px">${status}</p>
+          <p style="color:#7b8674;font-weight:800">${log.createdAtText||""}</p>
+          <div style="margin-top:12px">
+            ${(log.entries||[]).map(e=>`
+              <div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5eadb;padding:8px 0">
+                <span>${e.nameAr}</span><b>${e.done?"تم":"لم يتم"}</b>
+              </div>`).join("")}
+          </div>
+          ${adminActionMenu('cleaning_logs',log.id,`printCleaningLog('${log.id}')`,!!log.printed,'renderAdminCleaning')}
+        </div>`;
+    }).join("")}
+  `;
 }
 
 function renderAdminOperations(){
@@ -1855,46 +2034,32 @@ function drawOperationAdmin(){
   const box=document.getElementById("operationAdminBox");
   if(!box) return;
 
-  if(!operationTasks.length){
-    box.innerHTML=`<div class="panel placeholder">لا توجد مهام تشغيل</div>`;
+  if(!operationLogs.length){
+    box.innerHTML=`<div class="panel placeholder">لا توجد تقارير تشغيل</div>`;
     return;
   }
 
-  const periods=getOperationPeriods();
+  const logs=sortNewest(operationLogs);
 
-  box.innerHTML=periods.map(period=>{
-    const tasks=operationTasks.filter(t=>t.period===period);
-    const rows=tasks.map(task=>{
-      const latest=getLatestOperationLog(task.id);
-      return {task,latest,done:latest&&latest.done};
-    });
-
-    const total=rows.length;
-    const doneCount=rows.filter(r=>r.done).length;
-    const status=total>0&&total===doneCount?"مكتمل":"ناقص";
-
-    return `
-      <div class="panel" style="margin-bottom:14px">
-        <h3>${period}</h3>
-        <p style="font-weight:900;margin-top:8px">${status}</p>
-
-        <div style="margin-top:12px">
-          ${rows.map(r=>`
-            <div style="border-bottom:1px solid #e5eadb;padding:10px 0">
-              <div style="display:flex;justify-content:space-between;gap:10px">
-                <span>${r.task.name}</span>
-                <b>${r.done?"تم":"لم يتم"}</b>
-              </div>
-              ${r.latest&&r.latest.done ? `
-                <div style="color:#7b8674;font-weight:800;margin-top:4px">${r.latest.completedAtText||""} - ${r.latest.operatorName||""}</div>
-                ${r.latest.note ? `<div style="color:#7b8674;margin-top:6px">📝 ${r.latest.note}</div>` : ""}
-              ` : ""}
-            </div>
-          `).join("")}
-        </div>
+  box.innerHTML=`
+    <div class="panel" style="margin-bottom:14px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">
+      <h3>تقرير التشغيل</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-main" onclick="printReport('operations')">🖨 طباعة التقرير</button>
+        <button class="btn btn-light danger-btn" onclick="deleteAllPrinted('operation_logs','renderAdminOperations')">🗑 حذف جميع العمليات المطبوعة</button>
       </div>
-    `;
-  }).join("");
+    </div>
+    ${logs.map(log=>`
+      <div class="panel" style="margin-bottom:14px">
+        <h3>${log.period||"تشغيل"}</h3>
+        <div style="border-bottom:1px solid #e5eadb;padding:10px 0">
+          <div style="display:flex;justify-content:space-between;gap:10px"><span>${log.taskName||""}</span><b>${log.done?"تم":"لم يتم"}</b></div>
+          <div style="color:#7b8674;font-weight:800;margin-top:4px">${log.completedAtText||log.createdAtText||""} - ${log.operatorName||""}</div>
+          ${log.note ? `<div style="color:#7b8674;margin-top:6px">📝 ${log.note}</div>` : ""}
+        </div>
+        ${adminActionMenu('operation_logs',log.id,`printOperationLog('${log.id}')`,!!log.printed,'renderAdminOperations')}
+      </div>`).join("")}
+  `;
 }
 
 
@@ -1967,9 +2132,9 @@ function itemsTable(items, withUnit=true){
     </table>`;
 }
 
-function buildProductionReport(){
-  if(!productionLogs.length) return `<div class="card">لا يوجد إنتاج</div>`;
-  return [...productionLogs].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0)).map(log=>`
+function buildProductionReport(source=productionLogs){
+  if(!source.length) return `<div class="card">لا يوجد إنتاج</div>`;
+  return sortNewest(source).map(log=>`
     <div class="card">
       <h3>${escapeHtml(log.section)} - ${escapeHtml(log.chefName)}</h3>
       <div class="meta">${escapeHtml(log.createdAtText||"")}</div>
@@ -1979,9 +2144,9 @@ function buildProductionReport(){
   `).join("");
 }
 
-function buildWasteReport(){
-  if(!wasteLogs.length) return `<div class="card">لا يوجد تالف أو هدر</div>`;
-  return [...wasteLogs].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0)).map(log=>`
+function buildWasteReport(source=wasteLogs){
+  if(!source.length) return `<div class="card">لا يوجد تالف أو هدر</div>`;
+  return sortNewest(source).map(log=>`
     <div class="card">
       <h3>${escapeHtml(log.section)} - ${escapeHtml(log.chefName)}</h3>
       <div class="meta">${escapeHtml(log.createdAtText||"")}</div>
@@ -1999,9 +2164,9 @@ function buildWasteReport(){
   `).join("");
 }
 
-function buildOperationsReport(){
-  if(!operationLogs.length) return `<div class="card">لا يوجد تشغيل</div>`;
-  return [...operationLogs].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0)).map(log=>`
+function buildOperationsReport(source=operationLogs){
+  if(!source.length) return `<div class="card">لا يوجد تشغيل</div>`;
+  return sortNewest(source).map(log=>`
     <div class="card">
       <h3>${escapeHtml(log.period||"تشغيل")}</h3>
       <table>
@@ -2017,9 +2182,9 @@ function buildOperationsReport(){
   `).join("");
 }
 
-function buildInternalReport(){
-  if(!internalIssues.length) return `<div class="card">لا يوجد صرف داخلي</div>`;
-  return [...internalIssues].sort((a,b)=>(b.timeMs||0)-(a.timeMs||0)).map(log=>`
+function buildInternalReport(source=internalIssues){
+  if(!source.length) return `<div class="card">لا يوجد صرف داخلي</div>`;
+  return sortNewest(source).map(log=>`
     <div class="card">
       <h3>${escapeHtml(log.destination||"صرف داخلي")}</h3>
       <div class="meta">بواسطة: ${escapeHtml(log.staff||"")} - ${escapeHtml(log.createdAtText||"")}</div>
@@ -2047,6 +2212,7 @@ function printReport(type){
 function printWarehouseOrder(id){
   const order=warehouseOrders.find(o=>o.id===id);
   if(!order) return;
+  markPrinted("warehouse_orders",id);
 
   const body = `
     <div class="card">
@@ -2070,6 +2236,7 @@ function printWarehouseOrder(id){
 function printInternalIssue(id){
   const log=internalIssues.find(i=>i.id===id);
   if(!log) return;
+  markPrinted("internal_issues",id);
   const body = `
     <div class="card">
       <table>
