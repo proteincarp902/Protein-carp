@@ -72,9 +72,9 @@ function ensureUxStyle(){
     .admin-actions{position:relative;margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     .admin-menu-wrap{position:relative;display:inline-block}
     .admin-menu-btn{min-width:44px!important;padding:8px 12px!important;font-size:20px!important;line-height:1!important}
-    .admin-menu{display:none;position:fixed;left:14px;right:14px;bottom:18px;top:auto;width:auto;max-width:420px;margin:auto;background:rgba(255,255,255,.98);border:1px solid rgba(18,51,37,.12);box-shadow:0 22px 60px rgba(18,51,37,.25);border-radius:22px;padding:10px;z-index:999999}
-    .admin-menu.show{display:grid;gap:8px}
-    .admin-menu .btn{width:100%;min-height:44px;font-size:15px;padding:10px 14px;text-align:right}
+    .admin-menu{display:none;position:absolute;right:0;left:auto;top:48px;bottom:auto;min-width:190px;width:max-content;max-width:260px;background:rgba(255,255,255,.98);border:1px solid rgba(18,51,37,.12);box-shadow:0 18px 45px rgba(18,51,37,.18);border-radius:18px;padding:8px;z-index:999999}
+    .admin-menu.show{display:grid;gap:6px}
+    .admin-menu .btn{width:100%;min-height:40px;font-size:14px;padding:8px 12px;text-align:right}
     .printed-chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;background:#EFF9F0;color:#1B4D32;font-weight:900;padding:6px 10px;font-size:12px}
     .danger-btn{color:#B91C1C!important}
     @media(max-width:700px){.issue-row{grid-template-columns:1fr}.issue-row input{text-align:right}}
@@ -284,6 +284,144 @@ function printCleaningLog(id){
   const log=cleaningLogs.find(x=>x.id===id); if(!log)return;
   markPrinted('cleaning_logs',id);
   openPrintReport("تقرير نظافة", buildCleaningLogReport(log));
+}
+
+
+function reportLogo(){
+  return `<img src="assets/logo.png" class="report-logo" onerror="this.style.display='none'">`;
+}
+
+function reportHeader(title){
+  return `
+    <div class="report-header">
+      ${reportLogo()}
+      <h1>${escapeHtml(title)}</h1>
+      <div class="report-meta">
+        <span>التاريخ: ${escapeHtml(todayDate())}</span>
+        <span>وقت الإنشاء: ${escapeHtml(nowText())}</span>
+      </div>
+    </div>
+  `;
+}
+
+function getReportCss(){
+  return `
+    <style>
+      @page{size:A4;margin:14mm}
+      *{box-sizing:border-box}
+      body{direction:rtl;font-family:'Cairo',Arial,sans-serif;color:#1B2A1F;background:#fff;margin:0;padding:0}
+      .report-page{position:relative;background:#fff}
+      .report-header{text-align:center;border-bottom:3px solid #1B4D32;padding-bottom:14px;margin-bottom:18px}
+      .report-logo{width:86px;height:86px;object-fit:contain;display:block;margin:0 auto 8px}
+      h1{font-size:24px;margin:4px 0 8px;color:#1B4D32;font-weight:900}
+      h2{font-size:18px;color:#1B4D32;margin:18px 0 8px;padding:8px 10px;border-right:5px solid #F4C542;background:#F7FAF3;font-weight:900}
+      h3{font-size:15px;color:#1B4D32;margin:12px 0 8px;font-weight:900}
+      .report-meta{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;font-size:12px;color:#6F7C68;font-weight:800}
+      .summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 18px}
+      .summary-card{border:1px solid #DDE8D7;border-radius:14px;padding:12px;background:#FAFCF7;text-align:center}
+      .summary-card b{display:block;color:#1B4D32;font-size:18px;margin-top:4px}
+      table{width:100%;border-collapse:collapse;margin:8px 0 14px;page-break-inside:auto}
+      th{background:#1B4D32;color:#fff;font-weight:900;padding:9px 8px;border:1px solid #1B4D32;font-size:12px}
+      td{padding:8px;border:1px solid #DDE8D7;font-size:12px;vertical-align:top}
+      tr:nth-child(even) td{background:#FAFCF7}
+      .subtle{color:#6F7C68;font-size:12px;font-weight:800}
+      .footer{border-top:1px solid #DDE8D7;margin-top:20px;padding-top:8px;color:#6F7C68;font-size:11px;text-align:center}
+      @media print{.no-print{display:none!important}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+    </style>
+  `;
+}
+
+function formatItemsText(items){
+  return (items||[]).map(i=>{
+    const req = i.qty !== undefined ? `${i.qty} ${i.unit||""}` : "";
+    const issued = i.issuedQty !== undefined ? ` / مصروف: ${i.issuedQty} ${i.unit||""}` : "";
+    return `${escapeHtml(i.name||i.productName||"")} (${escapeHtml(req)}${escapeHtml(issued)})`;
+  }).join("<br>");
+}
+
+function buildWarehouseReport(){
+  const orders = sortNewest(warehouseOrders.filter(o=>o.status!=="محذوف"));
+  const issues = sortNewest(internalIssues);
+  return `
+    <h2>المستودع</h2>
+    <div class="summary-grid">
+      <div class="summary-card">طلبات الشيفات<b>${orders.length}</b></div>
+      <div class="summary-card">الصرف الداخلي<b>${issues.length}</b></div>
+      <div class="summary-card">إجمالي العمليات<b>${orders.length + issues.length}</b></div>
+    </div>
+
+    <h3>طلبات الشيفات</h3>
+    ${orders.length ? `
+      <table>
+        <thead><tr><th>رقم الطلب</th><th>الشيف</th><th>القسم</th><th>الحالة</th><th>الصرف</th><th>الأصناف</th><th>الوقت</th></tr></thead>
+        <tbody>${orders.map(o=>`
+          <tr>
+            <td>${escapeHtml(o.orderId||o.id||"")}</td>
+            <td>${escapeHtml(o.chefName||"")}</td>
+            <td>${escapeHtml(o.section||"")}</td>
+            <td>${escapeHtml(o.status||"")}</td>
+            <td>${escapeHtml(o.issueStatus || getOrderIssueSummary(o))}</td>
+            <td>${formatItemsText(o.items)}</td>
+            <td>${escapeHtml(o.createdAtText||o.issuedAtText||o.archivedAtText||"")}</td>
+          </tr>`).join("")}</tbody>
+      </table>` : `<div class="subtle">لا توجد طلبات شيفات</div>`}
+
+    <h3>الصرف الداخلي</h3>
+    ${issues.length ? `
+      <table>
+        <thead><tr><th>الموظف</th><th>الجهة</th><th>الأصناف</th><th>الملاحظة</th><th>الوقت</th></tr></thead>
+        <tbody>${issues.map(i=>`
+          <tr>
+            <td>${escapeHtml(i.staff||"")}</td>
+            <td>${escapeHtml(i.destination||"")}</td>
+            <td>${formatItemsText(i.items)}</td>
+            <td>${escapeHtml(i.note||"")}</td>
+            <td>${escapeHtml(i.createdAtText||"")}</td>
+          </tr>`).join("")}</tbody>
+      </table>` : `<div class="subtle">لا يوجد صرف داخلي</div>`}
+  `;
+}
+
+function buildProductionReport(list){
+  list = sortNewest(list||[]);
+  return `<h2>الإنتاج</h2>${list.length ? `
+    <table>
+      <thead><tr><th>الشيف</th><th>القسم</th><th>الأصناف</th><th>ملاحظة</th><th>الوقت</th></tr></thead>
+      <tbody>${list.map(log=>`<tr><td>${escapeHtml(log.chefName||"")}</td><td>${escapeHtml(log.section||"")}</td><td>${formatItemsText(log.items)}</td><td>${escapeHtml(log.note||"")}</td><td>${escapeHtml(log.createdAtText||"")}</td></tr>`).join("")}</tbody>
+    </table>` : `<div class="subtle">لا يوجد إنتاج</div>`}`;
+}
+
+function buildWasteReport(list){
+  list = sortNewest(list||[]);
+  return `<h2>التالف والهدر</h2>${list.length ? `
+    <table>
+      <thead><tr><th>الشيف</th><th>القسم</th><th>الصنف</th><th>الكمية</th><th>السبب</th><th>الوقت</th></tr></thead>
+      <tbody>${list.map(log=>`<tr><td>${escapeHtml(log.chefName||"")}</td><td>${escapeHtml(log.section||"")}</td><td>${escapeHtml(log.productName||"")}</td><td>${escapeHtml(log.qty||"")}</td><td>${escapeHtml(log.reason||"")}</td><td>${escapeHtml(log.createdAtText||"")}</td></tr>`).join("")}</tbody>
+    </table>` : `<div class="subtle">لا يوجد تالف أو هدر</div>`}`;
+}
+
+function buildCleaningReport(list){
+  list = sortNewest(list||[]);
+  return `<h2>النظافة</h2>${list.length ? `
+    <table>
+      <thead><tr><th>الوردية</th><th>المهام</th><th>الوقت</th></tr></thead>
+      <tbody>${list.map(log=>`<tr><td>${escapeHtml(shiftLabels[log.shift]?.ar || log.shift || "")}</td><td>${(log.entries||[]).map(e=>`${escapeHtml(e.nameAr||"")} : ${e.done?"تم":"لم يتم"}`).join("<br>")}</td><td>${escapeHtml(log.createdAtText||"")}</td></tr>`).join("")}</tbody>
+    </table>` : `<div class="subtle">لا توجد تقارير نظافة</div>`}`;
+}
+
+function buildOperationsReport(list){
+  list = sortNewest(list||[]);
+  return `<h2>التشغيل</h2>${list.length ? `
+    <table>
+      <thead><tr><th>المسؤول</th><th>المهمة</th><th>الفترة</th><th>الملاحظة</th><th>الوقت</th></tr></thead>
+      <tbody>${list.map(log=>`<tr><td>${escapeHtml(log.operatorName||"")}</td><td>${escapeHtml(log.taskName||"")}</td><td>${escapeHtml(log.period||"")}</td><td>${escapeHtml(log.note||"")}</td><td>${escapeHtml(log.createdAtText||"")}</td></tr>`).join("")}</tbody>
+    </table>` : `<div class="subtle">لا توجد تقارير تشغيل</div>`}`;
+}
+
+function printWarehouseReport(){
+  warehouseOrders.filter(o=>o.id && o.status!=="محذوف").forEach(o=>markPrinted("warehouse_orders",o.id));
+  internalIssues.filter(i=>i.id).forEach(i=>markPrinted("internal_issues",i.id));
+  openPrintReport("تقرير المستودع", buildWarehouseReport());
 }
 
 function isStandaloneApp(){
@@ -1898,10 +2036,11 @@ function drawWasteAdmin(){
 }
 
 function renderAdminWarehouse(){
-  pageLayout("إدارة المستودع", `
+  pageLayout("المستودع", `
     <section class="grid">
-      <div class="card" onclick="renderAdminWarehouseArchive()"><div class="icon"><i class="fa-solid fa-folder-open"></i></div><div class="card-title">طلبات الشيفات</div></div>
+      <div class="card" onclick="renderAdminWarehouseArchive()"><div class="icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="card-title">طلبات الشيفات</div></div>
       <div class="card" onclick="renderAdminInternalIssue()"><div class="icon"><i class="fa-solid fa-arrow-up-from-bracket"></i></div><div class="card-title">الصرف الداخلي</div></div>
+      <div class="card" onclick="printWarehouseReport()"><div class="icon"><i class="fa-solid fa-file-pdf"></i></div><div class="card-title">طباعة تقرير المستودع</div></div>
     </section>
   `,"renderAdmin()");
 }
@@ -2079,11 +2218,12 @@ function drawOperationAdmin(){
 function renderAdminPDF(){
   pageLayout("تصدير PDF", `
     <section class="grid">
-      <div class="card" onclick="printReport('production')"><div class="icon"><i class="fa-solid fa-chart-line"></i></div><div class="card-title">تقرير الإنتاج</div></div>
-      <div class="card" onclick="printReport('waste')"><div class="icon"><i class="fa-solid fa-trash-can"></i></div><div class="card-title">تقرير التالف والهدر</div></div>
-      <div class="card" onclick="printReport('operations')"><div class="icon"><i class="fa-solid fa-industry"></i></div><div class="card-title">تقرير التشغيل</div></div>
-      <div class="card" onclick="printReport('internal')"><div class="icon"><i class="fa-solid fa-arrow-up-from-bracket"></i></div><div class="card-title">تقرير الصرف الداخلي</div></div>
-      <div class="card" onclick="printReport('summary')"><div class="icon"><i class="fa-solid fa-file-pdf"></i></div><div class="card-title">تقرير شامل</div></div>
+      <div class="card" onclick="printWarehouseReport()"><div class="icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="card-title">تقرير المستودع</div></div>
+      <div class="card" onclick="printAllProduction()"><div class="icon"><i class="fa-solid fa-chart-line"></i></div><div class="card-title">تقرير الإنتاج</div></div>
+      <div class="card" onclick="printAllWaste()"><div class="icon"><i class="fa-solid fa-trash-can"></i></div><div class="card-title">تقرير التالف والهدر</div></div>
+      <div class="card" onclick="printAllCleaning()"><div class="icon"><i class="fa-solid fa-broom"></i></div><div class="card-title">تقرير النظافة</div></div>
+      <div class="card" onclick="printAllOperations()"><div class="icon"><i class="fa-solid fa-industry"></i></div><div class="card-title">تقرير التشغيل</div></div>
+      <div class="card" onclick="printFullDailyReport()"><div class="icon"><i class="fa-solid fa-file-pdf"></i></div><div class="card-title">التقرير الشامل</div></div>
     </section>
   `,"renderAdmin()");
 }
@@ -2279,3 +2419,5 @@ async function deleteDocByPath(collectionName,id){
 
 initCloud();
 renderHome();
+
+function printAllInternalIssue(){ printWarehouseReport(); }
