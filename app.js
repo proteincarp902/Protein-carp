@@ -1657,43 +1657,24 @@ function checkAdminPassword(){
   renderAdmin();
 }
 
-
 function renderAdmin(){
-  const todayProd=productionLogs.length;
-  const todayWaste=wasteLogs.length;
-  const todayOrders=warehouseOrders.filter(o=>o.status!=="تم الاستلام").length;
-  const todayClean=cleaningLogs.length;
-  const todayOps=operationLogs.length;
-
-  pageLayout("لوحة التحكم", `
-  <div class="admin-dashboard">
-    <div class="admin-kpis">
-      <div class="admin-kpi"><span>طلبات المستودع</span><b>${todayOrders}</b></div>
-      <div class="admin-kpi"><span>إنتاج اليوم</span><b>${todayProd}</b></div>
-      <div class="admin-kpi"><span>الهدر</span><b>${todayWaste}</b></div>
-      <div class="admin-kpi"><span>النظافة</span><b>${todayClean}</b></div>
-      <div class="admin-kpi"><span>التشغيل</span><b>${todayOps}</b></div>
+  pageLayout("الإدارة", `
+    <div class="panel">
+      <h3>🔔 التنبيهات</h3>
+      <div id="adminAlertsBox"></div>
     </div>
 
-    <div class="admin-grid">
-      <div class="admin-panel"><h3>🔔 التنبيهات</h3><div id="adminAlertsBox"></div></div>
-      <div class="admin-panel">
-        <h3>⚡ أقسام الإدارة</h3>
-        <div class="admin-actions">
-          <button class="btn btn-light" onclick="renderAdminProduction()">الإنتاج</button>
-          <button class="btn btn-light" onclick="renderAdminWarehouse()">المستودع</button>
-          <button class="btn btn-light" onclick="renderAdminWaste()">الهدر</button>
-          <button class="btn btn-light" onclick="renderAdminCleaning()">النظافة</button>
-          <button class="btn btn-light" onclick="renderAdminOperations()">التشغيل</button>
-          <button class="btn btn-light" onclick="renderAdminPDF()">التقارير</button>
-        </div>
-      </div>
-    </div>
-  </div>
+    <section class="grid" style="margin-top:16px">
+      <div class="card" onclick="renderAdminProduction()"><div class="icon"><i class="fa-solid fa-chart-line"></i></div><div class="card-title">الإنتاج</div></div>
+      <div class="card" onclick="renderAdminWaste()"><div class="icon"><i class="fa-solid fa-trash-can"></i></div><div class="card-title">التالف والهدر</div></div>
+      <div class="card" onclick="renderAdminWarehouse()"><div class="icon"><i class="fa-solid fa-boxes-stacked"></i></div><div class="card-title">المستودع</div></div>
+      <div class="card" onclick="renderAdminCleaning()"><div class="icon"><i class="fa-solid fa-broom"></i></div><div class="card-title">النظافة</div></div>
+      <div class="card" onclick="renderAdminOperations()"><div class="icon"><i class="fa-solid fa-industry"></i></div><div class="card-title">التشغيل</div></div>
+      <div class="card" onclick="renderAdminPDF()"><div class="icon"><i class="fa-solid fa-file-pdf"></i></div><div class="card-title">تصدير PDF</div></div>
+    </section>
   `,"renderHome()");
   drawAdminAlerts();
 }
-
 
 function getAlert(order){
   let text="";
@@ -2247,26 +2228,9 @@ function renderSettingsExcel(){settingsShell("excel","استيراد Excel",`<di
 function renderSettingsAbout(){settingsShell("about","حول البرنامج",`<div class="about-card"><img src="assets/logo.png" onerror="this.style.display='none'"><h2>Protein & Carb Operations</h2><p>نظام إدارة التشغيل والإنتاج</p><div class="about-info"><div><span>اسم المنشأة</span><b>Protein & Carb</b></div><div><span>الإصدار</span><b>Premium V1.0</b></div><div><span>حالة النظام</span><b>متصل</b></div><div><span>المطور</span><b>Mimoon Mohammad</b></div><div><span>Email</span><b>mimoon7113@gmail.com</b></div></div></div>${settingsStatsCards()}`);}
 
 
-/* ===== Premium Dashboard V1.2 Complete ===== */
-function dashDateKey(x){const ms=getTimeValue(x); if(!ms)return ''; const d=new Date(ms); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
-function dashTodayKey(){const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
-function dashToday(list){const k=dashTodayKey(); return (list||[]).filter(x=>dashDateKey(x)===k);}
-function dashProductionQty(logs){let t=0;(logs||[]).forEach(l=>(l.items||[]).forEach(i=>t+=Number(i.qty||0)));return t;}
-function dashTopChefs(limit=5){const m={};(productionLogs||[]).forEach(l=>{const n=l.chefName||'غير محدد'; if(!m[n])m[n]={name:n,qty:0,count:0};m[n].count++;(l.items||[]).forEach(i=>m[n].qty+=Number(i.qty||0));});return Object.values(m).sort((a,b)=>b.qty-a.qty).slice(0,limit);}
-function dashTopItems(limit=5,low=false){const m={};(productionLogs||[]).forEach(l=>(l.items||[]).forEach(i=>{const n=i.name||i.productName||'غير محدد'; if(!m[n])m[n]={name:n,qty:0,count:0};m[n].qty+=Number(i.qty||0);m[n].count++;}));const a=Object.values(m).filter(x=>x.qty>0);a.sort((x,y)=>low?x.qty-y.qty:y.qty-x.qty);return a.slice(0,limit);}
-function dashPendingChefs(){const k=dashTodayKey();const done=new Set();(productionLogs||[]).filter(x=>dashDateKey(x)===k).forEach(x=>{done.add(String(x.chefCode||x.code||x.chefName||''));done.add(String(x.chefName||''));});return (chefs||[]).filter(c=>!done.has(String(c.code||''))&&!done.has(String(c.name||'')));}
-function dashActivities(limit=8){const a=[];(productionLogs||[]).forEach(x=>a.push({i:'fa-chart-line',t:`${x.chefName||'شيف'} رفع إنتاج`,m:`${x.section||''} • ${x.createdAtText||''}`,time:getTimeValue(x)}));(warehouseOrders||[]).forEach(x=>a.push({i:'fa-boxes-stacked',t:`طلب مستودع ${x.status||''}`,m:`${x.chefName||''} • ${x.section||''} • ${x.createdAtText||x.issuedAtText||''}`,time:getTimeValue(x)}));(wasteLogs||[]).forEach(x=>a.push({i:'fa-triangle-exclamation',t:'تالف / هدر',m:`${x.chefName||''} • ${x.productName||''} • ${x.createdAtText||''}`,time:getTimeValue(x)}));(internalIssues||[]).forEach(x=>a.push({i:'fa-arrow-up-from-bracket',t:'صرف داخلي',m:`${x.staff||''} • ${x.destination||''} • ${x.createdAtText||''}`,time:getTimeValue(x)}));(cleaningLogs||[]).forEach(x=>a.push({i:'fa-broom',t:'تقرير نظافة',m:`${shiftLabels[x.shift]?.ar||x.shift||''} • ${x.createdAtText||''}`,time:getTimeValue(x)}));(operationLogs||[]).forEach(x=>a.push({i:'fa-industry',t:'تقرير تشغيل',m:`${x.operatorName||''} • ${x.taskName||''} • ${x.createdAtText||''}`,time:getTimeValue(x)}));return a.sort((x,y)=>y.time-x.time).slice(0,limit);}
-function dashMetric(icon,title,value,sub,type=''){return `<div class="dash-metric ${type}"><div class="dash-metric-icon"><i class="fa-solid ${icon}"></i></div><div><span>${title}</span><b>${value}</b><small>${sub||''}</small></div></div>`;}
-function dashRank(list,empty){if(!list.length)return `<div class="dash-empty">${empty}</div>`;return `<div class="dash-rank-list">${list.map((x,i)=>`<div class="dash-rank-row"><span class="rank-no">${i+1}</span><div><b>${escapeHtml(x.name)}</b><small>${x.count||0} عملية</small></div><strong>${escapeHtml(x.qty||0)}</strong></div>`).join('')}</div>`;}
-function dashPending(list){if(!list.length)return `<div class="dash-empty success">كل الشيفات رفعوا إنتاج اليوم أو لا توجد شيفات</div>`;return `<div class="dash-pending-list">${list.slice(0,8).map(c=>`<div class="dash-pending-row"><div><b>${escapeHtml(c.name||'')}</b><small>${escapeHtml(c.section||'')}</small></div><span>معلق</span></div>`).join('')}</div>`;}
-function dashActivity(list){if(!list.length)return `<div class="dash-empty">لا توجد أنشطة حتى الآن</div>`;return `<div class="dash-activity-list">${list.map(a=>`<div class="dash-activity-row"><i class="fa-solid ${a.i}"></i><div><b>${escapeHtml(a.t)}</b><small>${escapeHtml(a.m)}</small></div></div>`).join('')}</div>`;}
-function adminShell(active,title,body){const nav=[['dashboard','fa-gauge-high','لوحة التحكم','renderAdmin()'],['warehouse','fa-boxes-stacked','المستودع','renderAdminWarehouse()'],['production','fa-chart-line','الإنتاج','renderAdminProduction()'],['waste','fa-triangle-exclamation','التالف والهدر','renderAdminWaste()'],['cleaning','fa-broom','النظافة','renderAdminCleaning()'],['operations','fa-industry','التشغيل','renderAdminOperations()'],['reports','fa-file-pdf','التقارير PDF','renderAdminPDF()']];currentBackFn='renderHome()';if(!isPhoneBack)history.pushState({page:'admin-'+active},'');app.innerHTML=`<main class="admin-premium"><aside class="admin-sidebar"><div class="admin-brand"><img src="assets/logo.png" onerror="this.style.display='none'"><div><b>الإدارة</b><span>Premium Dashboard</span></div></div><nav class="admin-nav">${nav.map(([k,i,l,f])=>`<button class="${active===k?'active':''}" onclick="${f}"><i class="fa-solid ${i}"></i><span>${l}</span></button>`).join('')}</nav><button class="admin-back" onclick="renderHome()"><i class="fa-solid fa-house"></i> الرئيسية</button></aside><section class="admin-content"><div class="admin-top"><div><p>Protein & Carb Operations</p><h2>${title}</h2></div><button class="btn btn-light" onclick="renderHome()">رجوع</button></div>${body}</section></main>`;}
-function renderAdmin(){const tp=dashToday(productionLogs),tw=dashToday(wasteLogs),tc=dashToday(cleaningLogs),to=dashToday(operationLogs),nw=warehouseOrders.filter(o=>o.status==='جديد').length,p=dashPendingChefs();adminShell('dashboard','لوحة التحكم',`<section class="dash-hero"><div><span>ملخص اليوم</span><h1>وضع التشغيل الآن</h1><p>${todayDate()}</p></div><button class="btn btn-main" onclick="printFullDailyReport()">طباعة التقرير الشامل</button></section><section class="dash-metrics">${dashMetric('fa-boxes-stacked','طلبات المستودع',nw,'طلبات جديدة',nw?'warn':'')}${dashMetric('fa-chart-line','إنتاج اليوم',dashProductionQty(tp),'إجمالي الكميات')}${dashMetric('fa-triangle-exclamation','الهدر اليوم',tw.length,'عمليات مسجلة',tw.length?'danger':'')}${dashMetric('fa-broom','النظافة',tc.length,'تقارير اليوم')}${dashMetric('fa-industry','التشغيل',to.length,'تقارير اليوم')}${dashMetric('fa-clock','إنتاج معلق',p.length,'شيف لم يرفع اليوم',p.length?'warn':'')}</section><section class="dash-grid"><div class="dash-card wide"><div class="dash-card-head"><h3>⏰ الإنتاج المعلق</h3><button onclick="renderAdminProduction()" class="mini-link">عرض الإنتاج</button></div>${dashPending(p)}</div><div class="dash-card"><div class="dash-card-head"><h3>🏆 أكثر الشيفات إنتاجاً</h3></div>${dashRank(dashTopChefs(5),'لا توجد بيانات إنتاج')}</div><div class="dash-card"><div class="dash-card-head"><h3>🔥 أكثر الأصناف إنتاجاً</h3></div>${dashRank(dashTopItems(5),'لا توجد أصناف منتجة')}</div><div class="dash-card"><div class="dash-card-head"><h3>📉 أقل الأصناف إنتاجاً</h3></div>${dashRank(dashTopItems(5,true),'لا توجد أصناف كافية')}</div><div class="dash-card wide"><div class="dash-card-head"><h3>📢 آخر الأنشطة</h3></div>${dashActivity(dashActivities(8))}</div></section><section class="dash-shortcuts"><button onclick="renderAdminWarehouse()"><i class="fa-solid fa-boxes-stacked"></i><span>المستودع</span></button><button onclick="renderAdminProduction()"><i class="fa-solid fa-chart-line"></i><span>الإنتاج</span></button><button onclick="renderAdminWaste()"><i class="fa-solid fa-triangle-exclamation"></i><span>التالف والهدر</span></button><button onclick="renderAdminCleaning()"><i class="fa-solid fa-broom"></i><span>النظافة</span></button><button onclick="renderAdminOperations()"><i class="fa-solid fa-industry"></i><span>التشغيل</span></button><button onclick="renderAdminPDF()"><i class="fa-solid fa-file-pdf"></i><span>PDF</span></button></section>`);}
+/* ===== Mobile Premium V1.5 Chef UI Fix ===== */
 
-/* ===== Mobile Premium V1.3 ===== */
-
-function pcDateKey(x){
-  const ms = getTimeValue(x);
+function pcDateKeyFromMs(ms){
   if(!ms) return "";
   const d = new Date(ms);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -2277,144 +2241,230 @@ function pcTodayKey(){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
-function pcTodayProductionLogsForChef(){
+function pcDateKey(obj){
+  return pcDateKeyFromMs(getTimeValue(obj));
+}
+
+function pcItemName(item){
+  return item?.nameAr || item?.name || item?.ar || item?.productName || "";
+}
+
+function pcItemEn(item){
+  return item?.nameEn || item?.en || "";
+}
+
+function pcChefProductionToday(){
   if(!currentChef) return [];
   const key = pcTodayKey();
-  return (productionLogs||[]).filter(x=>{
+  return (productionLogs||[]).filter(log=>{
     const sameChef =
-      String(x.chefCode||x.code||x.chefId||"") === String(currentChef.code||currentChef.id||"") ||
-      String(x.chefName||"") === String(currentChef.name||"");
-    return sameChef && pcDateKey(x) === key;
+      String(log.chefCode||"") === String(currentChef.code||"") ||
+      String(log.chefName||"") === String(currentChef.name||"");
+    return sameChef && pcDateKey(log) === key;
   });
 }
 
-function pcProductionStatus(){
-  const logs = pcTodayProductionLogsForChef();
-  if(!logs.length) return {label:"معلق", cls:"pending", qty:0, logs};
-  if(logs.some(x=>x.noProduction)) return {label:"لا يوجد إنتاج", cls:"none", qty:0, logs};
-  return {label:"تم رفع الإنتاج", cls:"done", qty:sumProductionItems(logs), logs};
+function pcChefWasteToday(){
+  if(!currentChef) return [];
+  const key = pcTodayKey();
+  return (wasteLogs||[]).filter(log=>{
+    return String(log.chefName||"") === String(currentChef.name||"") && pcDateKey(log) === key;
+  });
 }
 
-function pcChefHeader(){
-  const cartCount = (currentCart||[]).length;
-  const st = pcProductionStatus();
+function pcChefStatus(){
+  const logs = pcChefProductionToday();
+  if(!logs.length) return {label:"معلق", cls:"pending", qty:0, logs};
+  if(logs.some(x=>x.noProduction)) return {label:"لا يوجد إنتاج", cls:"none", qty:0, logs};
+  let qty=0;
+  logs.forEach(log=>(log.items||[]).forEach(i=>qty+=Number(i.qty||0)));
+  return {label:"تم رفع الإنتاج", cls:"done", qty, logs};
+}
+
+function pcMenuForChef(){
+  const section = currentChef?.section || "";
+  return (menuItems||[]).filter(i=>!i.section || i.section===section);
+}
+
+function pcWarehouseForChef(){
+  const section = currentChef?.section || "";
+  return (warehouseItems||[]).filter(i=>!i.section || i.section===section);
+}
+
+function pcChefTopBar(title=""){
+  const cartQty = (currentCart||[]).reduce((s,i)=>s+Number(i.qty||0),0);
+  const status = pcChefStatus();
   return `
-    <section class="chef-mobile-head">
-      <button class="chef-head-btn" onclick="smartBack()"><i class="fa-solid fa-arrow-right"></i></button>
-      <div class="chef-head-main">
-        <span>${escapeHtml(currentChef?.section || "")}</span>
+    <section class="pc-chef-topbar">
+      <button class="pc-top-btn" onclick="smartBack()" aria-label="رجوع">
+        <i class="fa-solid fa-arrow-right"></i>
+      </button>
+      <div class="pc-chef-title">
+        <span>${escapeHtml(currentChef?.section || title || "")}</span>
         <b>${escapeHtml(currentChef?.name || "")}</b>
-        <small class="${st.cls}">${st.label}</small>
+        <small class="${status.cls}">${status.label}</small>
       </div>
-      <button class="chef-cart-btn" onclick="renderWarehouseRequest()">
+      <button class="pc-cart-btn" onclick="renderWarehouseRequest()" aria-label="طلب مستودع">
         <i class="fa-solid fa-cart-shopping"></i>
-        ${cartCount ? `<em>${cartCount}</em>` : ``}
+        ${cartQty ? `<em>${cartQty}</em>` : ""}
       </button>
     </section>
   `;
 }
 
-function pcMenuItemsForChef(){
-  const section = currentChef?.section || "";
-  return (menuItems||[]).filter(i=>!i.section || i.section===section);
-}
-
-function pcWarehouseItemsForChef(){
-  const section = currentChef?.section || "";
-  return (warehouseItems||[]).filter(i=>!i.section || i.section===section);
-}
-
 function renderChefDashboard(chef){
   currentChef = chef;
-  const st = pcProductionStatus();
-  const logs = pcTodayProductionLogsForChef();
-  const wasteCount = (wasteLogs||[]).filter(x=>pcDateKey(x)===pcTodayKey() && x.chefName===chef.name).length;
+  currentCart = currentCart || [];
+  productionDraft = productionDraft || [];
+  const status = pcChefStatus();
+  const wasteCount = pcChefWasteToday().length;
 
   pageLayout(chef.name, `
-    ${pcChefHeader()}
+    ${pcChefTopBar()}
+    <section class="pc-chef-hero">
+      <span>واجهة الشيف</span>
+      <h2>${escapeHtml(chef.section||"")}</h2>
+      <p>الإنتاج والهدر من هنا، وطلب المستودع من السلة أعلى الصفحة.</p>
+    </section>
 
-    <section class="chef-mobile-actions">
-      <div class="chef-action-card primary" onclick="renderProduction()">
+    <section class="pc-chef-main-actions">
+      <button class="pc-chef-big-card pc-production" onclick="renderProduction()">
         <span>إنتاج اليوم</span>
-        <b>${st.qty || 0}</b>
-        <small>${st.label}</small>
-      </div>
-      <div class="chef-action-card danger" onclick="renderWaste()">
+        <b>${status.qty||0}</b>
+        <small>${status.label}</small>
+      </button>
+      <button class="pc-chef-big-card pc-waste" onclick="renderWaste()">
         <span>الهدر والتالف</span>
         <b>${wasteCount}</b>
         <small>تسجيل هدر جديد</small>
-      </div>
+      </button>
     </section>
 
-    <section class="chef-last-card">
-      <div class="dash-card-head">
-        <h3>آخر إنتاج اليوم</h3>
-        ${st.cls==="pending" ? `<button class="mini-link" onclick="submitNoProductionToday()">لا يوجد إنتاج</button>` : ``}
+    <section class="pc-chef-panel">
+      <div class="pc-panel-head">
+        <h3>آخر إنتاج مرفوع اليوم</h3>
+        ${status.cls==="pending" ? `<button class="pc-soft-btn" onclick="submitNoProductionToday()">لا يوجد إنتاج</button>` : ""}
       </div>
-      ${logs.length ? `
-        <div class="chef-last-list">
-          ${logs.slice(0,3).map(log=>`
-            <div class="chef-last-row">
-              <b>${escapeHtml(log.createdAtText || "")}</b>
-              <small>${(log.items||[]).map(i=>`${escapeHtml(i.name||i.productName||"")} : ${escapeHtml(i.qty||"")}`).join(" • ") || (log.noProduction ? "لا يوجد إنتاج" : "")}</small>
+      ${status.logs.length ? `
+        <div class="pc-last-list">
+          ${status.logs.slice(0,4).map(log=>`
+            <div class="pc-last-row">
+              <b>${escapeHtml(log.createdAtText || "اليوم")}</b>
+              <small>${log.noProduction ? "لا يوجد إنتاج اليوم" : ((log.items||[]).map(i=>`${escapeHtml(i.name||i.productName||"")} : ${escapeHtml(i.qty||"")}`).join(" • ") || "إنتاج مرفوع")}</small>
             </div>
           `).join("")}
         </div>
-      ` : `<div class="dash-empty">لم يتم رفع إنتاج اليوم بعد</div>`}
+      ` : `<div class="pc-empty">لم يتم رفع إنتاج اليوم بعد</div>`}
     </section>
 
-    <section class="chef-quick-links">
+    <section class="pc-chef-bottom">
       <button onclick="renderMyOrders()"><i class="fa-solid fa-clipboard-list"></i><span>طلباتي</span></button>
-      <button onclick="renderWarehouseRequest()"><i class="fa-solid fa-cart-shopping"></i><span>طلب مستودع</span></button>
     </section>
   `,"renderChefs()");
 }
 
 function renderProduction(){
   if(!currentChef) return renderChefs();
-  const sectionItems = pcMenuItemsForChef();
-  const options = sectionItems.map(i=>`<option value="${escapeHtml(i.nameAr||i.name||"")}">${escapeHtml(i.code ? i.code+" - " : "")}${escapeHtml(i.nameEn||"")}</option>`).join("");
-  const st = pcProductionStatus();
+  const status = pcChefStatus();
 
   pageLayout("الإنتاج", `
-    ${pcChefHeader()}
-    <div class="mobile-form-card">
-      <div class="dash-card-head">
+    ${pcChefTopBar("الإنتاج")}
+    <section class="pc-chef-panel">
+      <div class="pc-panel-head">
         <h3>إنتاج اليوم</h3>
-        <span class="production-chip ${st.cls}">${st.label}</span>
+        <span class="pc-chip ${status.cls}">${status.label}</span>
       </div>
-      <label>الصنف</label>
-      <input id="productionNameInput" list="productionMenuList" placeholder="${sectionItems.length ? "ابحث في أصناف "+escapeHtml(currentChef.section) : getProductionPlaceholder()}" onkeydown="focusProductionQty(event)">
-      <datalist id="productionMenuList">${options}</datalist>
-      <label>الكمية</label>
-      <input id="productionQtyInput" type="number" min="1" placeholder="مثال: 20" onkeydown="handleProductionQtyInput(event)">
-      <button class="btn btn-main mobile-wide" onclick="addProductionFromInputs()">إضافة للإنتاج</button>
-      <textarea id="productionNote" placeholder="ملاحظة للإدارة"></textarea>
-    </div>
+      <input id="productionMenuSearch" class="pc-search" placeholder="ابحث عن صنف الإنتاج" oninput="drawProductionMenuList()">
+      <div class="pc-note">أصناف الإنتاج الخاصة بقسم: <b>${escapeHtml(currentChef.section||"")}</b></div>
+      <div id="productionMenuItemsBox"></div>
+    </section>
 
-    <div class="mobile-form-card">
+    <section class="pc-chef-panel">
       <h3>الإنتاج الحالي</h3>
       <div id="productionDraftBox"></div>
-      <div class="mobile-action-row">
+      <textarea id="productionNote" placeholder="ملاحظة للإدارة"></textarea>
+      <div class="pc-action-row">
         <button class="btn btn-main" onclick="submitProduction()">رفع الإنتاج</button>
         <button class="btn btn-light" onclick="submitNoProductionToday()">لا يوجد إنتاج</button>
       </div>
-    </div>
+    </section>
+
     <div id="lastProductionBox" style="margin-top:16px"></div>
   `,"renderChefDashboard(currentChef)");
 
+  drawProductionMenuList();
   drawProductionDraft();
   drawLastProductionForChef();
-  setTimeout(()=>document.getElementById("productionNameInput")?.focus(),100);
+}
+
+function drawProductionMenuList(){
+  const box=document.getElementById("productionMenuItemsBox");
+  if(!box) return;
+  const q=(document.getElementById("productionMenuSearch")?.value||"").trim().toLowerCase();
+  const list=pcMenuForChef().filter(i=>
+    String(pcItemName(i)).toLowerCase().includes(q) ||
+    String(pcItemEn(i)).toLowerCase().includes(q) ||
+    String(i.code||"").toLowerCase().includes(q)
+  ).slice(0,120);
+
+  if(!list.length){
+    box.innerHTML=`<div class="pc-empty">لا توجد أصناف إنتاج مرتبطة بهذا القسم</div>`;
+    return;
+  }
+
+  box.innerHTML=`
+    <div class="pc-prod-list">
+      ${list.map(i=>`
+        <div class="pc-prod-row">
+          <div class="pc-prod-info">
+            <b>${escapeHtml(pcItemName(i))}</b>
+            <small>${escapeHtml([i.code, pcItemEn(i)].filter(Boolean).join(" • "))}</small>
+          </div>
+          <input id="prodQty_${i.id}" type="number" min="1" inputmode="numeric" placeholder="العدد" onkeydown="if(event.key==='Enter') pcAddProductionItem('${i.id}')">
+          <button onclick="pcAddProductionItem('${i.id}')">إضافة</button>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function pcAddProductionItem(id){
+  const item=(menuItems||[]).find(x=>x.id===id);
+  if(!item) return;
+  const input=document.getElementById("prodQty_"+id);
+  const qty=Number(input?.value||0);
+  if(!qty || qty<=0){
+    showToast("اكتب العدد أولاً","error");
+    input?.focus();
+    return;
+  }
+  const name=pcItemName(item);
+  const existing=productionDraft.find(x=>String(x.itemId||"")===String(id) || String(x.name||"")===String(name));
+  if(existing){
+    existing.qty=Number(existing.qty||0)+qty;
+  }else{
+    productionDraft.push({
+      itemId:id,
+      code:item.code||"",
+      name,
+      nameEn:pcItemEn(item),
+      qty,
+      unit:item.unit||"",
+      section:item.section||currentChef?.section||""
+    });
+  }
+  if(input) input.value="";
+  drawProductionDraft();
+  showToast("تمت إضافة الصنف للإنتاج");
 }
 
 async function submitNoProductionToday(){
   if(!currentChef) return;
-  if(!confirm("تأكيد: لا يوجد إنتاج لهذا اليوم؟")) return;
+  if(!confirm("تأكيد تسجيل: لا يوجد إنتاج لهذا اليوم؟")) return;
   const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
   await addDoc(collection(db,"production_logs"),{
     chefName:currentChef.name,
-    chefCode:currentChef.code || "",
+    chefCode:currentChef.code||"",
     section:currentChef.section,
     items:[],
     note:"لا يوجد إنتاج اليوم",
@@ -2423,30 +2473,35 @@ async function submitNoProductionToday(){
     createdAtMs:Date.now(),
     createdAtText:nowText()
   });
+  productionDraft=[];
   showToast("تم تسجيل لا يوجد إنتاج اليوم");
   renderChefDashboard(currentChef);
 }
 
 function renderWarehouseRequest(){
   if(!currentChef) return renderChefs();
-  currentCart = currentCart || [];
+  currentCart=currentCart||[];
 
   pageLayout("طلب مستودع", `
-    ${pcChefHeader()}
-    <section class="mobile-warehouse-page">
-      <div class="mobile-form-card">
-        <h3>طلب من المستودع</h3>
-        <input id="warehouseRequestSearch" placeholder="ابحث عن صنف المستودع" oninput="drawWarehouseRequestItemsMobile()">
+    ${pcChefTopBar("طلب مستودع")}
+    <section class="pc-warehouse-layout">
+      <div class="pc-chef-panel">
+        <div class="pc-panel-head">
+          <h3>طلب من المستودع</h3>
+          <span class="pc-chip">${escapeHtml(currentChef.section||"")}</span>
+        </div>
+        <input id="warehouseRequestSearch" class="pc-search" placeholder="ابحث عن صنف المستودع" oninput="drawWarehouseRequestItemsMobile()">
         <div id="warehouseRequestItemsBox"></div>
       </div>
-      <div class="mobile-form-card sticky-cart">
-        <div class="dash-card-head">
+
+      <div class="pc-chef-panel pc-cart-panel">
+        <div class="pc-panel-head">
           <h3>السلة</h3>
-          <span class="production-chip">${currentCart.length}</span>
+          <span class="pc-chip">${currentCart.length}</span>
         </div>
         <div id="warehouseCartBox"></div>
         <textarea id="warehouseOrderNote" placeholder="ملاحظة للمستودع"></textarea>
-        <button class="btn btn-main mobile-wide" onclick="submitWarehouseOrder()">إرسال الطلب</button>
+        <button class="btn btn-main pc-wide" onclick="submitWarehouseOrder()">إرسال الطلب</button>
       </div>
     </section>
   `,"renderChefDashboard(currentChef)");
@@ -2459,43 +2514,48 @@ function drawWarehouseRequestItemsMobile(){
   const box=document.getElementById("warehouseRequestItemsBox");
   if(!box) return;
   const q=(document.getElementById("warehouseRequestSearch")?.value||"").trim().toLowerCase();
-  const list=pcWarehouseItemsForChef().filter(i=>
+
+  const list=pcWarehouseForChef().filter(i=>
     String(i.name||i.nameAr||"").toLowerCase().includes(q) ||
     String(i.nameEn||"").toLowerCase().includes(q) ||
     String(i.code||"").toLowerCase().includes(q)
-  ).slice(0,80);
+  ).slice(0,100);
 
   if(!list.length){
-    box.innerHTML=`<div class="dash-empty">لا توجد أصناف مستودع لهذا القسم</div>`;
+    box.innerHTML=`<div class="pc-empty">لا توجد أصناف مستودع مرتبطة بهذا القسم</div>`;
     return;
   }
-  box.innerHTML=`<div class="mobile-items-list">
-    ${list.map(i=>`
-      <div class="mobile-item-row">
-        <div>
-          <b>${escapeHtml(i.nameAr || i.name || "")}</b>
-          <small>${escapeHtml(i.nameEn || i.code || "")} ${i.unit ? "• "+escapeHtml(i.unit) : ""}</small>
+
+  box.innerHTML=`
+    <div class="pc-warehouse-list">
+      ${list.map(i=>`
+        <div class="pc-warehouse-row">
+          <div>
+            <b>${escapeHtml(i.nameAr||i.name||"")}</b>
+            <small>${escapeHtml([i.code, i.nameEn, i.unit].filter(Boolean).join(" • "))}</small>
+          </div>
+          <button onclick="addWarehouseItemToCart('${i.id}')"><i class="fa-solid fa-plus"></i></button>
         </div>
-        <button onclick="addWarehouseItemToCart('${i.id}')"><i class="fa-solid fa-plus"></i></button>
-      </div>
-    `).join("")}
-  </div>`;
+      `).join("")}
+    </div>
+  `;
 }
 
 function addWarehouseItemToCart(id){
   const item=(warehouseItems||[]).find(i=>i.id===id);
   if(!item) return;
-  const existing=currentCart.find(x=>x.id===id || x.itemId===id);
+  currentCart=currentCart||[];
+  const existing=currentCart.find(x=>String(x.itemId||x.id||"")===String(id));
   if(existing){
-    existing.qty = Number(existing.qty||0)+1;
+    existing.qty=Number(existing.qty||0)+1;
   }else{
     currentCart.push({
-      id:item.id,
       itemId:item.id,
-      name:item.nameAr || item.name || "",
-      nameEn:item.nameEn || "",
-      code:item.code || "",
-      unit:item.unit || "",
+      id:item.id,
+      code:item.code||"",
+      name:item.nameAr||item.name||"",
+      nameEn:item.nameEn||"",
+      unit:item.unit||"",
       qty:1
     });
   }
@@ -2506,189 +2566,71 @@ function drawWarehouseCart(){
   const box=document.getElementById("warehouseCartBox");
   if(!box) return;
   if(!currentCart.length){
-    box.innerHTML=`<div class="dash-empty">السلة فارغة</div>`;
+    box.innerHTML=`<div class="pc-empty">السلة فارغة</div>`;
     return;
   }
-  box.innerHTML=`<div class="mobile-cart-list">
-    ${currentCart.map((i,idx)=>`
-      <div class="mobile-cart-row">
-        <div><b>${escapeHtml(i.name||"")}</b><small>${escapeHtml(i.unit||"")}</small></div>
-        <input type="number" min="1" value="${escapeHtml(i.qty||1)}" onchange="currentCart[${idx}].qty=Number(this.value||1)">
-        <button onclick="currentCart.splice(${idx},1);drawWarehouseCart();"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-    `).join("")}
-  </div>`;
-}
-
-
-/* ===== Mobile Premium V1.4 Production List Fix ===== */
-
-function pcSafeMenuItemName(i){
-  return i.nameAr || i.name || i.ar || i.productName || "";
-}
-
-function pcSafeMenuItemEn(i){
-  return i.nameEn || i.en || "";
-}
-
-function pcAddProductionItemById(id){
-  const item = (menuItems||[]).find(x=>x.id===id);
-  if(!item) return;
-
-  const qtyInput = document.getElementById("prodQty_" + id);
-  const qty = Number(qtyInput?.value || 0);
-  if(!qty || qty <= 0){
-    showToast("اكتب الكمية أولاً", "error");
-    qtyInput?.focus();
-    return;
-  }
-
-  const name = pcSafeMenuItemName(item);
-  const existing = productionDraft.find(x => String(x.itemId||"") === String(id) || String(x.name||"") === String(name));
-
-  if(existing){
-    existing.qty = Number(existing.qty || 0) + qty;
-  }else{
-    productionDraft.push({
-      itemId:id,
-      code:item.code || "",
-      name,
-      nameEn:pcSafeMenuItemEn(item),
-      qty,
-      unit:item.unit || "",
-      section:item.section || currentChef?.section || ""
-    });
-  }
-
-  if(qtyInput) qtyInput.value = "";
-  drawProductionDraft();
-  drawProductionMenuList();
-  showToast("تمت إضافة الصنف للإنتاج");
-}
-
-function drawProductionMenuList(){
-  const box = document.getElementById("productionMenuItemsBox");
-  if(!box) return;
-
-  const q = (document.getElementById("productionMenuSearch")?.value || "").trim().toLowerCase();
-  const section = currentChef?.section || "";
-  const list = (menuItems||[])
-    .filter(i => !i.section || i.section === section)
-    .filter(i =>
-      String(pcSafeMenuItemName(i)).toLowerCase().includes(q) ||
-      String(pcSafeMenuItemEn(i)).toLowerCase().includes(q) ||
-      String(i.code||"").toLowerCase().includes(q)
-    )
-    .slice(0,120);
-
-  if(!list.length){
-    box.innerHTML = `<div class="chef-empty">لا توجد أصناف إنتاج مرتبطة بهذا القسم</div>`;
-    return;
-  }
-
-  box.innerHTML = `
-    <div class="production-menu-list">
-      ${list.map(i=>`
-        <div class="production-menu-row">
-          <div class="production-menu-info">
-            <b>${escapeHtml(pcSafeMenuItemName(i))}</b>
-            <small>${escapeHtml([i.code, pcSafeMenuItemEn(i), i.section].filter(Boolean).join(" • "))}</small>
+  box.innerHTML=`
+    <div class="pc-cart-list">
+      ${currentCart.map((i,idx)=>`
+        <div class="pc-cart-row">
+          <div>
+            <b>${escapeHtml(i.name||"")}</b>
+            <small>${escapeHtml([i.code, i.unit].filter(Boolean).join(" • "))}</small>
           </div>
-          <input id="prodQty_${i.id}" type="number" min="1" placeholder="العدد" onkeydown="if(event.key==='Enter') pcAddProductionItemById('${i.id}')">
-          <button onclick="pcAddProductionItemById('${i.id}')">إضافة</button>
+          <input type="number" min="1" inputmode="numeric" value="${escapeHtml(i.qty||1)}" onchange="currentCart[${idx}].qty=Number(this.value||1)">
+          <button onclick="currentCart.splice(${idx},1);drawWarehouseCart();"><i class="fa-solid fa-xmark"></i></button>
         </div>
       `).join("")}
     </div>
   `;
 }
 
-function renderProduction(){
-  if(!currentChef) return renderChefs();
+async function submitWarehouseOrder(){
+  if(!currentChef) return;
+  if(!currentCart || !currentCart.length){
+    showToast("السلة فارغة","error");
+    return;
+  }
 
-  const status = typeof pcChefTodayStatus === "function" ? pcChefTodayStatus() : {text:"", cls:""};
-  const sectionItems = (menuItems||[]).filter(i=>!i.section || i.section===currentChef.section);
+  const items=currentCart
+    .filter(i=>Number(i.qty||0)>0)
+    .map(i=>({
+      itemId:i.itemId||i.id||"",
+      code:i.code||"",
+      name:i.name||"",
+      nameEn:i.nameEn||"",
+      qty:Number(i.qty||0),
+      unit:i.unit||""
+    }));
 
-  pageLayout("الإنتاج", `
-    ${typeof pcChefHeader === "function" ? pcChefHeader("الإنتاج") : ""}
-    <section class="chef-app-panel">
-      <div class="chef-panel-head">
-        <h3>إنتاج اليوم</h3>
-        <span class="chef-status-chip ${status.cls||""}">${status.text||""}</span>
-      </div>
+  if(!items.length){
+    showToast("اكتب الكميات أولاً","error");
+    return;
+  }
 
-      <input id="productionMenuSearch" placeholder="ابحث عن صنف الإنتاج" oninput="drawProductionMenuList()">
-      <div class="production-menu-note">تظهر هنا أصناف المنيو والإنتاج الخاصة بقسم: <b>${escapeHtml(currentChef.section||"")}</b></div>
-      <div id="productionMenuItemsBox"></div>
-    </section>
+  const note=document.getElementById("warehouseOrderNote")?.value?.trim() || "";
+  const {db,addDoc,collection,serverTimestamp,doc,getDoc,setDoc}=window.firebaseDB;
 
-    <section class="chef-app-panel">
-      <h3>الإنتاج الحالي</h3>
-      <div id="productionDraftBox"></div>
-      <textarea id="productionNote" placeholder="ملاحظة للإدارة"></textarea>
-      <div class="chef-action-row">
-        <button class="btn btn-main" onclick="submitProduction()">رفع الإنتاج</button>
-        <button class="btn btn-light" onclick="submitNoProductionToday()">لا يوجد إنتاج</button>
-      </div>
-    </section>
+  let orderId = systemSettings.orderCounter || 1001;
+  try{
+    await setDoc(doc(db,"settings","system"),{orderCounter:orderId+1},{merge:true});
+  }catch(e){}
 
-    <div id="lastProductionBox" style="margin-top:16px"></div>
-  `,"renderChefDashboard(currentChef)");
+  await addDoc(collection(db,"warehouse_orders"),{
+    orderId,
+    chefName:currentChef.name,
+    chefCode:currentChef.code||"",
+    section:currentChef.section,
+    items,
+    note,
+    status:"جديد",
+    issueStatus:"بانتظار الصرف",
+    createdAt:serverTimestamp(),
+    createdAtMs:Date.now(),
+    createdAtText:nowText()
+  });
 
-  drawProductionMenuList();
-  drawProductionDraft();
-  drawLastProductionForChef();
-}
-
-function renderChefDashboard(chef){
-  currentChef = chef;
-  productionDraft = productionDraft || [];
-  currentCart = currentCart || [];
-
-  const status = typeof pcChefTodayStatus === "function" ? pcChefTodayStatus() : {text:"معلق", cls:"pending", qty:0, logs:[]};
-  const wasteCount = typeof pcTodayWasteLogsForChef === "function" ? pcTodayWasteLogsForChef().length : 0;
-
-  pageLayout(chef.name, `
-    ${typeof pcChefHeader === "function" ? pcChefHeader() : ""}
-    <section class="chef-app-hero">
-      <div>
-        <span>واجهة الشيف</span>
-        <h2>${escapeHtml(chef.section || "")}</h2>
-        <p>الإنتاج والهدر من هنا، وطلب المستودع من أيقونة السلة أعلى الصفحة.</p>
-      </div>
-    </section>
-
-    <section class="chef-app-actions">
-      <button class="chef-app-card production" onclick="renderProduction()">
-        <span>إنتاج اليوم</span>
-        <b>${status.qty || 0}</b>
-        <small>${status.text || ""}</small>
-      </button>
-      <button class="chef-app-card waste" onclick="renderWaste()">
-        <span>الهدر والتالف</span>
-        <b>${wasteCount}</b>
-        <small>تسجيل هدر جديد</small>
-      </button>
-    </section>
-
-    <section class="chef-app-panel">
-      <div class="chef-panel-head">
-        <h3>آخر إنتاج مرفوع اليوم</h3>
-        ${status.cls==="pending" ? `<button class="chef-mini-btn" onclick="submitNoProductionToday()">لا يوجد إنتاج</button>` : ""}
-      </div>
-      ${status.logs && status.logs.length ? `
-        <div class="chef-last-list">
-          ${status.logs.slice(0,4).map(log=>`
-            <div class="chef-last-row">
-              <b>${escapeHtml(log.createdAtText || "اليوم")}</b>
-              <small>${log.noProduction ? "لا يوجد إنتاج اليوم" : ((log.items||[]).map(i=>`${escapeHtml(i.name||i.productName||"")} : ${escapeHtml(i.qty||"")}`).join(" • ") || "إنتاج مرفوع")}</small>
-            </div>
-          `).join("")}
-        </div>
-      ` : `<div class="chef-empty">لم يتم رفع إنتاج اليوم بعد</div>`}
-    </section>
-
-    <section class="chef-bottom-actions single">
-      <button onclick="renderMyOrders()"><i class="fa-solid fa-clipboard-list"></i><span>طلباتي</span></button>
-    </section>
-  `,"renderChefs()");
+  currentCart=[];
+  showToast("تم إرسال الطلب للمستودع");
+  renderChefDashboard(currentChef);
 }
