@@ -7148,13 +7148,13 @@ function pcStoreNeg(){
 }
 function pcStoreHomeCard(){
   const neg = pcStoreNeg();
-  return pc61Card("fa-warehouse","مستودعات الأقسام",pcStoreSub(),"renderStoreSections()", neg||"", neg ? "warn" : "");
+  return pc61Card("fa-warehouse","الأقسام",pcStoreSub(),"renderStoreSections()", neg||"", neg ? "warn" : "");
 }
 
 /* ----- Sections list ----- */
 function renderStoreSections(){
-  pageLayout("مستودعات الأقسام", `
-    ${pc60Bar({title:"مستودعات الأقسام", sub:pcBranchName(currentBranch), back:"renderHome()"})}
+  pageLayout("الأقسام", `
+    ${pc60Bar({title:"الأقسام", sub:pcBranchName(currentBranch), back:"renderHome()"})}
     <section class="pc60-page has-bar pc100-page"><div id="pcStoreSecBox"></div></section>`, "renderHome()");
   pcDrawStoreSections();
 }
