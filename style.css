@@ -4623,3 +4623,20 @@ button.pc70-unit{border:0;font:inherit;cursor:pointer}
 .pc108-row b{font-size:14px;color:var(--app-ink)}.pc108-row small{font-size:11px;color:var(--app-muted)}
 .pc108-row.on{background:#F3FAEE}
 .pc108-foot .pc107-foot-row{justify-content:flex-end}
+
+/* ===== V15 Odoo import ===== */
+.pc109-card{margin-bottom:14px}
+.pc109-card h3{display:flex;gap:8px;align-items:center}
+.pc109-opts{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.pc109-opts label{display:flex;gap:8px;align-items:flex-start;font-size:14px;font-weight:700;cursor:pointer}
+.pc109-opts input{width:auto;margin:3px 0 0}
+.pc109-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:10px 0}
+.pc109-kpis div{background:#F5F6F1;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:2px}
+.pc109-kpis b{font-size:22px;color:var(--app-ink);font-variant-numeric:tabular-nums}
+.pc109-kpis span{font-size:12px;color:var(--app-muted);font-weight:700}
+.pc109-warn{background:#FFF1D6;color:#8A5A00;border-radius:12px;padding:10px 12px;font-size:13px;font-weight:700}
+.pc109-acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.pc109-prog{margin-top:10px;display:flex;align-items:center;gap:10px}
+.pc109-prog div{flex:1;height:8px;background:#EEF0EA;border-radius:99px;overflow:hidden}
+.pc109-prog i{display:block;height:100%;width:0;background:var(--app-brand);transition:width .3s}
+.pc109-tabs{margin:6px 0 10px}

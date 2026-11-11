@@ -10,6 +10,7 @@ import {
   deleteDoc,
   onSnapshot,
   updateDoc,
+  writeBatch,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
@@ -36,6 +37,7 @@ window.firebaseDB = {
   deleteDoc,
   onSnapshot,
   updateDoc,
+  writeBatch,
   serverTimestamp
 };
 

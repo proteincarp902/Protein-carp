@@ -5768,6 +5768,11 @@ async function pc75DeleteAll(kind){
 
 function renderSettingsExcel(){
   settingsShell("excel","استيراد وتصدير Excel",`
+    <div class="premium-card pc109-card"><h3><i class="fa-solid fa-file-import"></i> استيراد أصناف أودو (product.template)</h3>
+      <p class="muted">ارفع ملف تصدير المنتجات من أودو. الأصناف التي لها سعر بيع تذهب للمنيو (مبيعات)، والتي بدون سعر بيع أو أصناف التجهيز تذهب للمستودع (مواد خام). ستراجع النتيجة قبل الحفظ.</p>
+      <input id="pcOdooFile" type="file" accept=".xlsx,.xls,.csv">
+      <button class="btn btn-main" onclick="pcOdooRead()">قراءة الملف ومراجعته</button>
+    </div>
     <div class="excel-grid">
       <div class="premium-card"><h3>أصناف المستودع</h3>
         <p class="muted">الأعمدة: الكود | العربي | English | الوحدة | التصنيف | الكمية (اختياري)</p>
@@ -8397,6 +8402,121 @@ async function pcSiSave(){
     pcSi.dirty = false; pcSiSum();
     showToast(`تم حفظ ${pcSi.sel.size} صنف لقسم ${pcSi.sec}`);
   }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+}
+
+/* =========================== Odoo product import =========================== *
+ * Reads an Odoo product.template export, classifies each product, previews, then writes in batches.
+ * Matching to existing items: internal reference (code) first, then exact name. Nothing is deleted.
+ * Odoo on-hand quantities are not imported (they are not reliable stock counts for this app). */
+var PC_ODOO_UNITS = {"g":"جرام","جرام":"جرام","gm":"جرام","كجم":"كجم","kg":"كجم","l":"لتر","لتر":"لتر","مل":"مل","ml":"مل","حبة":"حبة","pieces":"حبة","units":"حبة",
+  "can":"علبة","box":"صندوق","boxes":"صندوق","كرتونة":"كرتون","ربطة":"ربطة","a tie":"ربطة","bag":"كيس"};
+var pcOdoo = {rows:[], plan:[], rule:"gt0", prep:true, moveExisting:false};
+function pcOdooUnit(u){ const k = String(u||"").trim(); return PC_ODOO_UNITS[k] || PC_ODOO_UNITS[k.toLowerCase()] || (PC70_UNITS[pc70Unit(k)] ? pc70Unit(k) : "حبة"); }
+function pcOdooNorm(s){ return String(s||"").replace(/\s+/g," ").trim(); }
+async function pcOdooRead(){
+  const f = document.getElementById("pcOdooFile")?.files?.[0];
+  if(!f){ showToast("اختر ملف أودو أولًا","error"); return; }
+  try{
+    const rows = await parseExcelRows(f);
+    const head = (rows[0]||[]).map(x=>String(x||"").trim());
+    const col = names=>head.findIndex(h=>names.includes(h));
+    const ix = {name:col(["الاسم","Name"]), code:col(["مرجع داخلي","Internal Reference"]), cat:col(["فئة المنتج","Product Category"]),
+      price:col(["سعر البيع","Sales Price"]), unit:col(["الوحدة","Unit of Measure","Unit"])};
+    if(ix.name < 0 || ix.price < 0){ showToast("الملف لا يحتوي عمود «الاسم» و«سعر البيع» — تأكد أنه تصدير منتجات أودو","error"); return; }
+    pcOdoo.rows = rows.slice(1).filter(r=>r && pcOdooNorm(r[ix.name])).map(r=>({
+      name:pcOdooNorm(r[ix.name]), code:ix.code>=0 ? pcOdooNorm(r[ix.code]) : "", category:ix.cat>=0 ? pcOdooNorm(r[ix.cat]) : "",
+      price:Number(r[ix.price]||0)||0, unitOdoo:ix.unit>=0 ? pcOdooNorm(r[ix.unit]) : ""}));
+    pcOdooPlan(); pcOdooReview();
+  }catch(err){ console.error(err); showToast("تعذر قراءة الملف","error"); }
+}
+function pcOdooClass(r){
+  if(pcOdoo.prep && r.name.includes("تجهيز")) return "raw";
+  return r.price > (pcOdoo.rule === "gt1" ? 1 : 0) ? "sale" : "raw";
+}
+function pcOdooPlan(){
+  const W = pcRaw.warehouseItems || warehouseItems || [], M = pcRaw.menuItems || menuItems || [];
+  const idx = list=>({code:new Map(list.filter(i=>i.code).map(i=>[String(i.code).trim(), i])), name:new Map(list.map(i=>[pcOdooNorm(i.nameAr||i.name), i]))});
+  const wi = idx(W), mi = idx(M), seen = new Set();
+  pcOdoo.plan = pcOdoo.rows.map(r=>{
+    const kind = pcOdooClass(r);
+    const key = `${kind}|${r.code}|${r.name}`;
+    if(seen.has(key)) return {...r, kind, act:"dup"};
+    seen.add(key);
+    const I = kind === "raw" ? wi : mi, O = kind === "raw" ? mi : wi;
+    const hit = (r.code && I.code.get(r.code)) || I.name.get(r.name) || null;
+    const other = (r.code && O.code.get(r.code)) || O.name.get(r.name) || null;
+    return {...r, kind, unit:pcOdooUnit(r.unitOdoo), act:hit ? "update" : "add", hit, other};
+  });
+}
+function pcOdooCounts(){
+  const c = {saleAdd:0, saleUpd:0, rawAdd:0, rawUpd:0, dup:0, cross:0};
+  pcOdoo.plan.forEach(p=>{
+    if(p.act==="dup") return c.dup++;
+    if(p.kind==="sale"){ p.act==="add" ? c.saleAdd++ : c.saleUpd++; if(p.other && p.act==="add") c.cross++; }
+    else p.act==="add" ? c.rawAdd++ : c.rawUpd++;
+  });
+  return c;
+}
+function pcOdooReview(){
+  const c = pcOdooCounts();
+  settingsShell("excel","استيراد أصناف أودو",`
+    <div class="premium-card pc109-card">
+      <h3>مراجعة قبل الحفظ — ${pcOdoo.rows.length} صنف في الملف</h3>
+      <div class="pc109-opts">
+        <label><input type="radio" name="pcOdRule" ${pcOdoo.rule==="gt0"?"checked":""} onchange="pcOdoo.rule='gt0';pcOdooPlan();pcOdooReview()"> مبيعات = أي سعر بيع أكبر من صفر</label>
+        <label><input type="radio" name="pcOdRule" ${pcOdoo.rule==="gt1"?"checked":""} onchange="pcOdoo.rule='gt1';pcOdooPlan();pcOdooReview()"> مبيعات = سعر أكبر من 1 (سعر 1 هو الافتراضي في أودو)</label>
+        <label><input type="checkbox" ${pcOdoo.prep?"checked":""} onchange="pcOdoo.prep=this.checked;pcOdooPlan();pcOdooReview()"> أصناف «تجهيز» تذهب للمواد الخام دائمًا</label>
+        <label><input type="checkbox" ${pcOdoo.moveExisting?"checked":""} onchange="pcOdoo.moveExisting=this.checked;pcOdooReview()"> انقل أصناف المستودع الحالية التي صنّفها الملف مبيعات (تُحذف من المستودع)</label>
+      </div>
+      <div class="pc109-kpis">
+        <div><b>${c.saleAdd}</b><span>مبيعات — جديد</span></div><div><b>${c.saleUpd}</b><span>مبيعات — تحديث</span></div>
+        <div><b>${c.rawAdd}</b><span>مواد خام — جديد</span></div><div><b>${c.rawUpd}</b><span>مواد خام — تحديث</span></div>
+        <div><b>${c.dup}</b><span>مكرر في الملف — يُتجاهل</span></div>
+      </div>
+      ${c.cross ? `<p class="pc109-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${c.cross} صنف موجود حاليًا في المستودع وصنّفه الملف مبيعات.
+        ${pcOdoo.moveExisting ? "سيُنقل للمنيو ويُحذف من المستودع، ولن يظهر في طلبات المستودع بعد ذلك." : "سيُضاف للمنيو ويبقى في المستودع كما هو."}</p>` : ""}
+      <p class="muted">التحديث يكتب الكود والفئة والوحدة (وسعر البيع للمنيو) على الصنف الموجود، ولا يغيّر اسمه ولا كمياته. لا يُحذف أي صنف إلا بالخيار أعلاه. كميات أودو لا تُستورد.</p>
+      <div class="pc109-acts"><button class="btn btn-light" onclick="openSettingsTab('excel')">إلغاء</button>
+        <button class="btn btn-main" onclick="pcOdooApply()"><i class="fa-solid fa-floppy-disk"></i> حفظ ${c.saleAdd+c.saleUpd+c.rawAdd+c.rawUpd} صنف</button></div>
+      <div id="pcOdooProg" class="pc109-prog" hidden><div><i></i></div><span></span></div>
+    </div>
+    <div class="pc60-chips pc109-tabs">${["sale","raw"].map(k=>`<button type="button" class="pc60-fchip ${(pcOdoo.view||"sale")===k?"active":""}" onclick="pcOdoo.view='${k}';pcOdooReview()">${k==="sale"?"مبيعات":"مواد خام"}</button>`).join("")}</div>
+    <div class="premium-table-wrap"><table class="premium-table"><thead><tr><th>الإجراء</th><th>الاسم</th><th>الكود</th><th>الفئة</th><th>سعر البيع</th><th>الوحدة</th></tr></thead><tbody>
+      ${pcOdoo.plan.filter(p=>p.kind===(pcOdoo.view||"sale")).slice(0,400).map(p=>`<tr><td>${p.act==="dup"?"مكرر":(p.act==="add"?"جديد":"تحديث")}</td><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.code)}</td><td>${escapeHtml(p.category)}</td><td>${pc60Num(p.price)}</td><td>${escapeHtml(p.unit||"")}</td></tr>`).join("")}
+    </tbody></table></div>`);
+}
+async function pcOdooApply(){
+  const work = pcOdoo.plan.filter(p=>p.act!=="dup");
+  const c = pcOdooCounts();
+  if(!(await pcConfirm(`حفظ ${work.length} صنف؟\nمبيعات: ${c.saleAdd} جديد، ${c.saleUpd} تحديث\nمواد خام: ${c.rawAdd} جديد، ${c.rawUpd} تحديث${pcOdoo.moveExisting && c.cross ? `\nحذف ${c.cross} صنف من المستودع بعد نقلها للمنيو` : ""}`,{title:"استيراد أصناف أودو", okText:"حفظ"}))) return;
+  const {db, doc, collection, writeBatch, serverTimestamp} = window.firebaseDB;
+  if(typeof writeBatch !== "function"){ showToast("نسخة الموقع لا تدعم الحفظ المجمع — حدّث الصفحة","error"); return; }
+  const ops = [];
+  work.forEach(p=>{
+    const base = {code:p.code, category:p.category, unit:p.unit, odooSync:Date.now()};
+    if(p.kind === "raw"){
+      if(p.hit) ops.push(["update", doc(db,"warehouse_items",p.hit.id), base]);
+      else ops.push(["set", doc(collection(db,"warehouse_items")), {...base, name:p.name, nameAr:p.name, nameEn:"", createdAt:serverTimestamp()}]);
+    } else {
+      const m = {...base, price:p.price};
+      if(p.hit) ops.push(["update", doc(db,"menu_items",p.hit.id), m]);
+      else ops.push(["set", doc(collection(db,"menu_items")), {...m, nameAr:p.name, nameEn:"", section:"", createdAt:serverTimestamp()}]);
+      if(pcOdoo.moveExisting && p.other && p.act==="add") ops.push(["delete", doc(db,"warehouse_items",p.other.id)]);
+    }
+  });
+  const prog = document.getElementById("pcOdooProg"); if(prog) prog.hidden = false;
+  let done = 0;
+  try{
+    for(let i = 0; i < ops.length; i += 400){
+      const b = writeBatch(db);
+      ops.slice(i, i+400).forEach(([t, ref, data])=>{ if(t==="set") b.set(ref, data); else if(t==="update") b.update(ref, data); else b.delete(ref); });
+      await b.commit();
+      done = Math.min(ops.length, i+400);
+      if(prog){ prog.querySelector("i").style.width = `${Math.round(done/ops.length*100)}%`; prog.querySelector("span").textContent = `${done} من ${ops.length}`; }
+    }
+    showToast(`تم استيراد ${work.length} صنف`);
+    openSettingsTab("excel");
+  }catch(err){ console.error(err); showToast(`توقف الحفظ بعد ${done} عملية — أعد الاستيراد لإكمال الباقي (لن تتكرر الأصناف)`,"error"); }
 }
 
 /* =========================== One order screen =========================== *
