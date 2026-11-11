@@ -4079,7 +4079,7 @@ function pcSheet({title="", body="", actions=[], icon="", tone=""}){
 function pcConfirm(message, opt={}){
   return pcSheet({
     title: opt.title || (opt.danger ? "تأكيد الإجراء" : "تأكيد"),
-    body: `<p>${escapeHtml(message)}</p>`,
+    body: `<p style="white-space:pre-line">${escapeHtml(message)}</p>`,
     icon: opt.danger ? "fa-trash-can" : "fa-circle-question",
     tone: opt.danger ? "danger" : "",
     actions: [
@@ -7244,7 +7244,7 @@ function pcDrawStore(){
       </div>
       <div class="pc100-acts">
         <button type="button" class="btn btn-light" onclick="pcStoreIssue()"><i class="fa-solid fa-right-from-bracket"></i> صرف</button>
-        <button type="button" class="btn btn-main" onclick="pcStoreCount()"><i class="fa-solid fa-clipboard-list"></i> جرد</button>
+        <button type="button" class="btn btn-main" onclick="renderStoreCount()"><i class="fa-solid fa-clipboard-list"></i> جرد</button>
       </div>
     </div>
     <small class="pc100-since">الاحتساب من ${escapeHtml(new Date(pcStoreStart()).toLocaleDateString("ar-SA"))}</small>`;
@@ -8168,6 +8168,115 @@ async function pcHrPunch(empId){
     showToast(open ? `تم تسجيل انصراف ${e.name}` : `تم تسجيل حضور ${e.name}`);
   }catch(err){ console.error(err); showToast("تعذر التسجيل، تحقق من الاتصال","error"); }
   finally{ pc60Busy = false; pcHrDrawKiosk(); }
+}
+
+/* ----- Bulk stock count: one list, many items, one approved count document ----- */
+var pcCnt = {all:false, q:"", vals:{}, back:null};
+function pcCntKey(){ return `pcCnt:${currentBranch}:${pcStoreSec}:${pcStoreCur}`; }
+function pcCntSave(){ try{ localStorage.setItem(pcCntKey(), JSON.stringify(pcCnt.vals)); }catch(e){} }
+function pcCntLoad(){ try{ return JSON.parse(localStorage.getItem(pcCntKey()) || "{}") || {}; }catch(e){ return {}; } }
+function renderStoreCount(){
+  if(!pcStoreStart()){ showToast("فعّل المستودعات أولًا","error"); return; }
+  const S = PC_STORES[pcStoreCur];
+  pcCnt = {all:false, q:"", vals:pcCntLoad(), back:(pcEmpSessionRaw && pcEmpSessionRaw()) ? "pcEmpHome()" : `renderBranchStore(${JSON.stringify(pcStoreSec)},"${pcStoreCur}")`};
+  pageLayout(`جرد ${S.name}`, `
+    ${pc60Bar({title:`جرد ${S.name}`, sub:`${pcStoreSec} · ${pcBranchName(currentBranch)}`, back:pcCnt.back.replace(/"/g,"&quot;")})}
+    <section class="pc60-page has-bar pc107-page">
+      <p class="pc85-hint">اكتب الكمية الموجودة فعليًا أمام كل صنف جردته. الأصناف الفارغة لا تدخل في الجرد. المسودة محفوظة على هذا الجهاز حتى الاعتماد.</p>
+      <div class="pc107-tools">
+        <label class="pc60-search"><i class="fa-solid fa-magnifying-glass"></i><input id="pcCntQ" type="search" placeholder="ابحث عن صنف أو كود" oninput="pcCnt.q=this.value;pcCntDraw()" autocomplete="off"></label>
+        <div class="pc60-chips">
+          <button type="button" class="pc60-fchip active" data-all="0" onclick="pcCntAll(false,this)">أصناف القسم</button>
+          <button type="button" class="pc60-fchip" data-all="1" onclick="pcCntAll(true,this)">كل الأصناف</button>
+        </div>
+      </div>
+      <div id="pcCntBox"></div>
+      <div class="pc107-foot">
+        <div id="pcCntSum" class="pc107-sum"></div>
+        <div class="pc107-foot-row">
+          <input id="pcCntBy" class="pc93-name" maxlength="40" placeholder="اسم القائم بالجرد" value="${escapeHtml(pcStoreByName())}">
+          <button type="button" class="btn btn-main" onclick="pcCntSubmit()"><i class="fa-solid fa-clipboard-check"></i> اعتماد الجرد</button>
+        </div>
+      </div>
+    </section>`, pcCnt.back);
+  pcCntDraw();
+}
+function pcCntAll(v, btn){ pcCnt.all = v; btn.parentNode.querySelectorAll("button").forEach(b=>b.classList.toggle("active", b===btn)); pcCntDraw(); }
+/* Rows: items with a balance or movement in this section, plus (optionally) the whole catalog. */
+function pcCntRows(){
+  const store = pcStoreCur;
+  const bal = pcStoreBalances(store, pcStoreSec);
+  const byKey = new Map(bal.map(r=>[r.key, r]));
+  const rows = new Map();
+  bal.forEach(r=>rows.set(r.key, {key:r.key, cat:null, name:r.name, code:r.code, unit:r.unit, book:r.qty, itemId:r.itemId}));
+  if(pcCnt.all || Object.keys(pcCnt.vals).length){
+    pcStoreCatalog(store).forEach(c=>{
+      const l = pcStoreLineFor(store, c, 0);
+      if(rows.has(l.key)) { rows.get(l.key).cat = c; return; }
+      if(!pcCnt.all && !(l.key in pcCnt.vals)) return;
+      rows.set(l.key, {key:l.key, cat:c, name:l.name, code:l.code, unit:l.unit, book:(byKey.get(l.key)||{qty:0}).qty, itemId:l.itemId});
+    });
+  }
+  return [...rows.values()].sort((a,b)=>String(a.name).localeCompare(String(b.name),"ar"));
+}
+function pcCntDraw(){
+  const box = document.getElementById("pcCntBox");
+  if(!box) return;
+  const q = pcCnt.q.trim().toLowerCase();
+  const rows = pcCntRows().filter(r=>!q || String(r.name).toLowerCase().includes(q) || String(r.code).toLowerCase().includes(q));
+  box.innerHTML = rows.length ? `<div class="pc107-list">
+    <div class="pc107-row head"><span>الصنف</span><span>الدفتري</span><span>الفعلي</span><span>الفرق</span></div>
+    ${rows.map(r=>{
+      const v = pcCnt.vals[r.key];
+      const has = v !== undefined && v !== "";
+      const diff = has ? pc70R(Number(v) - r.book) : null;
+      return `<div class="pc107-row ${has?"on":""} ${has&&diff!==0?"diff":""}">
+        <span><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.code||"")} · ${escapeHtml(r.unit||"")}</small></span>
+        <span>${pc60Num(r.book)}</span>
+        <span><input type="number" min="0" step="any" inputmode="decimal" data-key="${escapeHtml(r.key)}" value="${has?escapeHtml(String(v)):""}" placeholder="—"
+          oninput="pcCntSet(this)" aria-label="الكمية الفعلية من ${escapeHtml(r.name)}"></span>
+        <span class="pc107-d" data-d="${escapeHtml(r.key)}">${diff===null ? "" : `${diff>0?"+":""}${pc60Num(diff)}`}</span>
+      </div>`;
+    }).join("")}</div>` : pc60Empty("fa-folder-open", pcCnt.all ? "لا توجد أصناف مطابقة" : "لا توجد أصناف في هذا القسم بعد — اختر «كل الأصناف» للجرد الافتتاحي");
+  pcCntSum();
+}
+function pcCntSet(inp){
+  const k = inp.dataset.key, v = inp.value.trim();
+  if(v === "") delete pcCnt.vals[k]; else pcCnt.vals[k] = v;
+  pcCntSave();
+  const row = inp.closest(".pc107-row"), r = pcCntRows().find(x=>x.key===k);
+  const diff = v === "" || !r ? null : pc70R(Number(v) - r.book);
+  row.classList.toggle("on", v !== ""); row.classList.toggle("diff", diff !== null && diff !== 0);
+  const d = row.querySelector(".pc107-d"); if(d) d.textContent = diff===null ? "" : `${diff>0?"+":""}${pc60Num(diff)}`;
+  pcCntSum();
+}
+function pcCntSum(){
+  const el = document.getElementById("pcCntSum");
+  if(!el) return;
+  const rows = pcCntRows().filter(r=>pcCnt.vals[r.key] !== undefined);
+  const diffs = rows.filter(r=>pc70R(Number(pcCnt.vals[r.key]) - r.book) !== 0);
+  el.innerHTML = rows.length ? `<b>${rows.length}</b> صنف مجرود · <b class="${diffs.length?"pc107-warn":""}">${diffs.length}</b> بفروقات`
+    + `<button type="button" class="pc107-clear" onclick="pcCntClear()">مسح المسودة</button>` : "لم تُدخل أي كمية بعد";
+}
+async function pcCntClear(){
+  if(!(await pcConfirm("مسح كل الكميات المكتوبة في هذه المسودة؟",{danger:true}))) return;
+  pcCnt.vals = {}; pcCntSave(); pcCntDraw();
+}
+async function pcCntSubmit(){
+  const by = document.getElementById("pcCntBy")?.value.trim() || "";
+  const rows = pcCntRows().filter(r=>pcCnt.vals[r.key] !== undefined);
+  if(!rows.length){ showToast("اكتب الكمية الفعلية لصنف واحد على الأقل","error"); return; }
+  const bad = rows.find(r=>{ const n = Number(pcCnt.vals[r.key]); return !isFinite(n) || n < 0; });
+  if(bad){ showToast(`كمية غير صحيحة: ${bad.name}`,"error"); return; }
+  if(!by){ showToast("اكتب اسم القائم بالجرد","error"); return; }
+  const lines = rows.map(r=>{ const actual = pc70R(Number(pcCnt.vals[r.key])); return {key:r.key, itemId:r.itemId||"", code:r.code||"", name:r.name, unit:r.unit||"", qty:pc70R(actual - r.book), book:r.book, actual}; });
+  const diffs = lines.filter(l=>l.qty !== 0);
+  const listTxt = diffs.slice(0,8).map(l=>`${l.name}: ${l.qty>0?"+":""}${pc60Num(l.qty)} ${l.unit}`).join("\n");
+  if(!(await pcConfirm(`اعتماد جرد ${lines.length} صنف في ${pcStoreSec}؟\n${diffs.length ? `فروقات (${diffs.length}):\n${listTxt}${diffs.length>8?"\n…":""}` : "لا توجد فروقات."}`,{title:"اعتماد الجرد", okText:"اعتماد"}))) return;
+  const note = rows.length && !pcStoreBalances(pcStoreCur, pcStoreSec).length ? "جرد افتتاحي" : "جرد مجمع";
+  await pcStoreSave({store:pcStoreCur, type:"count", by, note, lines}, diffs.length ? `تم اعتماد الجرد — ${diffs.length} فرق مسجل` : "تم اعتماد الجرد — لا توجد فروقات");
+  pcCnt.vals = {}; pcCntSave();
+  Function(pcCnt.back)();
 }
 
 /* =========================== One order screen =========================== *

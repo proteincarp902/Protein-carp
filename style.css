@@ -4585,3 +4585,26 @@ button.pc70-unit{border:0;font:inherit;cursor:pointer}
 .pc106-act{width:100%;padding:14px;font-size:16px;display:flex;align-items:center;justify-content:center;gap:8px}
 .pc106-wait{text-align:center}
 @media (max-width:420px){.pc106-row{grid-template-columns:minmax(0,1.6fr) .8fr .9fr minmax(0,1.5fr);padding:9px 8px;gap:6px}}
+
+/* ===== V13 Bulk stock count ===== */
+.pc107-page{display:flex;flex-direction:column;gap:10px;padding-bottom:150px}
+.pc107-tools{display:flex;flex-direction:column;gap:8px}
+.pc107-list{background:var(--app-surface);border:1px solid var(--app-line);border-radius:16px;overflow:hidden}
+.pc107-row{display:grid;grid-template-columns:minmax(0,2.2fr) .9fr 1.1fr .8fr;gap:8px;align-items:center;padding:9px 12px;border-top:1px solid var(--app-line);font-variant-numeric:tabular-nums}
+.pc107-row:first-child{border-top:0}
+.pc107-row.head{background:#F5F6F1;font-size:12px;font-weight:800;color:var(--app-muted);position:sticky;top:0;z-index:1}
+.pc107-row>span{min-width:0}
+.pc107-row b{display:block;font-size:14px;color:var(--app-ink);overflow-wrap:anywhere}
+.pc107-row small{font-size:11px;color:var(--app-muted)}
+.pc107-row input{width:100%;margin:0;padding:8px 6px;border-radius:10px;border:1px solid var(--app-line);font:inherit;text-align:center}
+.pc107-row.on{background:#F3FAEE}
+.pc107-row.diff{background:#FFFBEB}
+.pc107-d{font-weight:800;font-size:13px;color:#8A5A00;text-align:center;direction:ltr;unicode-bidi:isolate}
+.pc107-foot{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--app-surface);border-top:1px solid var(--app-line);box-shadow:0 -6px 20px rgba(0,0,0,.06);
+  padding:10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));display:flex;flex-direction:column;gap:8px}
+.pc107-sum{font-size:13px;color:var(--app-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pc107-sum b{color:var(--app-ink)}.pc107-sum .pc107-warn{color:#B45309}
+.pc107-clear{margin-inline-start:auto;border:0;background:transparent;color:#B42318;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.pc107-foot-row{display:flex;gap:8px}
+.pc107-foot-row input{flex:1;min-width:0;margin:0}
+.pc107-foot-row .btn{white-space:nowrap;display:flex;align-items:center;gap:6px}
