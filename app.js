@@ -364,6 +364,7 @@ async function initCloud(){
   listen("hr_attendance", plain("hrAttendance", v=>hrAttendance=v));
   listen("hr_leaves", plain("hrLeaves", v=>hrLeaves=v));
   listen("hr_docs", plain("hrDocs", v=>hrDocs=v));
+  listen("section_items", plain("sectionItems", v=>sectionItems=v));
 }
 
 function pcBaseRefreshViews(){
@@ -391,6 +392,7 @@ function pcBaseRefreshViews(){
   if(document.getElementById("pcHrKioskBox")) pcHrDrawKiosk();
   if(document.getElementById("pcEmpWait")) pcEmpResume();
   if(document.getElementById("pcOrderBox")) pcOrdDraw(false);
+  if(document.getElementById("pcSiBox") && !pcSi.dirty) pcSiDraw();
   if(document.getElementById("pcStoreBox")){
     if(document.activeElement && document.activeElement.id === "pcStoreSearch") pcStoreDrawBalRows(); else pcDrawStore();
   }
@@ -1270,11 +1272,13 @@ function pc17SectionStats(sectionName){
 
 function pc17MenuForChef(){
   const section = currentChef?.section || "";
+  if(typeof pcSecFilter === "function"){ const f = pcSecFilter(section, "prod", menuItems||[]); if(f) return f; }
   return (menuItems||[]).filter(i=>!i.section || i.section===section);
 }
 
 function pc17WarehouseForChef(){
   const section = currentChef?.section || "";
+  if(typeof pcSecFilter === "function"){ const f = pcSecFilter(section, "raw", warehouseItems||[]); if(f) return f; }
   return (warehouseItems||[]).filter(i=>!i.section || i.section===section);
 }
 
@@ -6264,7 +6268,7 @@ function pc61LiveHome(){
 function openSettingsTab(tab){
   setSettingsTab(tab);
   const map = {branches:renderSettingsBranches, overview:renderSettingsOverview, chefs:renderSettingsChefs, sections:renderSettingsSections, warehouse:renderSettingsWarehouseItems, menu:renderSettingsMenuItems, excel:renderSettingsExcel, cleaning:renderSettingsCleaning, operations:renderSettingsOperations, internal:renderSettingsInternalIssue, home:renderSettingsHome, passwords:renderSettingsPasswords, about:renderSettingsAbout,
-    hrEmp:renderSettingsHrEmployees, chefs:()=>{ pcHrRole = "شيف"; renderSettingsHrEmployees(); }, hrAtt:renderSettingsHrAttendance, hrLeave:renderSettingsHrLeaves, hrDocs:renderSettingsHrDocs};
+    secItems:renderSettingsSecItems, hrEmp:renderSettingsHrEmployees, chefs:()=>{ pcHrRole = "شيف"; renderSettingsHrEmployees(); }, hrAtt:renderSettingsHrAttendance, hrLeave:renderSettingsHrLeaves, hrDocs:renderSettingsHrDocs};
   (map[tab] || renderSettingsOverview)();
 }
 
@@ -6368,7 +6372,7 @@ async function pc80AddSlide(input){
 var PC84_GROUPS = [
   {title:"الفريق والتشغيل", rows:[
     {key:"branches", ico:"fa-building",   color:"#0A84FF", name:"الفروع",          sub:"إضافة الفروع وتعطيلها",          tabs:["branches"]},
-    {key:"team",  ico:"fa-layer-group", color:"#4C920E", name:"الأقسام", sub:"الأقسام، الصرف الداخلي", tabs:["sections","internal"]},
+    {key:"team",  ico:"fa-layer-group", color:"#4C920E", name:"الأقسام", sub:"الأقسام، أصناف كل قسم، الصرف الداخلي", tabs:["sections","secItems","internal"]},
     {key:"hr",    ico:"fa-id-card",     color:"#E5484D", name:"الموارد البشرية", sub:"الموظفون والشيفات، الحضور، الإجازات، المستندات", tabs:["hrEmp","hrAtt","hrLeave","hrDocs"]},
     {key:"tasks", ico:"fa-clipboard-check", color:"#AF52DE", name:"المهام",       sub:"النظافة والتشغيل",              tabs:["cleaning","operations"]}]},
   {title:"المحتوى", rows:[
@@ -6378,7 +6382,7 @@ var PC84_GROUPS = [
     {key:"sys",   ico:"fa-shield-halved", color:"#8E8E93", name:"النظام",        sub:"كلمات المرور، حول البرنامج",     tabs:["passwords","about"]}]}
 ];
 var PC84_TAB_NAMES = {branches:"الفروع", sections:"الأقسام", chefs:"الشيفات", internal:"الصرف الداخلي", cleaning:"النظافة", operations:"التشغيل",
-  hrEmp:"الموظفون", hrAtt:"الحضور", hrLeave:"الإجازات", hrDocs:"المستندات",
+  secItems:"أصناف الأقسام", hrEmp:"الموظفون", hrAtt:"الحضور", hrLeave:"الإجازات", hrDocs:"المستندات",
   warehouse:"المستودع", menu:"المنيو والإنتاج", excel:"Excel", home:"الرسالة والسلايدر", passwords:"كلمات المرور", about:"حول البرنامج"};
 
 function pc84GroupOf(tab){
@@ -7064,7 +7068,9 @@ function pcStoreMenuFind(src){
          (nm ? list.find(m=>String(pc17ItemName(m)).trim()===nm) : null) || null;
 }
 function pcStoreCatalog(store){
-  return store === "raw" ? (warehouseItems||[]) : (menuItems||[]);
+  const all = store === "raw" ? (warehouseItems||[]) : (menuItems||[]);
+  const f = typeof pcSecFilter === "function" ? pcSecFilter(pcStoreSec, store, all) : null;
+  return f || all;
 }
 function pcStoreCatUnit(store, cat){
   return pc70Unit(cat && cat.unit) || (store === "prod" ? "حبة" : "");
@@ -8183,12 +8189,9 @@ function renderStoreCount(){
     ${pc60Bar({title:`جرد ${S.name}`, sub:`${pcStoreSec} · ${pcBranchName(currentBranch)}`, back:pcCnt.back.replace(/"/g,"&quot;")})}
     <section class="pc60-page has-bar pc107-page">
       <p class="pc85-hint">اكتب الكمية الموجودة فعليًا أمام كل صنف جردته. الأصناف الفارغة لا تدخل في الجرد. المسودة محفوظة على هذا الجهاز حتى الاعتماد.</p>
+      ${pcSecIds(pcStoreSec, pcStoreCur) ? "" : `<div class="pc103-note"><span>لم تُحدد أصناف ${escapeHtml(pcStoreSec)} بعد، لذلك تظهر فقط الأصناف التي لها حركة. حدّدها من الإعدادات ← الأقسام ← أصناف الأقسام.</span></div>`}
       <div class="pc107-tools">
         <label class="pc60-search"><i class="fa-solid fa-magnifying-glass"></i><input id="pcCntQ" type="search" placeholder="ابحث عن صنف أو كود" oninput="pcCnt.q=this.value;pcCntDraw()" autocomplete="off"></label>
-        <div class="pc60-chips">
-          <button type="button" class="pc60-fchip active" data-all="0" onclick="pcCntAll(false,this)">أصناف القسم</button>
-          <button type="button" class="pc60-fchip" data-all="1" onclick="pcCntAll(true,this)">كل الأصناف</button>
-        </div>
       </div>
       <div id="pcCntBox"></div>
       <div class="pc107-foot">
@@ -8209,11 +8212,10 @@ function pcCntRows(){
   const byKey = new Map(bal.map(r=>[r.key, r]));
   const rows = new Map();
   bal.forEach(r=>rows.set(r.key, {key:r.key, cat:null, name:r.name, code:r.code, unit:r.unit, book:r.qty, itemId:r.itemId}));
-  if(pcCnt.all || Object.keys(pcCnt.vals).length){
+  if(pcSecIds(pcStoreSec, store)){
     pcStoreCatalog(store).forEach(c=>{
       const l = pcStoreLineFor(store, c, 0);
       if(rows.has(l.key)) { rows.get(l.key).cat = c; return; }
-      if(!pcCnt.all && !(l.key in pcCnt.vals)) return;
       rows.set(l.key, {key:l.key, cat:c, name:l.name, code:l.code, unit:l.unit, book:(byKey.get(l.key)||{qty:0}).qty, itemId:l.itemId});
     });
   }
@@ -8237,7 +8239,7 @@ function pcCntDraw(){
           oninput="pcCntSet(this)" aria-label="الكمية الفعلية من ${escapeHtml(r.name)}"></span>
         <span class="pc107-d" data-d="${escapeHtml(r.key)}">${diff===null ? "" : `${diff>0?"+":""}${pc60Num(diff)}`}</span>
       </div>`;
-    }).join("")}</div>` : pc60Empty("fa-folder-open", pcCnt.all ? "لا توجد أصناف مطابقة" : "لا توجد أصناف في هذا القسم بعد — اختر «كل الأصناف» للجرد الافتتاحي");
+    }).join("")}</div>` : pc60Empty("fa-folder-open", q ? "لا توجد أصناف مطابقة" : "لا توجد أصناف لهذا القسم بعد — حدّدها من الإعدادات ← الأقسام ← أصناف الأقسام");
   pcCntSum();
 }
 function pcCntSet(inp){
@@ -8277,6 +8279,124 @@ async function pcCntSubmit(){
   await pcStoreSave({store:pcStoreCur, type:"count", by, note, lines}, diffs.length ? `تم اعتماد الجرد — ${diffs.length} فرق مسجل` : "تم اعتماد الجرد — لا توجد فروقات");
   pcCnt.vals = {}; pcCntSave();
   Function(pcCnt.back)();
+}
+
+/* =========================== Items per section =========================== *
+ * section_items/{section name}: {section, raw:[warehouse item ids], prod:[menu item ids]}. Shared by every branch,
+ * since branches use the same section names. A section with no list for a type keeps the old behaviour (all items),
+ * so nothing breaks before the lists are filled in. */
+var sectionItems = [];
+function pcSecDocId(sec){ return String(sec||"").trim().replace(/\//g,"∕") || "_"; }
+function pcSecRec(sec){ const id = pcSecDocId(sec); return (pcRaw.sectionItems || sectionItems || []).find(x=>x.id===id) || null; }
+function pcSecIds(sec, store){
+  const r = pcSecRec(sec); const ids = r && Array.isArray(r[store]) ? r[store] : null;
+  return ids && ids.length ? new Set(ids.map(String)) : null;
+}
+function pcSecFilter(sec, store, list){
+  const ids = pcSecIds(sec, store);
+  return ids ? list.filter(i=>ids.has(String(i.id))) : null;
+}
+function pcAllSectionNames(){
+  return [...new Set((pcRaw.chefSections || chefSections || []).map(s=>String(s.name||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ar"));
+}
+
+var pcSi = {sec:"", store:"raw", q:"", sel:null, dirty:false, onlySel:false};
+function renderSettingsSecItems(){
+  pcSettingsEnter();
+  const names = pcAllSectionNames();
+  if(!pcSi.sec || !names.includes(pcSi.sec)) pcSi.sec = names[0] || "";
+  pcSiReset();
+  settingsShell("secItems", "الأقسام", `
+    <p class="pc85-hint">حدّد الأصناف الخاصة بكل قسم. القسم سيرى هذه الأصناف فقط في الطلب والإنتاج والجرد والصرف. القائمة مشتركة بين كل الفروع.</p>
+    <div class="pc108-top">
+      <select id="pcSiSec" class="pc93-name" onchange="pcSiPick(this.value)">${names.map(n=>`<option ${n===pcSi.sec?"selected":""}>${escapeHtml(n)}</option>`).join("")}</select>
+      <div class="pc60-chips">
+        <button type="button" class="pc60-fchip ${pcSi.store==="raw"?"active":""}" onclick="pcSiStore('raw')">مواد خام (المستودع)</button>
+        <button type="button" class="pc60-fchip ${pcSi.store==="prod"?"active":""}" onclick="pcSiStore('prod')">أصناف الإنتاج (المنيو)</button>
+      </div>
+    </div>
+    <div class="pc108-tools">
+      <label class="pc60-search"><i class="fa-solid fa-magnifying-glass"></i><input id="pcSiQ" type="search" placeholder="ابحث بالاسم أو الكود أو التصنيف" oninput="pcSi.q=this.value;pcSiDraw()" autocomplete="off"></label>
+      <div class="pc108-btns">
+        <button type="button" class="btn btn-light" onclick="pcSiUsed()">إضافة ما طلبه القسم سابقًا</button>
+        <button type="button" class="btn btn-light" onclick="pcSiToggleShown(true)">تحديد النتائج</button>
+        <button type="button" class="btn btn-light" onclick="pcSiToggleShown(false)">إلغاء تحديد النتائج</button>
+      </div>
+    </div>
+    <div id="pcSiBox"></div>
+    <div class="pc107-foot pc108-foot"><div id="pcSiSum" class="pc107-sum"></div>
+      <div class="pc107-foot-row"><button type="button" class="btn btn-light" onclick="pcSi.onlySel=!pcSi.onlySel;pcSiDraw()">المحددة فقط / الكل</button>
+      <button type="button" class="btn btn-main" onclick="pcSiSave()"><i class="fa-solid fa-floppy-disk"></i> حفظ أصناف القسم</button></div></div>`);
+  pcSiDraw();
+}
+function pcSiReset(){
+  const ids = pcSecIds(pcSi.sec, pcSi.store);
+  pcSi.sel = new Set(ids ? [...ids] : []); pcSi.dirty = false; pcSi.onlySel = false;
+}
+async function pcSiPick(sec){
+  if(pcSi.dirty && !(await pcConfirm("لديك تغييرات غير محفوظة على هذا القسم. تجاهلها؟",{title:"تغييرات غير محفوظة", okText:"تجاهل"}))){
+    document.getElementById("pcSiSec").value = pcSi.sec; return;
+  }
+  pcSi.sec = sec; pcSiReset(); pcSiDraw();
+}
+async function pcSiStore(st){
+  if(pcSi.dirty && !(await pcConfirm("لديك تغييرات غير محفوظة. تجاهلها؟",{title:"تغييرات غير محفوظة", okText:"تجاهل"}))) return;
+  pcSi.store = st; renderSettingsSecItems();
+}
+function pcSiList(){
+  const all = pcSi.store === "raw" ? (pcRaw.warehouseItems || warehouseItems || []) : (pcRaw.menuItems || menuItems || []);
+  const q = pcSi.q.trim().toLowerCase();
+  return all.filter(i=>(!pcSi.onlySel || pcSi.sel.has(String(i.id))) &&
+    (!q || [i.nameAr, i.name, i.nameEn, i.code, i.category, i.section].some(v=>String(v||"").toLowerCase().includes(q))))
+    .sort((a,b)=>(pcSi.sel.has(String(b.id)) - pcSi.sel.has(String(a.id))) || String(pc17ItemName(a)).localeCompare(String(pc17ItemName(b)),"ar"));
+}
+function pcSiDraw(){
+  const box = document.getElementById("pcSiBox");
+  if(!box) return;
+  const list = pcSiList(), shown = list.slice(0, 300);
+  box.innerHTML = list.length ? `<div class="pc108-list">${shown.map(i=>{
+    const on = pcSi.sel.has(String(i.id));
+    return `<label class="pc108-row ${on?"on":""}"><input type="checkbox" ${on?"checked":""} data-id="${escapeHtml(String(i.id))}" onchange="pcSiTick(this)">
+      <span><b>${escapeHtml(pc17ItemName(i)||i.name||"")}</b><small>${escapeHtml(i.code||"")}${i.category?` · ${escapeHtml(i.category)}`:""}${i.unit?` · ${escapeHtml(i.unit)}`:""}</small></span></label>`;
+  }).join("")}</div>${list.length>shown.length?`<p class="pc85-hint">يظهر أول ${shown.length} من ${list.length} — استخدم البحث لتضييق النتائج.</p>`:""}`
+    : pc60Empty("fa-magnifying-glass", "لا توجد أصناف مطابقة");
+  pcSiSum();
+}
+function pcSiTick(inp){
+  const id = inp.dataset.id;
+  if(inp.checked) pcSi.sel.add(id); else pcSi.sel.delete(id);
+  inp.closest(".pc108-row")?.classList.toggle("on", inp.checked);
+  pcSi.dirty = true; pcSiSum();
+}
+function pcSiToggleShown(on){
+  pcSiList().slice(0,300).forEach(i=>on ? pcSi.sel.add(String(i.id)) : pcSi.sel.delete(String(i.id)));
+  pcSi.dirty = true; pcSiDraw();
+}
+function pcSiUsed(){
+  let n = 0;
+  if(pcSi.store === "raw"){
+    (pcRaw.warehouseOrders || warehouseOrders || []).filter(o=>String(o.section||"").trim()===pcSi.sec).forEach(o=>(o.items||[]).forEach(it=>{
+      const c = pc86Find(it); if(c && !pcSi.sel.has(String(c.id))){ pcSi.sel.add(String(c.id)); n++; } }));
+  } else {
+    (pcRaw.productionLogs || productionLogs || []).filter(l=>String(l.section||"").trim()===pcSi.sec).forEach(l=>(l.items||[]).forEach(it=>{
+      const c = pcStoreMenuFind(it); if(c && !pcSi.sel.has(String(c.id))){ pcSi.sel.add(String(c.id)); n++; } }));
+  }
+  pcSi.dirty = pcSi.dirty || n > 0; pcSiDraw();
+  showToast(n ? `أضيف ${n} صنف من سجل القسم — راجعها ثم احفظ` : "لا توجد أصناف جديدة في سجل هذا القسم");
+}
+function pcSiSum(){
+  const el = document.getElementById("pcSiSum");
+  if(el) el.innerHTML = `<b>${pcSi.sel.size}</b> صنف محدد لقسم <b>${escapeHtml(pcSi.sec)}</b>${pcSi.dirty ? ` · <span class="pc107-warn">غير محفوظ</span>` : ""}`;
+}
+async function pcSiSave(){
+  if(!pcSi.sec) return;
+  if(!pcSi.sel.size && !(await pcConfirm("لم تحدد أي صنف. الحفظ سيجعل القسم يرى كل الأصناف كما كان. متابعة؟",{title:"بدون أصناف", okText:"حفظ"}))) return;
+  try{
+    const {db,doc,setDoc} = window.firebaseDB;
+    await setDoc(doc(db,"section_items",pcSecDocId(pcSi.sec)), {section:pcSi.sec, [pcSi.store]:[...pcSi.sel], updatedAtMs:Date.now()}, {merge:true});
+    pcSi.dirty = false; pcSiSum();
+    showToast(`تم حفظ ${pcSi.sel.size} صنف لقسم ${pcSi.sec}`);
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
 }
 
 /* =========================== One order screen =========================== *
