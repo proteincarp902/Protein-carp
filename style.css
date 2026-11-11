@@ -4462,3 +4462,16 @@ button.pc70-unit{border:0;font:inherit;cursor:pointer}
 .pc100-new{width:100%;padding:13px 16px;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px}
 .pc94-c{background:#C2410C}
 .pc101-branches{margin-bottom:12px;flex-wrap:wrap}
+.pc100-sec-head{display:flex;align-items:center;gap:8px;border:0;background:transparent;font:inherit;cursor:pointer;padding:2px 0;text-align:start;width:100%}
+.pc100-sec-head b{font-size:16px;color:var(--app-ink);flex:1}
+.pc100-sec-head small{font-size:12px;color:var(--app-muted)}
+.pc100-sec-head i{color:var(--app-muted);font-size:12px}
+.pc100-intro.is-compact{flex-direction:row;text-align:start;align-items:center;justify-content:space-between;gap:12px;padding:14px;margin-bottom:10px;flex-wrap:wrap}
+.pc100-intro.is-compact div{flex:1;min-width:200px}
+.pc100-intro.is-compact p{font-size:13px;line-height:1.6}
+.pc100-chefs{background:var(--app-surface);border:1px solid var(--app-line);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.pc100-chefs small{color:var(--app-muted);font-size:12px}
+.pc100-chef-row{display:flex;flex-wrap:wrap;gap:8px}
+.pc100-chef-row button{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--app-line);background:var(--app-bg,#F6F7F2);border-radius:999px;padding:6px 14px 6px 6px;font:inherit;font-weight:700;font-size:14px;color:var(--app-ink);cursor:pointer}
+.pc100-chef-row .pc94-av{width:30px;height:30px;font-size:13px}
+.pc100-none{margin:0;color:var(--app-muted);font-size:13px}

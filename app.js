@@ -4452,18 +4452,7 @@ function pc60Empty(icon, text){
 
 function renderChefs(){
   currentChef = null;
-  const many = pcActiveBranches().length > 1;
-  if(!pcActiveBranches().some(b=>b.id === currentBranch)) currentBranch = pcActiveBranches()[0]?.id || "main";
-  pcSetScope(currentBranch);
-  pageLayout("الشيفات", `
-    ${pc60Bar({title:"الشيفات", sub:"اختر فرعك ثم قسمك", back:"renderGateway()"})}
-    <section class="pc60-page">
-      ${many ? `<div class="pc60-chips pc101-branches">${pcActiveBranches().map(b=>`<button type="button" class="pc60-fchip ${b.id===currentBranch?"active":""}" data-b="${escapeHtml(b.id)}" onclick="pcChefsBranch(this.dataset.b)">${escapeHtml(b.name||"")}</button>`).join("")}</div>` : ""}
-      <div class="pc50-section-title"><h2>الأقسام · ${escapeHtml(pcBranchName(currentBranch))}</h2>${pcViewToggle("chefsec")}</div>
-      <div id="chefSectionsView"></div>
-    </section>
-  `,"renderGateway()");
-  drawChefSectionsView();
+  renderStoreSections();
 }
 
 function drawChefSectionsView(){
@@ -6608,7 +6597,6 @@ function renderGateway(){
   currentChef = null;
   const doors = [
     ["fa-building","pc94-g","الفروع","جميع الفروع، ادخل أي فرع","renderBranches()"],
-    ["fa-utensils","pc94-c","الشيفات","ادخل باسمك من أي فرع","renderChefsHub()"],
     ["fa-gear","pc94-s","الإعدادات","كل إعدادات النظام","renderSettingsGate()"],
     ["fa-shield-halved","pc94-o","الإدارة","جميع البيانات والتقارير","renderAdminGate()"],
     ["fa-boxes-stacked","pc94-w","المستودع","استقبال الطلبات والإشراف عليها","renderWarehouseGate()"]];
@@ -7150,8 +7138,8 @@ function pcStoreStat(store, sec){
 
 /* ----- Branch home card ----- */
 function pcStoreSub(){
-  if(!pcStoreStart()) return "غير مفعّل بعد";
   const n = pcStoreSections().length;
+  if(!pcStoreStart()) return `${n} قسم · الشيفات والطلبات`;
   const neg = pcStoreNeg();
   return `${n} قسم · خام وإنتاج${neg ? ` · ${neg} رصيد سالب` : ""}`;
 }
@@ -7160,7 +7148,7 @@ function pcStoreNeg(){
 }
 function pcStoreHomeCard(){
   const neg = pcStoreNeg();
-  return pc61Card("fa-warehouse","الأقسام",pcStoreSub(),"renderStoreSections()", neg||"", neg ? "warn" : "");
+  return pc61Card("fa-layer-group","الأقسام",pcStoreSub(),"renderStoreSections()", neg||"", neg ? "warn" : "");
 }
 
 /* ----- Sections list ----- */
@@ -7173,24 +7161,31 @@ function renderStoreSections(){
 function pcDrawStoreSections(){
   const box = document.getElementById("pcStoreSecBox");
   if(!box) return;
-  if(!pcStoreStart()){ box.innerHTML = pcStoreIntroHtml(); return; }
+  const on = !!pcStoreStart();
   const secs = pcStoreSections();
   box.innerHTML = `
-    <small class="pc100-since">الاحتساب من ${escapeHtml(new Date(pcStoreStart()).toLocaleDateString("ar-SA"))} · لكل قسم مستودع خام ومستودع إنتاج</small>
+    ${on ? `<small class="pc100-since">الاحتساب من ${escapeHtml(new Date(pcStoreStart()).toLocaleDateString("ar-SA"))} · لكل قسم مستودع خام ومستودع إنتاج</small>` : pcStoreIntroHtml(true)}
     ${secs.length ? `<div class="pc100-secs">${secs.map(sec=>{
-      const r = pcStoreStat("raw", sec), p = pcStoreStat("prod", sec);
+      const r = on ? pcStoreStat("raw", sec) : {items:0,neg:0}, p = on ? pcStoreStat("prod", sec) : {items:0,neg:0};
       const js = escapeHtml(JSON.stringify(sec));
+      const nCh = pcStoreSecChefs(sec).length;
       return `<div class="pc100-sec ${r.neg||p.neg?"neg":""}">
-        <b>${escapeHtml(sec)}</b>
-        <div class="pc100-sec-btns">
+        <button type="button" class="pc100-sec-head" onclick='renderBranchStore(${js},"raw")'>
+          <b>${escapeHtml(sec)}</b><small>${nCh ? `${nCh} شيف` : "لا يوجد شيف"}</small><i class="fa-solid fa-chevron-left"></i></button>
+        ${on ? `<div class="pc100-sec-btns">
           <button type="button" onclick='renderBranchStore(${js},"raw")'>
             <i class="fa-solid ${PC_STORES.raw.icon}"></i><span>خام</span><em>${r.items} صنف${r.neg?` · ${r.neg} سالب`:""}</em></button>
           <button type="button" onclick='renderBranchStore(${js},"prod")'>
             <i class="fa-solid ${PC_STORES.prod.icon}"></i><span>إنتاج</span><em>${p.items} صنف${p.neg?` · ${p.neg} سالب`:""}</em></button>
-        </div></div>`;
+        </div>` : ""}</div>`;
     }).join("")}</div>` : pc60Empty("fa-layer-group","لا توجد أقسام في هذا الفرع — أضفها من الإعدادات")}`;
 }
-function pcStoreIntroHtml(){
+function pcStoreIntroHtml(compact){
+  if(compact) return `
+    <div class="pc100-intro is-compact">
+      <div><b>مستودعات الأقسام غير مفعّلة</b><p>الشيفات والطلبات تعمل الآن. فعّل المستودعات ليصبح لكل قسم مستودع خام ومستودع إنتاج.</p></div>
+      <button type="button" class="btn btn-main" onclick="pcStoreActivate()">تفعيل</button>
+    </div>`;
   return `
     <div class="pc100-intro">
       <span class="pc100-intro-ic"><i class="fa-solid fa-warehouse"></i></span>
@@ -7215,11 +7210,12 @@ function renderBranchStore(sec, store){
 function pcDrawStore(){
   const box = document.getElementById("pcStoreBox");
   if(!box) return;
-  if(!pcStoreStart()){ box.innerHTML = pcStoreIntroHtml(); return; }
+  const top = pcStoreChefsHtml() + `
+    <button type="button" class="btn btn-main pc100-new" onclick="pcStoreNewOrder()"><i class="fa-solid fa-cart-plus"></i> طلب جديد من المستودع</button>`;
+  if(!pcStoreStart()){ box.innerHTML = top + pcStoreIntroHtml(true); return; }
   const store = pcStoreCur;
   const y = window.scrollY;
-  const head = `
-    <button type="button" class="btn btn-main pc100-new" onclick="pcStoreNewOrder()"><i class="fa-solid fa-cart-plus"></i> طلب جديد من المستودع</button>
+  const head = top + `
     <div class="pc100-seg" role="tablist">
       ${["raw","prod"].map(st=>`<button type="button" role="tab" class="${store===st?"active":""}" onclick="pcStoreCur='${st}';pcStoreQ='';pcDrawStore()">
         <i class="fa-solid ${PC_STORES[st].icon}"></i> ${PC_STORES[st].name}</button>`).join("")}
@@ -7396,21 +7392,18 @@ async function pcStoreSave(rec, okMsg){
   finally{ pc60Busy = false; pcDrawStore(); }
 }
 
-/* ----- Chefs entry from the main screen (outside branches) ----- */
-function renderChefsHub(){
-  if(!pcActiveBranches().some(b=>b.id === currentBranch)) currentBranch = pcActiveBranches()[0]?.id || "main";
-  renderChefs();
-}
-function pcChefsBranch(id){
-  currentBranch = id;
-  pcSetScope(id);
-  renderChefs();
-}
-
 /* ----- New warehouse order from inside a section ----- */
 var pcStoreOrderRet = null;
-function pcStoreSecChefs(){
-  return pcStoreMine(pcStoreRawList("chefs", chefs)).filter(c=>String(c.section||"").trim() === pcStoreSec);
+function pcStoreSecChefs(sec){
+  const name = sec || pcStoreSec;
+  return pcStoreMine(pcStoreRawList("chefs", chefs)).filter(c=>String(c.section||"").trim() === name);
+}
+function pcStoreChefsHtml(){
+  const list = pcStoreSecChefs();
+  return `<div class="pc100-chefs"><small>شيفات القسم — اضغط على اسمك للدخول</small>
+    ${list.length ? `<div class="pc100-chef-row">${list.map(c=>`<button type="button" data-id="${escapeHtml(c.id)}" onclick="pcEnterChef(this.dataset.id)">
+      <span class="pc94-av">${escapeHtml((c.name||"?").trim().charAt(0))}</span>${escapeHtml(c.name||"")}</button>`).join("")}</div>`
+      : `<p class="pc100-none">لا يوجد شيف في هذا القسم — أضفه من الإعدادات</p>`}</div>`;
 }
 async function pcStoreNewOrder(){
   const list = pcStoreSecChefs();
