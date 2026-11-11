@@ -4499,7 +4499,7 @@ function renderChefPick(sectionName){
         <button type="button" class="pc94-row" data-id="${escapeHtml(c.id)}" onclick="pcEnterChef(this.dataset.id)">
           <span class="pc94-av">${escapeHtml((c.name||"?").trim().charAt(0))}</span>
           <span class="pc94-txt"><b>${escapeHtml(c.name||"")}</b></span>
-          <i class="fa-solid fa-chevron-left pc94-chev"></i></button>`).join("") : pc60Empty("fa-user","لا يوجد شيفات في هذا القسم. أضفهم من الإعدادات.")}
+          <i class="fa-solid fa-chevron-left pc94-chev"></i></button>`).join("") : pc60Empty("fa-user","لا يوجد شيفات في هذا القسم. أضفهم من الإعدادات ← الموارد البشرية.")}
     </section>
   `,"renderChefs()");
 }
@@ -6262,7 +6262,7 @@ function pc61LiveHome(){
 function openSettingsTab(tab){
   setSettingsTab(tab);
   const map = {branches:renderSettingsBranches, overview:renderSettingsOverview, chefs:renderSettingsChefs, sections:renderSettingsSections, warehouse:renderSettingsWarehouseItems, menu:renderSettingsMenuItems, excel:renderSettingsExcel, cleaning:renderSettingsCleaning, operations:renderSettingsOperations, internal:renderSettingsInternalIssue, home:renderSettingsHome, passwords:renderSettingsPasswords, about:renderSettingsAbout,
-    hrEmp:renderSettingsHrEmployees, hrAtt:renderSettingsHrAttendance, hrLeave:renderSettingsHrLeaves, hrDocs:renderSettingsHrDocs};
+    hrEmp:renderSettingsHrEmployees, chefs:()=>{ pcHrRole = "شيف"; renderSettingsHrEmployees(); }, hrAtt:renderSettingsHrAttendance, hrLeave:renderSettingsHrLeaves, hrDocs:renderSettingsHrDocs};
   (map[tab] || renderSettingsOverview)();
 }
 
@@ -6366,8 +6366,8 @@ async function pc80AddSlide(input){
 var PC84_GROUPS = [
   {title:"الفريق والتشغيل", rows:[
     {key:"branches", ico:"fa-building",   color:"#0A84FF", name:"الفروع",          sub:"إضافة الفروع وتعطيلها",          tabs:["branches"]},
-    {key:"team",  ico:"fa-users",       color:"#4C920E", name:"الفريق والأقسام", sub:"الأقسام، الشيفات، الصرف الداخلي", tabs:["sections","chefs","internal"]},
-    {key:"hr",    ico:"fa-id-card",     color:"#E5484D", name:"الموارد البشرية", sub:"الموظفون، الحضور، الإجازات، المستندات", tabs:["hrEmp","hrAtt","hrLeave","hrDocs"]},
+    {key:"team",  ico:"fa-layer-group", color:"#4C920E", name:"الأقسام", sub:"الأقسام، الصرف الداخلي", tabs:["sections","internal"]},
+    {key:"hr",    ico:"fa-id-card",     color:"#E5484D", name:"الموارد البشرية", sub:"الموظفون والشيفات، الحضور، الإجازات، المستندات", tabs:["hrEmp","hrAtt","hrLeave","hrDocs"]},
     {key:"tasks", ico:"fa-clipboard-check", color:"#AF52DE", name:"المهام",       sub:"النظافة والتشغيل",              tabs:["cleaning","operations"]}]},
   {title:"المحتوى", rows:[
     {key:"items", ico:"fa-box",         color:"#FF9500", name:"الأصناف",         sub:"المستودع، المنيو، Excel",        tabs:["warehouse","menu","excel"]},
@@ -7491,11 +7491,11 @@ function pcStoreChefsHtml(){
   return `<div class="pc100-chefs"><small>شيفات القسم — اضغط على اسمك للدخول</small>
     ${list.length ? `<div class="pc100-chef-row">${list.map(c=>`<button type="button" data-id="${escapeHtml(c.id)}" onclick="pcEnterChef(this.dataset.id)">
       <span class="pc94-av">${escapeHtml((c.name||"?").trim().charAt(0))}</span>${escapeHtml(c.name||"")}</button>`).join("")}</div>`
-      : `<p class="pc100-none">لا يوجد شيف في هذا القسم — أضفه من الإعدادات</p>`}</div>`;
+      : `<p class="pc100-none">لا يوجد شيف في هذا القسم — أضفه من الإعدادات ← الموارد البشرية</p>`}</div>`;
 }
 async function pcStoreNewOrder(){
   const list = pcStoreSecChefs();
-  if(!list.length){ showToast("لا يوجد شيف في هذا القسم — أضفه من الإعدادات","error"); return; }
+  if(!list.length){ showToast("لا يوجد شيف في هذا القسم — أضفه من الإعدادات ← الموارد البشرية","error"); return; }
   let chef = list[0];
   if(list.length > 1){
     chef = await pcSheet({title:"من صاحب الطلب؟", icon:"fa-user", body:`<p class="pc85-hint">القسم: <b>${escapeHtml(pcStoreSec)}</b></p>`,
@@ -7525,6 +7525,7 @@ var PC_HR_STATUS = ["نشط","موقوف","منتهي الخدمة"];
 var PC_HR_LEAVE_TYPES = ["سنوية","مرضية","اضطرارية","بدون راتب","أخرى"];
 var PC_HR_DOC_TYPES = ["الشهادة الصحية","عقد العمل","رخصة القيادة","شهادة تدريب","أخرى"];
 var PC_HR_DAYS = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+var pcHrRole = "الكل";
 var pcHrQ = "", pcHrDay = "", pcHrAttMode = "day", pcHrLeaveFilter = "معلقة";
 
 function pcHrList(key, fallback){ const r = pcRaw && pcRaw[key]; return Array.isArray(r) ? r : (fallback || []); }
@@ -7616,6 +7617,7 @@ function renderSettingsHrEmployees(){
       <input id="pcHrSearch" placeholder="بحث بالاسم أو الوظيفة أو الرقم الوظيفي" value="${escapeHtml(pcHrQ)}" oninput="pcHrQ=this.value;pcHrDrawEmployees()">
       <button class="btn btn-main" onclick="pcHrEditEmployee()">إضافة موظف</button>
     </div>
+    <div class="pc60-chips pc103-roles">${["الكل", ...PC_HR_ROLES].map(r=>`<button type="button" class="pc60-fchip ${pcHrRole===r?"active":""}" onclick="pcHrRole='${r}';pcHrDrawEmployees();this.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b===this))">${r}</button>`).join("")}</div>
     ${pcHrUnlinkedChefsHtml()}
     <div id="pcHrEmpBox"></div>`);
   pcHrDrawEmployees();
@@ -7624,8 +7626,8 @@ function pcHrDrawEmployees(){
   const box = document.getElementById("pcHrEmpBox");
   if(!box) return;
   const q = pcHrQ.trim().toLowerCase();
-  const list = pcHrBranchEmps(settingsBranch).filter(e=>!q || [e.name,e.role,e.section,e.odooEmployeeId].some(x=>String(x||"").toLowerCase().includes(q)));
-  if(!list.length){ box.innerHTML = `<div class="placeholder">لا يوجد موظفون في هذا الفرع بعد</div>`; return; }
+  const list = pcHrBranchEmps(settingsBranch).filter(e=>(pcHrRole==="الكل" || e.role===pcHrRole) && (!q || [e.name,e.role,e.section,e.odooEmployeeId].some(x=>String(x||"").toLowerCase().includes(q))));
+  if(!list.length){ box.innerHTML = `<div class="placeholder">لا يوجد ${pcHrRole==="الكل"?"موظفون":pcHrRole} في هذا الفرع</div>`; return; }
   box.innerHTML = `<div class="pc103-emps">${list.map(e=>{
     const docs = pcHrDocState(e.id);
     return `<button type="button" class="pc103-emp ${pcHrActive(e)?"":"off"}" data-id="${escapeHtml(e.id)}" onclick="pcHrEditEmployee(this.dataset.id)">
@@ -7642,14 +7644,14 @@ function pcHrDrawEmployees(){
 }
 function pcHrUnlinkedChefsHtml(){
   const linked = new Set(pcHrEmps().map(e=>e.chefId).filter(Boolean));
-  const n = pcHrList("chefs", chefs).filter(c=>!c.employeeId && !linked.has(c.id)).length;
+  const n = pcHrList("chefs", chefs).filter(c=>!c.employeeId && !linked.has(c.id) && pcBranchOf(c)===settingsBranch).length;
   if(!n) return "";
   return `<div class="pc103-note"><span>يوجد ${n} شيف مسجلون قبل الموارد البشرية وليس لهم ملف موظف.</span>
     <button type="button" class="btn btn-light" onclick="pcHrImportChefs()">إنشاء ملفات لهم</button></div>`;
 }
 async function pcHrImportChefs(){
   const linked = new Set(pcHrEmps().map(e=>e.chefId).filter(Boolean));
-  const list = pcHrList("chefs", chefs).filter(c=>!c.employeeId && !linked.has(c.id));
+  const list = pcHrList("chefs", chefs).filter(c=>!c.employeeId && !linked.has(c.id) && pcBranchOf(c)===settingsBranch);
   if(!list.length) return;
   if(!(await pcConfirm(`إنشاء ملف موظف لـ ${list.length} شيف بنفس الاسم والفرع والقسم؟ يمكنك تعديل بقية البيانات بعدها.`,{title:"ملفات الشيفات", okText:"إنشاء"}))) return;
   const {db,addDoc,collection,doc,updateDoc} = window.firebaseDB;

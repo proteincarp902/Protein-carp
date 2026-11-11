@@ -4513,3 +4513,4 @@ button.pc70-unit{border:0;font:inherit;cursor:pointer}
 .pc103-kiosk em{font-style:normal;font-weight:800;font-size:13px;border-radius:10px;padding:8px 12px;background:var(--app-brand);color:#fff}
 .pc103-kiosk button.in{border-color:#9BD07A;background:#F3FAEE}
 .pc103-kiosk button.in em{background:#B42318}
+.pc103-roles{margin-bottom:12px;flex-wrap:wrap}
