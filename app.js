@@ -389,6 +389,7 @@ function pcBaseRefreshViews(){
   if(document.getElementById("pcHrLeaveBox")) pcHrDrawLeaves();
   if(document.getElementById("pcHrDocBox") && document.activeElement?.id !== "pcHrDocSearch") pcHrDrawDocs();
   if(document.getElementById("pcHrKioskBox")) pcHrDrawKiosk();
+  if(document.getElementById("pcEmpWait")) pcEmpResume();
   if(document.getElementById("pcStoreBox")){
     if(document.activeElement && document.activeElement.id === "pcStoreSearch") pcStoreDrawBalRows(); else pcDrawStore();
   }
@@ -6609,6 +6610,7 @@ function renderGateway(){
   currentBackFn = "renderGateway()";
   currentChef = null;
   const doors = [
+    ["fa-user-lock","pc94-e","دخول الموظفين","ادخل برقمك الوظيفي والرقم السري","renderEmpLogin()"],
     ["fa-building","pc94-g","الفروع","جميع الفروع، ادخل أي فرع","renderBranches()"],
     ["fa-gear","pc94-s","الإعدادات","كل إعدادات النظام","renderSettingsGate()"],
     ["fa-shield-halved","pc94-o","الإدارة","جميع البيانات والتقارير","renderAdminGate()"],
@@ -7223,7 +7225,8 @@ function renderBranchStore(sec, store){
 function pcDrawStore(){
   const box = document.getElementById("pcStoreBox");
   if(!box) return;
-  const top = pcStoreChefsHtml() + `
+  const me = pcEmpCurrent();
+  const top = me ? pcEmpTopHtml(me) : pcStoreChefsHtml() + `
     <button type="button" class="btn btn-main pc100-new" onclick="pcStoreNewOrder()"><i class="fa-solid fa-cart-plus"></i> طلب جديد من المستودع</button>`;
   if(!pcStoreStart()){ box.innerHTML = top + pcStoreIntroHtml(true); return; }
   const store = pcStoreCur;
@@ -7494,7 +7497,8 @@ function pcStoreChefsHtml(){
       : `<p class="pc100-none">لا يوجد شيف في هذا القسم — أضفه من الإعدادات ← الموارد البشرية</p>`}</div>`;
 }
 async function pcStoreNewOrder(){
-  const list = pcStoreSecChefs();
+  const me = pcEmpCurrent();
+  const list = me ? pcStoreSecChefs().filter(c=>c.id===me.chefId || c.employeeId===me.id) : pcStoreSecChefs();
   if(!list.length){ showToast("لا يوجد شيف في هذا القسم — أضفه من الإعدادات ← الموارد البشرية","error"); return; }
   let chef = list[0];
   if(list.length > 1){
@@ -7690,8 +7694,8 @@ async function pcHrEditEmployee(id, preset){
       <div><label class="pc94-lb">تاريخ المباشرة</label><input id="hrHire" class="pc93-name" type="date" value="${escapeHtml(e.hireDate||"")}"></div>
       <div><label class="pc94-lb">رصيد الإجازة السنوية (يوم)</label><input id="hrAnnual" class="pc93-name" type="number" min="0" max="60" value="${escapeHtml(String(e.annualLeaveDays ?? 21))}"></div>
     </div>
-    <label class="pc94-lb">رمز الحضور (4 أرقام) <small>${e.pinHash ? "— محفوظ، اتركه فارغًا لعدم التغيير" : "(اختياري)"}</small></label>
-    <input id="hrPin" class="pc93-name" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="••••">
+    <label class="pc94-lb">الرقم السري لحساب الموظف <small>${e.pwHash||e.pinHash ? "— محفوظ، اتركه فارغًا لعدم التغيير" : "(4 إلى 8 أرقام — يدخل به برقمه الوظيفي)"}</small></label>
+    <input id="hrPin" class="pc93-name" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password" placeholder="••••">
     ${id ? `<p class="pc85-hint">${pcHrEmpSummary(e)}</p>` : ""}`,
     actions:[
       {label:"حفظ", kind:"btn-main", value:h=>({
@@ -7708,7 +7712,8 @@ async function pcHrEditEmployee(id, preset){
   if(v.extra.error){ showToast(v.extra.error,"error"); return; }
   const isChef = v.role === "شيف";
   if(isChef && !v.section){ showToast("اختر قسم الشيف","error"); return; }
-  if(v.pin && !/^\d{4}$/.test(v.pin)){ showToast("رمز الحضور 4 أرقام","error"); return; }
+  if(v.pin && !/^\d{4,8}$/.test(v.pin)){ showToast("الرقم السري من 4 إلى 8 أرقام","error"); return; }
+  if(v.pin && !v.extra.data.odooEmployeeId){ showToast("سجّل الرقم الوظيفي أولًا — الموظف يدخل به مع الرقم السري","error"); return; }
   if(!v.workDays.length){ showToast("اختر يوم عمل واحدًا على الأقل","error"); return; }
   if(v.extra.data.odooEmployeeId && pcHrEmps().some(x=>x.id!==id && String(x.odooEmployeeId||"")===v.extra.data.odooEmployeeId)){
     showToast("الرقم الوظيفي مستخدم لموظف آخر","error"); return;
@@ -7720,7 +7725,7 @@ async function pcHrEditEmployee(id, preset){
     let empId = id;
     if(id) await updateDoc(doc(db,"hr_employees",id), data);
     else empId = (await addDoc(collection(db,"hr_employees"), {...data, createdAtMs:Date.now()})).id;
-    if(v.pin){ const salt = Math.random().toString(36).slice(2,10); await updateDoc(doc(db,"hr_employees",empId), {pinSalt:salt, pinHash:await pcHrHash(v.pin, salt)}); }
+    if(v.pin){ const salt = pcEmpSalt(); await updateDoc(doc(db,"hr_employees",empId), {pwSalt:salt, pwHash:await pcEmpHash(v.pin, salt), pwAlgo:"pbkdf2-sha256-150k", pwSetAtMs:Date.now(), pinHash:"", pinSalt:""}); }
     await pcHrSyncChef(empId, {...e, ...data}, isChef);
     showToast(id ? "تم حفظ ملف الموظف" : "تمت إضافة الموظف");
   }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
@@ -8144,11 +8149,12 @@ async function pcHrPunch(empId){
   const e = pcHrEmp(empId);
   if(!e || pc60Busy) return;
   const open = pcHrOpenRecord(empId);
-  if(e.pinHash){
-    const pin = await pcSheet({title:`رمز ${e.name}`, icon:"fa-lock", body:`<input id="hrPunchPin" class="pc93-name" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••">`,
+  const self = pcEmpCurrent();
+  if((e.pwHash || e.pinHash) && !(self && self.id === e.id)){
+    const pin = await pcSheet({title:`الرقم السري · ${e.name}`, icon:"fa-lock", body:`<input id="hrPunchPin" class="pc93-name" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="••••">`,
       actions:[{label:"متابعة", kind:"btn-main", value:h=>h.querySelector("#hrPunchPin").value.trim()},{label:"إلغاء", kind:"btn-light", value:null}]});
     if(pin === null || pin === undefined) return;
-    if(await pcHrHash(pin, e.pinSalt||"") !== e.pinHash){ showToast("الرمز غير صحيح","error"); return; }
+    if(!(await pcEmpVerify(e, pin))){ showToast("الرقم السري غير صحيح","error"); return; }
   }
   const now = Date.now();
   if(!(await pcConfirm(`${open ? "تسجيل انصراف" : "تسجيل حضور"} ${e.name} الساعة ${pcHrClock(now)}؟`,{title:open?"انصراف":"حضور", okText:"تأكيد"}))) return;
@@ -8162,6 +8168,128 @@ async function pcHrPunch(empId){
   }catch(err){ console.error(err); showToast("تعذر التسجيل، تحقق من الاتصال","error"); }
   finally{ pc60Busy = false; pcHrDrawKiosk(); }
 }
+
+/* =========================== Employee accounts =========================== *
+ * Each employee signs in with their Odoo employee number and a numeric password (PBKDF2, salted).
+ * A signed-in device is locked to that employee's own section: every other screen sends them back.
+ * This restricts what the screens show; it is not a substitute for Firebase Authentication + rules. */
+var PC_EMP_KEY = "pcEmpSession", PC_EMP_FAILS = "pcEmpFails", PC_EMP_TTL = 16*3600e3;
+function pcEmpSalt(){ const a = new Uint8Array(16); crypto.getRandomValues(a); return [...a].map(b=>b.toString(16).padStart(2,"0")).join(""); }
+async function pcEmpHash(pin, salt){
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(String(pin)), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({name:"PBKDF2", salt:new TextEncoder().encode(salt), iterations:150000, hash:"SHA-256"}, key, 256);
+  return [...new Uint8Array(bits)].map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+async function pcEmpVerify(e, pin){
+  if(e.pwHash) return (await pcEmpHash(pin, e.pwSalt||"")) === e.pwHash;
+  if(e.pinHash) return (await pcHrHash(pin, e.pinSalt||"")) === e.pinHash;
+  return false;
+}
+function pcEmpStore(k, v){ try{ v === null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function pcEmpLoad(k){ try{ return JSON.parse(localStorage.getItem(k) || "null"); }catch(e){ return null; } }
+function pcEmpSessionRaw(){
+  const s = pcEmpLoad(PC_EMP_KEY);
+  if(!s || !s.empId || Date.now() - Number(s.at||0) > PC_EMP_TTL){ if(s) pcEmpStore(PC_EMP_KEY, null); return null; }
+  return s;
+}
+/* The signed-in employee, or null. Returns null while employee data is still loading. */
+function pcEmpCurrent(){
+  const s = pcEmpSessionRaw();
+  if(!s || !Array.isArray(pcRaw.hrEmployees)) return null;
+  const e = pcHrEmp(s.empId);
+  if(!e || !pcHrActive(e) || !(e.pwHash || e.pinHash) || (s.pwSetAtMs||0) < (e.pwSetAtMs||0)){ pcEmpStore(PC_EMP_KEY, null); return null; }
+  return e;
+}
+
+function renderEmpLogin(){
+  if(pcEmpSessionRaw()) return pcEmpHome();
+  const f = pcEmpLoad(PC_EMP_FAILS) || {};
+  const locked = f.until && f.until > Date.now();
+  pageLayout("دخول الموظفين", `
+    ${pc60Bar({title:"دخول الموظفين", sub:"برقمك الوظيفي والرقم السري", back:"renderGateway()"})}
+    <section class="pc60-page has-bar pc100-page">
+      <form class="pc105-login" onsubmit="event.preventDefault();pcEmpLogin()">
+        <span class="pc100-intro-ic"><i class="fa-solid fa-user-lock"></i></span>
+        <label class="pc94-lb" for="empNo">الرقم الوظيفي</label>
+        <input id="empNo" class="pc93-name" inputmode="numeric" autocomplete="username" dir="ltr" required>
+        <label class="pc94-lb" for="empPw">الرقم السري</label>
+        <input id="empPw" class="pc93-name" type="password" inputmode="numeric" maxlength="8" autocomplete="current-password" dir="ltr" required>
+        ${locked ? `<p class="pc105-err">محاولات كثيرة خاطئة. حاول بعد ${Math.ceil((f.until-Date.now())/60000)} دقيقة.</p>` : `<p class="pc105-err" id="empErr" hidden></p>`}
+        <button type="submit" class="btn btn-main" ${locked?"disabled":""}>دخول</button>
+        <small class="pc85-hint">الرقم السري يحدده المسؤول من الإعدادات ← الموارد البشرية.</small>
+      </form>
+    </section>`, "renderGateway()");
+  setTimeout(()=>document.getElementById("empNo")?.focus(), 50);
+}
+async function pcEmpLogin(){
+  const f = pcEmpLoad(PC_EMP_FAILS) || {n:0};
+  if(f.until && f.until > Date.now()) return renderEmpLogin();
+  const no = String(document.getElementById("empNo")?.value||"").trim();
+  const pw = String(document.getElementById("empPw")?.value||"").trim();
+  const err = msg=>{ const el = document.getElementById("empErr"); if(el){ el.textContent = msg; el.hidden = false; } };
+  if(!no || !pw){ err("اكتب الرقم الوظيفي والرقم السري"); return; }
+  if(!Array.isArray(pcRaw.hrEmployees)){ err("جاري تحميل البيانات، حاول بعد لحظة"); return; }
+  const e = pcHrEmps().find(x=>String(x.odooEmployeeId||"").trim() === no);
+  const ok = !!(e && pcHrActive(e) && await pcEmpVerify(e, pw));
+  if(!ok){
+    const n = (f.n||0) + 1;
+    pcEmpStore(PC_EMP_FAILS, n >= 5 ? {n:0, until:Date.now()+5*60000} : {n});
+    if(n >= 5) return renderEmpLogin();
+    err(e && !pcHrActive(e) ? "هذا الحساب غير نشط — راجع المسؤول" : "الرقم الوظيفي أو الرقم السري غير صحيح");
+    return;
+  }
+  pcEmpStore(PC_EMP_FAILS, null);
+  pcEmpStore(PC_EMP_KEY, {empId:e.id, at:Date.now(), pwSetAtMs:e.pwSetAtMs||0});
+  pcEmpHome();
+}
+async function pcEmpLogout(){
+  if(!(await pcConfirm("تسجيل الخروج من حسابك على هذا الجهاز؟",{title:"تسجيل الخروج", okText:"خروج"}))) return;
+  pcEmpStore(PC_EMP_KEY, null);
+  currentChef = null; productionDraft = []; currentCart = [];
+  pcEmpOrig.renderGateway();
+}
+/* While employee data is still loading after a reload, wait on a small screen and resume. */
+function pcEmpResume(){ if(Array.isArray(pcRaw.hrEmployees)) pcEmpHome(); }
+
+function pcEmpHome(){
+  if(!pcEmpSessionRaw()) return pcEmpOrig.renderGateway();
+  if(!Array.isArray(pcRaw.hrEmployees)){
+    app.innerHTML = `<main class="app pc94-gate"><div class="pc94-brand" id="pcEmpWait">${pc50Logo()}<b>جاري التحميل…</b></div></main>`;
+    return;
+  }
+  const e = pcEmpCurrent();
+  if(!e){ showToast("انتهت الجلسة — سجّل الدخول مرة أخرى","error"); return renderEmpLogin(); }
+  currentBranch = pcBranchOf(e); pcSetScope(currentBranch);
+  pcStoreSec = String(e.section||"").trim() || PC_NO_SEC;
+  pcStoreView = "bal"; pcStoreQ = "";
+  pageLayout(e.name, `
+    ${pc60Bar({title:e.section || e.role || "حسابي", sub:`${e.name} · ${pcBranchName(currentBranch)}`, back:"pcEmpHome()",
+      trailing:`<button type="button" class="pc60-back" onclick="pcEmpLogout()" aria-label="تسجيل الخروج"><i class="fa-solid fa-right-from-bracket"></i></button>`})}
+    <section class="pc60-page has-bar pc100-page"><div id="pcStoreBox"></div></section>`, "pcEmpHome()");
+  if(e.section) pcDrawStore();
+  else document.getElementById("pcStoreBox").innerHTML = pcEmpTopHtml(e) + `<p class="pc85-hint">لا يوجد قسم مرتبط بحسابك. راجع المسؤول لربطك بقسم.</p>`;
+}
+function pcEmpChef(e){ return pcHrList("chefs", chefs).find(c=>!c.inactive && (c.id===e.chefId || c.employeeId===e.id)) || null; }
+function pcEmpTopHtml(e){
+  const open = pcHrOpenRecord(e.id);
+  const chef = e.role === "شيف" ? pcEmpChef(e) : null;
+  return `<div class="pc105-me">
+    <button type="button" class="pc105-punch ${open?"in":""}" data-id="${escapeHtml(e.id)}" onclick="pcHrPunch(this.dataset.id).then(()=>pcEmpHome())">
+      <i class="fa-solid fa-user-clock"></i><span><b>${open ? "تسجيل انصراف" : "تسجيل حضور"}</b><small>${open ? `حاضر منذ ${pcHrClock(open.inMs)}` : (e.shiftStart ? `الدوام ${pcChefShiftText(e)}` : "")}</small></span></button>
+    ${chef ? `<button type="button" class="pc105-dash" data-id="${escapeHtml(chef.id)}" onclick="pcEnterChef(this.dataset.id)"><i class="fa-solid fa-kitchen-set"></i><span><b>لوحة الشيف</b><small>الإنتاج والهدر وطلباتي</small></span></button>` : ""}
+  </div>
+  ${chef ? `<button type="button" class="btn btn-main pc100-new" onclick="pcStoreNewOrder()"><i class="fa-solid fa-cart-plus"></i> طلب جديد من المستودع</button>` : ""}`;
+}
+
+/* Lock navigation to the employee's own section while signed in. */
+var pcEmpOrig = {};
+["renderGateway","renderHome","renderBranches","renderStoreSections","renderChefs","renderSettingsGate","renderAdminGate",
+ "renderWarehouseGate","renderBranchAttendance","pc94PickBranch","renderBranchStore","renderEmpLogin"].forEach(n=>{
+  const f = window[n];
+  if(typeof f !== "function") return;
+  pcEmpOrig[n] = f;
+  window[n] = function(...a){ return pcEmpSessionRaw() ? pcEmpHome() : f.apply(this, a); };
+});
 
 pcHydrate();
 initCloud();
