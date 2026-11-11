@@ -434,7 +434,7 @@ async function addChef(){
   showToast(`تمت إضافة ${name} إلى ${section} · ${pcBranchName(branchId)}`);
 }
 
-function drawChefs(){const box=document.getElementById("chefsContainer"); if(!box)return; const q=(document.getElementById("chefSettingsSearch")?.value||"").trim().toLowerCase(); const list=chefs.filter(c=>String(c.name||"").toLowerCase().includes(q)||String(c.section||"").toLowerCase().includes(q)); box.innerHTML=list.length?`<table class="premium-table"><thead><tr><th>الشيف</th><th>الفرع</th><th>القسم</th><th>إجراء</th></tr></thead><tbody>${list.map(c=>`<tr><td><b>${escapeHtml(c.name||"")}</b></td><td>${escapeHtml(pcBranchName(pcBranchOf(c)))}</td><td>${escapeHtml(c.section||"")}</td><td><button class="mini-danger" onclick="deleteDocByPath('chefs','${c.id}')">حذف</button></td></tr>`).join("")}</tbody></table>`:`<div class="placeholder">لا يوجد شيفات</div>`;}
+function drawChefs(){const box=document.getElementById("chefsContainer"); if(!box)return; const q=(document.getElementById("chefSettingsSearch")?.value||"").trim().toLowerCase(); const list=chefs.filter(c=>String(c.name||"").toLowerCase().includes(q)||String(c.section||"").toLowerCase().includes(q)); box.innerHTML=list.length?`<table class="premium-table"><thead><tr><th>الشيف</th><th>الفرع</th><th>القسم</th><th>إجراء</th></tr></thead><tbody>${list.map(c=>`<tr><td><b>${escapeHtml(c.name||"")}</b></td><td>${escapeHtml(pcBranchName(pcBranchOf(c)))}</td><td>${escapeHtml(c.section||"")}</td><td><button class="mini-btn" data-id="${escapeHtml(c.id)}" onclick="pcEditChef(this.dataset.id)">تعديل</button> <button class="mini-danger" onclick="deleteDocByPath('chefs','${c.id}')">حذف</button></td></tr>`).join("")}</tbody></table>`:`<div class="placeholder">لا يوجد شيفات</div>`;}
 
 function renderSettingsWarehouseItems(){settingsShell("warehouse","أصناف المستودع",`<div class="premium-toolbar"><input id="warehouseSearch" placeholder="بحث بالكود أو العربي أو English" oninput="drawWarehouseItems()"><button class="btn btn-main" onclick="document.getElementById('warehouseItemForm').classList.toggle('hide')">إضافة صنف</button><button class="btn btn-light" onclick="openSettingsTab('excel')">استيراد Excel</button><button class="btn btn-light" onclick="exportWarehouseCSV()">تصدير Excel</button></div><div id="warehouseItemForm" class="premium-form hide"><label>الكود اختياري</label><input id="warehouseItemCode" placeholder="مثال: 4016"><label>اسم الصنف عربي / English</label><input id="warehouseItemName" placeholder="مثال: بصل برياني / Onion Biryani"><label>الوحدة</label><select id="warehouseItemUnit"><option>كجم</option><option>جرام</option><option>لتر</option><option>مل</option><option>حبة</option><option>علبة</option><option>كيس</option><option>كرتون</option><option>صندوق</option><option>ربطة</option></select><label>التصنيف (اختياري، يُخمَّن تلقائياً إن تُرك فارغاً)</label><input id="warehouseItemCategory" list="warehouseCatList" placeholder="مثال: لحوم ودواجن"><label>الكمية المتاحة (اختياري، يظهر للمستودع ويُخصم عند الصرف)</label><input id="warehouseItemStock" type="number" min="0" step="any" inputmode="decimal" placeholder="اتركها فارغة إن لم تريد التتبع"><datalist id="warehouseCatList">${PC70_CATS.map(c=>`<option value="${c[0]}">`).join("")}</datalist><button class="btn btn-main" onclick="addWarehouseItem()">حفظ الصنف</button></div><div id="warehouseItemsContainer" class="premium-table-wrap"></div>`);drawWarehouseItems();}
 
@@ -7390,6 +7390,45 @@ async function pcStoreSave(rec, okMsg){
     showToast(okMsg);
   }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
   finally{ pc60Busy = false; pcDrawStore(); }
+}
+
+/* ----- Edit a chef from settings (name, branch, section) ----- */
+function pcChefSecNames(branchId){
+  return [...new Set((pcRaw.chefSections||chefSections||[]).filter(s=>pcBranchOf(s)===branchId).map(s=>String(s.name||"").trim()).filter(Boolean))];
+}
+function pcEditChefSecs(){
+  const b = document.getElementById("pc102Branch"), sel = document.getElementById("pc102Sec");
+  if(!b || !sel) return;
+  const keep = sel.value, names = pcChefSecNames(b.value);
+  sel.innerHTML = names.length ? names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("") : `<option value="">لا توجد أقسام في هذا الفرع</option>`;
+  if(names.includes(keep)) sel.value = keep;
+}
+async function pcEditChef(id){
+  const c = (pcRaw.chefs||chefs||[]).find(x=>x.id===id);
+  if(!c) return;
+  const curB = pcBranchOf(c);
+  const v = await pcSheet({title:"تعديل بيانات الشيف", icon:"fa-user-pen", body:`
+    <label class="pc94-lb">اسم الشيف</label><input id="pc102Name" class="pc93-name" maxlength="40" value="${escapeHtml(c.name||"")}">
+    <label class="pc94-lb">الفرع</label>
+    <select id="pc102Branch" class="pc93-name" onchange="pcEditChefSecs()">${pcActiveBranches().map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===curB?"selected":""}>${escapeHtml(b.name||"")}</option>`).join("")}</select>
+    <label class="pc94-lb">القسم</label>
+    <select id="pc102Sec" class="pc93-name">${pcChefSecNames(curB).map(n=>`<option value="${escapeHtml(n)}" ${n===String(c.section||"").trim()?"selected":""}>${escapeHtml(n)}</option>`).join("")}</select>
+    <p class="pc85-hint">السجلات السابقة (الإنتاج والطلبات والهدر) تبقى على القسم والفرع اللذين سُجّلت عليهما.</p>`,
+    actions:[
+      {label:"حفظ التعديل", kind:"btn-main", value:h=>({name:h.querySelector("#pc102Name").value.trim(), branchId:h.querySelector("#pc102Branch").value, section:h.querySelector("#pc102Sec").value})},
+      {label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  if(!v.name){ showToast("اكتب اسم الشيف","error"); return; }
+  if(!v.section){ showToast("اختر القسم — لا توجد أقسام في هذا الفرع","error"); return; }
+  if((pcRaw.chefs||chefs).some(x=>x.id!==id && x.name===v.name && x.section===v.section && pcBranchOf(x)===v.branchId)){
+    showToast("يوجد شيف بنفس الاسم في هذا القسم","error"); return;
+  }
+  if(v.name===c.name && v.section===c.section && v.branchId===curB){ showToast("لا يوجد تغيير"); return; }
+  try{
+    const {db,doc,updateDoc} = window.firebaseDB;
+    await updateDoc(doc(db,"chefs",id), {name:v.name, section:v.section, branchId:v.branchId, updatedAtMs:Date.now()});
+    showToast("تم حفظ بيانات الشيف");
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
 }
 
 /* ----- New warehouse order from inside a section ----- */
