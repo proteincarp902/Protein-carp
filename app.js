@@ -359,6 +359,7 @@ async function initCloud(){
   listen("internal_issues", scoped("internalIssues", v=>internalIssues=v));
   listen("chat_messages", v=>chatMessages=v);
   listen("branches", plain("branches", v=>branches=v));
+  listen("branch_stock_moves", plain("branchStockMoves", v=>branchStockMoves=v));
 }
 
 function pcBaseRefreshViews(){
@@ -378,6 +379,9 @@ function pcBaseRefreshViews(){
   if(document.getElementById("operationRunBox")) drawOperationRunBox();
   if(document.getElementById("productionAdminBox")) drawProductionAdmin();
   if(document.getElementById("wasteAdminBox")) drawWasteAdmin();
+  if(document.getElementById("pcStoreBox")){
+    if(document.activeElement && document.activeElement.id === "pcStoreSearch") pcStoreDrawBalRows(); else pcDrawStore();
+  }
   if(document.getElementById("internalIssueAdminBox")) drawInternalIssueAdmin();
   if(document.getElementById("warehouseStaffBox")) drawWarehouseStaff();
   if(document.getElementById("internalDestinationsBox")) drawInternalDestinations();
@@ -5243,6 +5247,7 @@ async function submitWaste(){
       section:currentChef.section,
     branchId:currentBranch,
       productName,
+      store:pc60W.src === "raw" ? "raw" : "prod",
       itemCode:pc60W.code || "",
       qty,
       unit:pc60W.unit || "",
@@ -6228,13 +6233,15 @@ function pc61HomeHtml(){
       ${pc61Card("fa-utensils","الشيفات",chSub,"renderChefs()", s.pending ? s.pending : "", s.pending ? "warn" : "")}
       ${pc61Card("fa-broom","النظافة",clSub,"renderCleaning()", s.cs.missing ? s.cs.missing : "", s.cs.missing ? "warn" : "")}
       ${pc61Card("fa-gears","التشغيل",opSub,"renderOperations()", s.os.missing ? s.os.missing : "", s.os.missing ? "warn" : "")}
+      ${pc61Card(PC_STORES.raw.icon,"مستودع الخام",pcStoreSub("raw"),"renderBranchStore('raw')", pcStoreNeg("raw")||"", pcStoreNeg("raw") ? "warn" : "")}
+      ${pc61Card(PC_STORES.prod.icon,"مستودع الإنتاج",pcStoreSub("prod"),"renderBranchStore('prod')", pcStoreNeg("prod")||"", pcStoreNeg("prod") ? "warn" : "")}
     </section>`;
 }
 
 function pc61LiveHome(){
   const main = document.querySelector("main.pc61-home");
   if(!main) return;
-  const sig = JSON.stringify(pc61Stats()) + pcViewMode("home") + pc80Home.slides.length + pc93Unread() + pcSynced();
+  const sig = JSON.stringify(pc61Stats()) + pcStoreSub("raw") + pcStoreSub("prod") + pcViewMode("home") + pc80Home.slides.length + pc93Unread() + pcSynced();
   if(sig === pc61Sig) return;
   pc61Sig = sig;
   const y = window.scrollY;
@@ -6988,6 +6995,335 @@ async function pc92Save(){
     openSettingsTab(I.kind === "wh" ? "warehouse" : "menu");
   }catch(err){ console.error(err); showToast("توقف الحفظ","error"); }
   finally{ pc60Busy = false; }
+}
+
+
+/* ===== V10 Branch stores: each branch has a raw store and a production store =====
+   Balances are never stored; they are recomputed from source documents so every figure is traceable:
+   raw  (+) warehouse orders confirmed received (issued qty)      (−) raw waste, manual issues      (±) stock counts
+   prod (+) production logs                                       (−) product waste, manual issues  (±) stock counts
+   Only documents dated on/after the branch's stockStartMs are counted (go-live date, set once per branch). */
+var branchStockMoves = [];
+var pcStoreView = "bal", pcStoreQ = "", pcStoreCur = "raw";
+var PC_STORES = {
+  raw:  {name:"مستودع الخام",   icon:"fa-boxes-stacked", issueReasons:["صرف للإنتاج","استهلاك تشغيلي","تحويل لفرع آخر","أخرى"]},
+  prod: {name:"مستودع الإنتاج", icon:"fa-box-open",      issueReasons:["بيع / توزيع","وجبات موظفين","ضيافة","تحويل لفرع آخر","أخرى"]}
+};
+
+function pcStoreRawList(key, fallback){
+  const raw = pcRaw && pcRaw[key];
+  return Array.isArray(raw) ? raw : (Array.isArray(fallback) ? fallback : []);
+}
+function pcStoreMine(list){ return list.filter(x=>pcBranchOf(x) === currentBranch); }
+function pcStoreBranch(){ return pcBranches().find(b=>b.id===currentBranch) || {id:currentBranch, virtual:true}; }
+function pcStoreStart(){ return Number(pcStoreBranch().stockStartMs||0) || 0; }
+function pcStoreMs(x){
+  return Number(x && (x.timeMs || x.createdAtMs) || 0) || (typeof getTimeValue === "function" ? (getTimeValue(x)||0) : 0);
+}
+function pcStoreConv(q, from, to){
+  if(!from || !to || from === to) return {ok:true, q:Number(q||0)};
+  const a = PC70_UNITS[from], b = PC70_UNITS[to];
+  if(a && b && a.fam === b.fam && a.fam !== "cnt") return {ok:true, q:pc70R(Number(q||0)*a.f/b.f)};
+  return {ok:false, q:Number(q||0)};
+}
+function pcStoreMenuFind(src){
+  const list = menuItems || [];
+  const nm = String(src.name || src.productName || "").trim();
+  return list.find(m=>String(m.id)===String(src.itemId||src.id||"")) ||
+         ((src.code||src.itemCode) ? list.find(m=>String(m.code||"")===String(src.code||src.itemCode)) : null) ||
+         (nm ? list.find(m=>String(pc17ItemName(m)).trim()===nm) : null) || null;
+}
+function pcStoreCatalog(store){
+  return store === "raw" ? (warehouseItems||[]) : (menuItems||[]);
+}
+function pcStoreCatUnit(store, cat){
+  return pc70Unit(cat && cat.unit) || (store === "prod" ? "حبة" : "");
+}
+/* Maps any source line to one item key in the store's catalog unit. Lines whose unit cannot be
+   converted (e.g. كرتون vs حبة) are kept on their own key instead of being silently mixed. */
+function pcStoreItem(store, src){
+  const qty0 = Number(src.qty || 0);
+  const unit0 = pc70Unit(src.unit || "");
+  const cat = store === "raw" ? pc86Find(src) : pcStoreMenuFind(src);
+  if(cat){
+    const cu = pcStoreCatUnit(store, cat);
+    const c = pcStoreConv(qty0, unit0 || cu, cu);
+    const base = {itemId:cat.id, name:pc17ItemName(cat) || src.name || "", code:cat.code || ""};
+    return c.ok ? {...base, key:`${store}:${cat.id}`, unit:cu || unit0, qty:c.q}
+                : {...base, key:`${store}:${cat.id}|${unit0}`, unit:unit0, qty:qty0};
+  }
+  const nm = String(src.name || src.productName || "").trim();
+  return {itemId:"", key:`${store}:n:${nm}|${unit0}`, name:nm, code:src.code || src.itemCode || "", unit:unit0, qty:qty0};
+}
+function pcStoreWasteStore(w){
+  if(w.store === "raw" || w.store === "prod") return w.store;
+  return pc86Find({name:w.productName, code:w.itemCode}) ? "raw" : "prod";
+}
+
+/* All movements of one store for the current branch, oldest first. */
+function pcStoreMoves(store){
+  const start = pcStoreStart();
+  const out = [];
+  const after = ms => start && ms >= start;
+  if(store === "raw"){
+    pcStoreMine(pcStoreRawList("warehouseOrders", warehouseOrders)).forEach(o=>{
+      if(o.status !== "تم الاستلام") return;
+      const ms = Number(o.receiveReview?.atMs || o.issuedAtMs || 0) || pcStoreMs(o);
+      if(!after(ms)) return;
+      const lines = (o.items||[]).map(i=>pcStoreItem("raw", {...i, qty:(i.issuedQty ?? i.qty)})).filter(l=>l.qty);
+      const short = (o.receiveReview?.items||[]).some(x=>x.ok === false);
+      if(lines.length) out.push({ms, sign:1, type:"receipt", icon:"fa-truck", tone:"ok",
+        title:`استلام طلب #${o.orderId||""}`, by:o.chefName||"", note:short ? "أُبلغ عن نقص عند الاستلام — راجع بجرد" : "", lines});
+    });
+  } else {
+    pcStoreMine(pcStoreRawList("productionLogs", productionLogs)).forEach(l=>{
+      if(l.noProduction) return;
+      const ms = pcStoreMs(l);
+      if(!after(ms)) return;
+      const lines = (l.items||[]).map(i=>pcStoreItem("prod", i)).filter(x=>x.qty);
+      if(lines.length) out.push({ms, sign:1, type:"production", icon:"fa-kitchen-set", tone:"ok",
+        title:`إنتاج ${l.section||""}`, by:l.chefName||"", note:l.note||"", lines});
+    });
+  }
+  pcStoreMine(pcStoreRawList("wasteLogs", wasteLogs)).forEach(w=>{
+    if(pcStoreWasteStore(w) !== store) return;
+    const ms = pcStoreMs(w);
+    if(!after(ms)) return;
+    const line = pcStoreItem(store, {name:w.productName, code:w.itemCode, qty:w.qty, unit:w.unit});
+    if(line.qty) out.push({ms, sign:-1, type:"waste", icon:"fa-trash-can", tone:"warn",
+      title:"هدر", by:w.chefName||"", note:w.reason||"", lines:[line]});
+  });
+  pcStoreMine(pcStoreRawList("branchStockMoves", branchStockMoves)).forEach(m=>{
+    if(m.store !== store || m.cancelled) return;
+    const ms = pcStoreMs(m);
+    if(!after(ms)) return;
+    if(m.type === "count") out.push({ms, sign:1, type:"count", icon:"fa-clipboard-list", tone:"info",
+      title:"جرد فعلي", by:m.by||"", note:m.note||"", lines:(m.lines||[]).map(x=>({...x, qty:Number(x.qty||0)}))});
+    else out.push({ms, sign:-1, type:"issue", icon:"fa-right-from-bracket", tone:"info",
+      title:m.reason || "صرف", by:m.by||"", note:m.note||"", lines:(m.lines||[]).map(x=>({...x, qty:Number(x.qty||0)}))});
+  });
+  return out.sort((a,b)=>a.ms-b.ms);
+}
+
+function pcStoreBalances(store){
+  const map = {};
+  pcStoreMoves(store).forEach(m=>m.lines.forEach(l=>{
+    const r = map[l.key] || (map[l.key] = {key:l.key, itemId:l.itemId||"", name:l.name, code:l.code||"", unit:l.unit, qty:0, inQ:0, outQ:0, lastMs:0});
+    const q = m.sign * Number(l.qty||0);
+    r.qty = pc70R(r.qty + q);
+    if(q >= 0) r.inQ = pc70R(r.inQ + q); else r.outQ = pc70R(r.outQ - q);
+    r.lastMs = Math.max(r.lastMs, m.ms);
+  }));
+  return Object.values(map).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ar"));
+}
+
+function pcStoreSub(store){
+  if(!pcStoreStart()) return "غير مفعّل بعد";
+  const bal = pcStoreBalances(store).filter(r=>r.qty !== 0);
+  const neg = bal.filter(r=>r.qty < 0).length;
+  return `${bal.length} صنف برصيد${neg ? ` · ${neg} سالب` : ""}`;
+}
+function pcStoreNeg(store){
+  return pcStoreStart() ? pcStoreBalances(store).filter(r=>r.qty < 0).length : 0;
+}
+
+function renderBranchStore(store){
+  pcStoreCur = store === "prod" ? "prod" : "raw";
+  pcStoreView = "bal"; pcStoreQ = "";
+  const S = PC_STORES[pcStoreCur];
+  pageLayout(S.name, `
+    ${pc60Bar({title:S.name, sub:pcBranchName(currentBranch), back:"renderHome()"})}
+    <section class="pc60-page has-bar pc100-page"><div id="pcStoreBox"></div></section>`, "renderHome()");
+  pcDrawStore();
+}
+
+function pcDrawStore(){
+  const box = document.getElementById("pcStoreBox");
+  if(!box) return;
+  const store = pcStoreCur, S = PC_STORES[store];
+  if(!pcStoreStart()){
+    box.innerHTML = `
+      <div class="pc100-intro">
+        <span class="pc100-intro-ic"><i class="fa-solid ${S.icon}"></i></span>
+        <b>${S.name} غير مفعّل لهذا الفرع</b>
+        <p>عند التفعيل يبدأ احتساب الحركات من تاريخ التفعيل فقط، ولا تدخل البيانات القديمة في الأرصدة.
+        بعد التفعيل سجّل جردًا افتتاحيًا لكل صنف موجود فعليًا في المستودعين.</p>
+        <button type="button" class="btn btn-main" onclick="pcStoreActivate()">تفعيل مستودعات الفرع من الآن</button>
+      </div>`;
+    return;
+  }
+  const y = window.scrollY;
+  const head = `
+    <div class="pc100-head">
+      <div class="pc60-chips">
+        <button type="button" class="pc60-fchip ${pcStoreView==="bal"?"active":""}" onclick="pcStoreView='bal';pcDrawStore()">الأرصدة</button>
+        <button type="button" class="pc60-fchip ${pcStoreView==="mov"?"active":""}" onclick="pcStoreView='mov';pcDrawStore()">الحركات</button>
+      </div>
+      <div class="pc100-acts">
+        <button type="button" class="btn btn-light" onclick="pcStoreIssue()"><i class="fa-solid fa-right-from-bracket"></i> صرف</button>
+        <button type="button" class="btn btn-main" onclick="pcStoreCount()"><i class="fa-solid fa-clipboard-list"></i> جرد</button>
+      </div>
+    </div>
+    <small class="pc100-since">الاحتساب من ${escapeHtml(new Date(pcStoreStart()).toLocaleDateString("ar-SA"))}</small>`;
+  box.innerHTML = head + (pcStoreView === "bal" ? pcStoreBalHtml(store) : pcStoreMovHtml(store));
+  const inp = document.getElementById("pcStoreSearch");
+  if(inp && document.activeElement !== inp && pcStoreQ){ inp.value = pcStoreQ; }
+  window.scrollTo(0,y);
+}
+
+function pcStoreBalHtml(store){
+  const q = pcStoreQ.trim().toLowerCase();
+  const all = pcStoreBalances(store).filter(r=>r.qty !== 0 || r.inQ || r.outQ);
+  const rows = all.filter(r=>!q || String(r.name).toLowerCase().includes(q) || String(r.code).toLowerCase().includes(q));
+  const neg = all.filter(r=>r.qty < 0).length;
+  return `
+    <label class="pc60-search pc100-search"><i class="fa-solid fa-magnifying-glass"></i>
+      <input id="pcStoreSearch" type="search" placeholder="ابحث عن صنف أو كود" value="${escapeHtml(pcStoreQ)}"
+        oninput="pcStoreQ=this.value;pcStoreDrawBalRows()" autocomplete="off"></label>
+    ${neg ? `<div class="pc100-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${neg} صنف برصيد سالب: صرف أكثر من الوارد المسجّل. راجع المستندات أو سجّل جردًا.</div>` : ""}
+    <div id="pcStoreBalRows">${pcStoreBalRows(rows)}</div>`;
+}
+function pcStoreBalRows(rows){
+  if(!rows.length) return pc60Empty("fa-folder-open","لا توجد أرصدة بعد — ابدأ بجرد افتتاحي");
+  return `<div class="pc100-list">${rows.map(r=>`
+    <div class="pc100-row ${r.qty<0?"neg":""}">
+      <div><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.code||"")} · وارد ${pc60Num(r.inQ)} · منصرف ${pc60Num(r.outQ)}</small></div>
+      <strong>${pc60Num(r.qty)} <em>${escapeHtml(r.unit||"")}</em></strong>
+    </div>`).join("")}</div>`;
+}
+function pcStoreDrawBalRows(){
+  const el = document.getElementById("pcStoreBalRows");
+  if(!el) return;
+  const q = pcStoreQ.trim().toLowerCase();
+  el.innerHTML = pcStoreBalRows(pcStoreBalances(pcStoreCur).filter(r=>(r.qty !== 0 || r.inQ || r.outQ) &&
+    (!q || String(r.name).toLowerCase().includes(q) || String(r.code).toLowerCase().includes(q))));
+}
+
+function pcStoreMovHtml(store){
+  const moves = pcStoreMoves(store).slice().reverse().slice(0,150);
+  if(!moves.length) return pc60Empty("fa-clock-rotate-left","لا توجد حركات منذ التفعيل");
+  return `<div class="pc60-timeline pc100-mov">${moves.map(m=>`
+    <div class="pc60-tl ${m.tone}">
+      <span class="pc60-tl-icon"><i class="fa-solid ${m.icon}"></i></span>
+      <div><b>${escapeHtml(m.title)}${m.by?` · ${escapeHtml(m.by)}`:""}</b>
+        <small>${m.lines.map(l=>{
+          const v = m.type === "count" ? `${l.qty>=0?"+":""}${pc60Num(l.qty)}` : `${m.sign<0?"−":"+"}${pc60Num(l.qty)}`;
+          return `${escapeHtml(l.name)} ${v} ${escapeHtml(l.unit||"")}${m.type==="count"?` (دفتري ${pc60Num(l.book)} ← فعلي ${pc60Num(l.actual)})`:""}`;
+        }).join("، ")}</small>
+        ${m.note?`<small class="pc100-note">${escapeHtml(m.note)}</small>`:""}</div>
+      <time>${escapeHtml(new Date(m.ms).toLocaleString("ar-SA",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))}</time>
+    </div>`).join("")}</div>`;
+}
+
+async function pcStoreActivate(){
+  const b = pcStoreBranch();
+  if(!(await pcConfirm(`تفعيل مستودع الخام ومستودع الإنتاج لفرع ${pcBranchName(currentBranch)} من الآن؟ لا يمكن تغيير تاريخ البداية من هذه الشاشة بعد التفعيل.`,{title:"تفعيل المستودعات", okText:"تفعيل"}))) return;
+  try{
+    const {db,doc,setDoc} = window.firebaseDB;
+    const data = {stockStartMs:Date.now()};
+    if(b.virtual) Object.assign(data, {name:pcBranchName(currentBranch), active:true, createdAtMs:0});
+    await setDoc(doc(db,"branches",currentBranch), data, {merge:true});
+    if(b.virtual) branches = [...(branches||[]), {id:currentBranch, ...data}];
+    else branches = (branches||[]).map(x=>x.id===currentBranch ? {...x, ...data} : x);
+    showToast("تم تفعيل المستودعات — سجّل الجرد الافتتاحي");
+    pcDrawStore();
+  }catch(err){ console.error(err); showToast("تعذر التفعيل، تحقق من الاتصال","error"); }
+}
+
+function pcStoreItemPicker(store){
+  const opts = pcStoreCatalog(store).map(c=>{
+    const nm = pc17ItemName(c);
+    return `<option value="${escapeHtml(nm + (c.code ? " — " + c.code : ""))}"></option>`;
+  }).join("");
+  return `<input id="pc100Item" class="pc93-name" list="pc100Cat" placeholder="اكتب اسم الصنف أو الكود واختر من القائمة" autocomplete="off">
+    <datalist id="pc100Cat">${opts}</datalist>`;
+}
+function pcStorePicked(store, text){
+  const t = String(text||"").trim();
+  if(!t) return null;
+  return pcStoreCatalog(store).find(c=>{
+    const nm = pc17ItemName(c);
+    return t === nm + (c.code ? " — " + c.code : "") || t === nm || (c.code && t === String(c.code));
+  }) || null;
+}
+function pcStoreLineFor(store, cat, qty){
+  return pcStoreItem(store, {itemId:cat.id, code:cat.code, name:pc17ItemName(cat), qty, unit:pcStoreCatUnit(store, cat)});
+}
+function pcStoreBookOf(store, key){
+  return (pcStoreBalances(store).find(r=>r.key===key) || {qty:0}).qty;
+}
+function pcStoreByName(){
+  try{ return localStorage.getItem("pcStoreBy") || ""; }catch(e){ return ""; }
+}
+function pcStoreSaveBy(v){
+  try{ localStorage.setItem("pcStoreBy", v); }catch(e){}
+}
+
+async function pcStoreIssue(){
+  const store = pcStoreCur, S = PC_STORES[store];
+  const v = await pcSheet({title:`صرف من ${S.name}`, icon:"fa-right-from-bracket", body:`
+    <label class="pc94-lb">الصنف</label>${pcStoreItemPicker(store)}
+    <label class="pc94-lb">الكمية (بوحدة الصنف)</label><input id="pc100Qty" class="pc93-name" type="text" inputmode="decimal" placeholder="0">
+    <label class="pc94-lb">السبب</label>
+    <select id="pc100Reason" class="pc93-name">${S.issueReasons.map(r=>`<option>${r}</option>`).join("")}</select>
+    <label class="pc94-lb">اسم المسؤول عن الصرف</label><input id="pc100By" class="pc93-name" maxlength="40" value="${escapeHtml(pcStoreByName())}">
+    <label class="pc94-lb">ملاحظة (اختياري)</label><input id="pc100Note" class="pc93-name" maxlength="120">`,
+    actions:[
+      {label:"تسجيل الصرف", kind:"btn-main", value:h=>({item:h.querySelector("#pc100Item").value, qty:h.querySelector("#pc100Qty").value,
+        reason:h.querySelector("#pc100Reason").value, by:h.querySelector("#pc100By").value.trim(), note:h.querySelector("#pc100Note").value.trim()})},
+      {label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  const cat = pcStorePicked(store, v.item);
+  const qty = Number(String(v.qty).replace(",", "."));
+  if(!cat){ showToast("اختر الصنف من القائمة","error"); return; }
+  if(!isFinite(qty) || qty <= 0){ showToast("اكتب كمية صحيحة أكبر من صفر","error"); return; }
+  if(!v.by){ showToast("اكتب اسم المسؤول عن الصرف","error"); return; }
+  const line = pcStoreLineFor(store, cat, qty);
+  const book = pcStoreBookOf(store, line.key);
+  if(qty > book && !(await pcConfirm(`الرصيد الدفتري ${pc60Num(book)} ${line.unit} أقل من الكمية المصروفة. سيصبح الرصيد سالبًا. هل تتابع؟`,{title:"رصيد غير كافٍ", okText:"تسجيل رغم ذلك"}))) return;
+  await pcStoreSave({store, type:"issue", reason:v.reason, by:v.by, note:v.note, lines:[line]}, "تم تسجيل الصرف");
+}
+
+async function pcStoreCount(){
+  const store = pcStoreCur, S = PC_STORES[store];
+  const v = await pcSheet({title:`جرد ${S.name}`, icon:"fa-clipboard-list", body:`
+    <p class="pc85-hint">اكتب الكمية الموجودة فعليًا على الرف. يسجّل النظام الفرق بين الدفتري والفعلي كتسوية جرد.</p>
+    <label class="pc94-lb">الصنف</label>${pcStoreItemPicker(store)}
+    <label class="pc94-lb">الكمية الفعلية (بوحدة الصنف)</label><input id="pc100Qty" class="pc93-name" type="text" inputmode="decimal" placeholder="0">
+    <label class="pc94-lb">اسم القائم بالجرد</label><input id="pc100By" class="pc93-name" maxlength="40" value="${escapeHtml(pcStoreByName())}">
+    <label class="pc94-lb">ملاحظة (اختياري)</label><input id="pc100Note" class="pc93-name" maxlength="120" placeholder="مثال: جرد افتتاحي">`,
+    actions:[
+      {label:"متابعة", kind:"btn-main", value:h=>({item:h.querySelector("#pc100Item").value, qty:h.querySelector("#pc100Qty").value,
+        by:h.querySelector("#pc100By").value.trim(), note:h.querySelector("#pc100Note").value.trim()})},
+      {label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  const cat = pcStorePicked(store, v.item);
+  const actual = Number(String(v.qty).replace(",", "."));
+  if(!cat){ showToast("اختر الصنف من القائمة","error"); return; }
+  if(String(v.qty).trim() === "" || !isFinite(actual) || actual < 0){ showToast("اكتب الكمية الفعلية (صفر أو أكثر)","error"); return; }
+  if(!v.by){ showToast("اكتب اسم القائم بالجرد","error"); return; }
+  const base = pcStoreLineFor(store, cat, actual);
+  const book = pcStoreBookOf(store, base.key);
+  const diff = pc70R(actual - book);
+  if(!(await pcConfirm(`${base.name}: الدفتري ${pc60Num(book)} · الفعلي ${pc60Num(actual)} · الفرق ${diff>=0?"+":""}${pc60Num(diff)} ${base.unit}`,{title:"تأكيد الجرد", okText:"اعتماد الجرد"}))) return;
+  await pcStoreSave({store, type:"count", by:v.by, note:v.note, lines:[{...base, qty:diff, book, actual}]},
+    diff ? "تم اعتماد الجرد وتسجيل الفرق" : "تم اعتماد الجرد — لا يوجد فرق");
+}
+
+async function pcStoreSave(rec, okMsg){
+  if(pc60Busy) return;
+  pc60Busy = true;
+  try{
+    pcStoreSaveBy(rec.by);
+    const {db,addDoc,collection,serverTimestamp} = window.firebaseDB;
+    const lines = rec.lines.map(l=>({key:l.key, itemId:l.itemId||"", code:l.code||"", name:l.name||"", unit:l.unit||"", qty:pc70R(l.qty),
+      ...(rec.type==="count" ? {book:pc70R(l.book), actual:pc70R(l.actual)} : {})}));
+    const now = Date.now();
+    await addDoc(collection(db,"branch_stock_moves"), {branchId:currentBranch, store:rec.store, type:rec.type, reason:rec.reason||"",
+      by:rec.by, note:rec.note||"", lines, createdAtMs:now, timeMs:now, createdAtText:nowText(), createdAt:serverTimestamp()});
+    showToast(okMsg);
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+  finally{ pc60Busy = false; pcDrawStore(); }
 }
 
 pcHydrate();

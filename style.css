@@ -4421,3 +4421,28 @@ button.pc70-unit{border:0;font:inherit;cursor:pointer}
 /* ===== V9.9 loading placeholder ===== */
 .pc97-sk{display:inline-block;width:26px;height:20px;border-radius:7px;background:linear-gradient(90deg,rgba(255,255,255,.14),rgba(255,255,255,.34),rgba(255,255,255,.14));background-size:200% 100%;animation:pc97 1.1s linear infinite;vertical-align:middle}
 @keyframes pc97{to{background-position:-200% 0}}
+
+/* ===== V10 Branch stores (raw / production) ===== */
+.pc100-page{display:flex;flex-direction:column;gap:12px}
+.pc100-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.pc100-acts{display:flex;gap:8px}
+.pc100-acts .btn{padding:9px 14px;font-size:14px;display:inline-flex;align-items:center;gap:6px}
+.pc100-since{color:var(--app-muted);font-size:12px;display:block;margin-top:2px}
+.pc100-search{margin:4px 0 8px}
+.pc100-warn{background:#FFF4E5;border:1px solid #F5C77E;color:#8A5A00;border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:8px}
+.pc100-list{display:flex;flex-direction:column;gap:8px}
+.pc100-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--app-surface);border:1px solid var(--app-line);border-radius:14px;padding:10px 14px}
+.pc100-row b{display:block;color:var(--app-ink);font-size:15px}
+.pc100-row small{color:var(--app-muted);font-size:12px}
+.pc100-row strong{font-size:17px;color:var(--app-brand-dark);white-space:nowrap;direction:ltr;unicode-bidi:isolate}
+.pc100-row strong em{font-style:normal;font-size:12px;color:var(--app-muted);font-weight:500}
+.pc100-row.neg{border-color:#F3B4B1;background:#FFF5F5}
+.pc100-row.neg strong{color:#C62828}
+.pc100-mov{display:flex;flex-direction:column;gap:8px}
+.pc100-mov small{display:block;line-height:1.6}
+.pc100-mov .pc100-note{color:#8A5A00}
+.pc100-mov time{font-size:11px;color:var(--app-muted);white-space:nowrap}
+.pc100-intro{background:var(--app-surface);border:1px solid var(--app-line);border-radius:18px;padding:22px 18px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px}
+.pc100-intro-ic{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--app-tint,#EEF6E6);color:var(--app-brand)}
+.pc100-intro p{color:var(--app-muted);font-size:14px;line-height:1.8;margin:0}
+.pc51-sheet-body select.pc93-name{width:100%}
