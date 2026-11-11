@@ -8007,8 +8007,9 @@ function pcHrDrawDocs(){
       <div><b>${escapeHtml(x.e.name)}</b> · <span>${escapeHtml(x.d.type)}</span>
         <small>${x.d.expiry ? `ينتهي ${pcHrDateText(x.d.expiry)}` : ""}${x.d.note?` · ${escapeHtml(x.d.note)}`:""}</small></div>
       <span class="pc103-acts"><em class="pc103-tag ${x.s.tone}">${x.s.t}</em>
+        ${x.d.hasFile ? `<button class="mini-btn" data-id="${escapeHtml(x.d.id)}" onclick="pcHrViewDocFile(this.dataset.id)"><i class="fa-solid fa-paperclip"></i> عرض</button>` : `<em class="pc103-tag muted">بدون صورة</em>`}
         <button class="mini-btn" data-id="${escapeHtml(x.d.id)}" onclick="pcHrAddDoc(this.dataset.id)">تعديل</button>
-        <button class="mini-danger" onclick="deleteDocByPath('hr_docs','${escapeHtml(x.d.id)}')">حذف</button></span>
+        <button class="mini-danger" data-id="${escapeHtml(x.d.id)}" onclick="pcHrDeleteDoc(this.dataset.id)">حذف</button></span>
     </div>`).join("")}</div>` : `<div class="placeholder">لا توجد مستندات مسجلة</div>`;
 }
 async function pcHrAddDoc(docId){
@@ -8019,17 +8020,99 @@ async function pcHrAddDoc(docId){
     <label class="pc94-lb">الموظف</label><select id="hrdEmp" class="pc93-name">${emps.map(e=>`<option value="${escapeHtml(e.id)}" ${cur&&cur.employeeId===e.id?"selected":""}>${escapeHtml(e.name)}</option>`).join("")}</select>
     <label class="pc94-lb">نوع المستند</label><select id="hrdType" class="pc93-name">${PC_HR_DOC_TYPES.map(t=>`<option ${cur&&cur.type===t?"selected":""}>${t}</option>`).join("")}</select>
     <label class="pc94-lb">تاريخ الانتهاء</label><input id="hrdExp" class="pc93-name" type="date" value="${escapeHtml(cur?.expiry||"")}">
-    <label class="pc94-lb">ملاحظة</label><input id="hrdNote" class="pc93-name" maxlength="120" value="${escapeHtml(cur?.note||"")}">`,
-    actions:[{label:"حفظ", kind:"btn-main", value:h=>({emp:h.querySelector("#hrdEmp").value, type:h.querySelector("#hrdType").value, expiry:h.querySelector("#hrdExp").value, note:h.querySelector("#hrdNote").value.trim()})},
+    <label class="pc94-lb">ملاحظة</label><input id="hrdNote" class="pc93-name" maxlength="120" value="${escapeHtml(cur?.note||"")}">
+    <label class="pc94-lb">صورة المستند <small>(صورة أو PDF)</small></label>
+    ${cur?.hasFile ? `<div class="pc104-cur"><span><i class="fa-solid fa-paperclip"></i> ${escapeHtml(cur.fileName||"مرفق")}</span>
+      <button type="button" class="mini-btn" data-id="${escapeHtml(cur.id)}" onclick="pcHrViewDocFile(this.dataset.id)">عرض</button>
+      <label class="pc104-rm"><input type="checkbox" id="hrdRemove"> حذف المرفق</label></div>` : ""}
+    <label class="pc104-drop"><input id="hrdFile" type="file" accept="image/*,application/pdf" onchange="pcHrFilePicked(this)">
+      <i class="fa-solid fa-camera"></i><span id="hrdFileName">${cur?.hasFile ? "اختر ملفًا لاستبدال المرفق الحالي" : "صوّر المستند أو اختر ملفًا"}</span></label>`,
+    actions:[{label:"حفظ", kind:"btn-main", value:h=>({emp:h.querySelector("#hrdEmp").value, type:h.querySelector("#hrdType").value, expiry:h.querySelector("#hrdExp").value, note:h.querySelector("#hrdNote").value.trim(),
+      file:h.querySelector("#hrdFile").files[0] || null, remove:!!h.querySelector("#hrdRemove")?.checked})},
       {label:"إلغاء", kind:"btn-light", value:null}]});
   if(!v) return;
   if(!v.expiry && !(await pcConfirm("حفظ المستند بدون تاريخ انتهاء؟ لن يظهر في التنبيهات.",{title:"بدون تاريخ", okText:"حفظ"}))) return;
-  const {db,addDoc,collection,doc,updateDoc} = window.firebaseDB;
+  const {db,addDoc,collection,doc,updateDoc,setDoc,deleteDoc} = window.firebaseDB;
   const data = {employeeId:v.emp, branchId:pcBranchOf(pcHrEmp(v.emp)), type:v.type, expiry:v.expiry, note:v.note, updatedAtMs:Date.now()};
+  let file = null;
+  if(v.file){
+    try{ file = await pcHrPrepareFile(v.file); }
+    catch(err){ showToast(err.message || "تعذر قراءة الملف","error"); return; }
+  }
   try{
-    if(cur) await updateDoc(doc(db,"hr_docs",cur.id), data); else await addDoc(collection(db,"hr_docs"), {...data, createdAtMs:Date.now()});
-    showToast("تم حفظ المستند");
-  }catch(err){ console.error(err); showToast("تعذر الحفظ","error"); }
+    let id = cur?.id;
+    if(cur) await updateDoc(doc(db,"hr_docs",id), data); else id = (await addDoc(collection(db,"hr_docs"), {...data, createdAtMs:Date.now()})).id;
+    if(file){
+      await setDoc(doc(db,"hr_doc_files",id), {...file, docId:id, employeeId:v.emp, uploadedAtMs:Date.now()});
+      await updateDoc(doc(db,"hr_docs",id), {hasFile:true, fileName:file.name, fileMime:file.mime, fileAtMs:Date.now()});
+    } else if(v.remove && cur?.hasFile){
+      await deleteDoc(doc(db,"hr_doc_files",id));
+      await updateDoc(doc(db,"hr_docs",id), {hasFile:false, fileName:"", fileMime:"", fileAtMs:0});
+    }
+    showToast(file ? "تم حفظ المستند والمرفق" : "تم حفظ المستند");
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+}
+
+/* ----- Document scans: stored one per document in hr_doc_files, loaded only when opened ----- */
+var PC_HR_FILE_MAX = 700000;
+function pcHrFilePicked(input){
+  const f = input.files && input.files[0], el = document.getElementById("hrdFileName");
+  if(el) el.textContent = f ? `${f.name} · ${Math.ceil(f.size/1024)} ك.ب` : "صوّر المستند أو اختر ملفًا";
+}
+function pcHrReadDataUrl(blob){
+  return new Promise((res,rej)=>{ const r = new FileReader(); r.onload = ()=>res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+}
+/* Images are scaled to at most 1800px and re-encoded as JPEG until they fit; PDFs are kept as-is if small enough. */
+async function pcHrPrepareFile(f){
+  const name = String(f.name||"مستند").slice(0,80);
+  if(f.type === "application/pdf"){
+    if(f.size > PC_HR_FILE_MAX * 0.74) throw new Error(`ملف PDF أكبر من ${Math.floor(PC_HR_FILE_MAX*0.74/1024)} ك.ب — صوّره كصورة بدلًا منه`);
+    return {name, mime:"application/pdf", dataUrl:await pcHrReadDataUrl(f), size:f.size};
+  }
+  if(!String(f.type).startsWith("image/")) throw new Error("نوع الملف غير مدعوم — اختر صورة أو PDF");
+  const url = URL.createObjectURL(f);
+  try{
+    const img = await new Promise((res,rej)=>{ const i = new Image(); i.onload = ()=>res(i); i.onerror = ()=>rej(new Error("تعذر قراءة الصورة")); i.src = url; });
+    let max = 1800, out = "";
+    for(let pass = 0; pass < 4 && (!out || out.length > PC_HR_FILE_MAX); pass++, max = Math.round(max*0.75)){
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas"); c.width = Math.round(img.width*k); c.height = Math.round(img.height*k);
+      const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0,0,c.width,c.height); g.drawImage(img,0,0,c.width,c.height);
+      let q = .85; out = c.toDataURL("image/jpeg", q);
+      while(out.length > PC_HR_FILE_MAX && q > .45){ q -= .1; out = c.toDataURL("image/jpeg", q); }
+    }
+    if(out.length > PC_HR_FILE_MAX) throw new Error("الصورة كبيرة جدًا — صوّرها بدقة أقل");
+    return {name:name.replace(/\.[^.]+$/,"") + ".jpg", mime:"image/jpeg", dataUrl:out, size:Math.round(out.length*0.75)};
+  } finally { URL.revokeObjectURL(url); }
+}
+async function pcHrViewDocFile(id){
+  const d = pcHrList("hrDocs", hrDocs).find(x=>x.id===id);
+  try{
+    const {db,doc,getDoc} = window.firebaseDB;
+    const snap = await getDoc(doc(db,"hr_doc_files",id));
+    if(!snap.exists()){ showToast("المرفق غير موجود","error"); return; }
+    const f = snap.data();
+    const blob = await (await fetch(f.dataUrl)).blob();
+    const href = URL.createObjectURL(blob);
+    const e = d ? pcHrEmp(d.employeeId) : null;
+    await pcSheet({title:`${d?.type||"مستند"}${e?` · ${e.name}`:""}`, icon:"fa-file-image", body:
+      f.mime === "application/pdf"
+        ? `<p class="pc85-hint">ملف PDF — ${escapeHtml(f.name||"")}</p><a class="btn btn-main pc104-open" href="${href}" target="_blank" rel="noopener">فتح الملف</a>`
+        : `<img class="pc104-img" src="${href}" alt="${escapeHtml(d?.type||"مستند")}"><a class="btn btn-light pc104-open" href="${href}" target="_blank" rel="noopener">فتح بالحجم الكامل</a>`,
+      actions:[{label:"إغلاق", kind:"btn-light", value:null}]});
+    setTimeout(()=>URL.revokeObjectURL(href), 60000);
+  }catch(err){ console.error(err); showToast("تعذر فتح المرفق، تحقق من الاتصال","error"); }
+}
+async function pcHrDeleteDoc(id){
+  const d = pcHrList("hrDocs", hrDocs).find(x=>x.id===id);
+  if(!d) return;
+  if(!(await pcConfirm(`حذف ${d.type}${d.hasFile ? " ومرفقه" : ""} نهائيًا؟`,{danger:true}))) return;
+  const {db,doc,deleteDoc} = window.firebaseDB;
+  try{
+    if(d.hasFile) await deleteDoc(doc(db,"hr_doc_files",id));
+    await deleteDoc(doc(db,"hr_docs",id));
+    showToast("تم حذف المستند");
+  }catch(err){ console.error(err); showToast("تعذر الحذف","error"); }
 }
 
 /* =========================== Branch attendance kiosk =========================== */

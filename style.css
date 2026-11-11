@@ -4514,3 +4514,13 @@ button.pc70-unit{border:0;font:inherit;cursor:pointer}
 .pc103-kiosk button.in{border-color:#9BD07A;background:#F3FAEE}
 .pc103-kiosk button.in em{background:#B42318}
 .pc103-roles{margin-bottom:12px;flex-wrap:wrap}
+.pc104-drop{display:flex;align-items:center;gap:10px;border:1.5px dashed var(--app-line);border-radius:14px;padding:14px;cursor:pointer;color:var(--app-muted);font-size:14px;background:var(--app-bg,#F6F7F2)}
+.pc104-drop input{position:absolute;opacity:0;width:1px;height:1px}
+.pc104-drop i{font-size:20px;color:var(--app-brand)}
+.pc104-drop:focus-within{outline:2px solid var(--app-brand);outline-offset:2px}
+.pc104-cur{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px;font-size:13px}
+.pc104-cur span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pc104-rm{display:inline-flex;align-items:center;gap:4px;color:#B42318;font-size:12px}
+.pc104-rm input{width:auto;margin:0}
+.pc104-img{display:block;max-width:100%;max-height:60vh;margin:0 auto 10px;border-radius:12px;border:1px solid var(--app-line)}
+.pc104-open{display:block;text-align:center;text-decoration:none}
