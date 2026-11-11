@@ -402,28 +402,39 @@ function drawSections(){
       <i class="fa-solid fa-chevron-left pc94-chev"></i></button>`).join("")}</section>` : `<div class="placeholder">لا توجد أقسام</div>`;
 }
 
-function renderSettingsChefs(){pcSettingsEnter();settingsShell("chefs","إدارة الشيفات",`${pcSettingsBar("renderSettingsChefs")}<div class="premium-toolbar"><input id="chefSettingsSearch" placeholder="بحث باسم الشيف أو القسم" oninput="drawChefs()"><button class="btn btn-main" onclick="document.getElementById('chefForm').classList.toggle('hide')">إضافة شيف</button></div><div id="chefForm" class="premium-form hide"><label>اسم الشيف</label><input id="chefName" placeholder="مثال: أحمد"><label>القسم</label><select id="chefSection"></select><button class="btn btn-main" onclick="addChef()">حفظ الشيف</button></div><div id="chefsContainer" class="premium-table-wrap"></div>`);drawChefSectionOptions();drawChefs();}
+function renderSettingsChefs(){pcSettingsEnter();settingsShell("chefs","إدارة الشيفات",`${pcSettingsBar("renderSettingsChefs")}<div class="premium-toolbar"><input id="chefSettingsSearch" placeholder="بحث باسم الشيف أو القسم" oninput="drawChefs()"><button class="btn btn-main" onclick="document.getElementById('chefForm').classList.toggle('hide')">إضافة شيف</button></div><div id="chefForm" class="premium-form hide"><label>اسم الشيف</label><input id="chefName" placeholder="مثال: أحمد"><label>الفرع</label><select id="chefBranch" onchange="drawChefSectionOptions()"></select><label>القسم</label><select id="chefSection"></select><button class="btn btn-main" onclick="addChef()">حفظ الشيف</button></div><div id="chefsContainer" class="premium-table-wrap"></div>`);drawChefSectionOptions();drawChefs();}
 
 function drawChefSectionOptions(){
+  const bsel=document.getElementById("chefBranch");
+  if(bsel && !bsel.options.length){
+    bsel.innerHTML = pcActiveBranches().map(b=>`<option value="${escapeHtml(b.id)}">${escapeHtml(b.name||"")}</option>`).join("");
+    bsel.value = pcActiveBranches().some(b=>b.id===settingsBranch) ? settingsBranch : (pcActiveBranches()[0]?.id || "main");
+  }
   const select=document.getElementById("chefSection");
   if(!select) return;
-  select.innerHTML = chefSections.length ? chefSections.map(s=>`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join("") : `<option value="">لا توجد أقسام في هذا الفرع</option>`;
+  const branchId = bsel?.value || settingsBranch;
+  const names = [...new Set((pcRaw.chefSections||chefSections||[]).filter(s=>pcBranchOf(s)===branchId).map(s=>String(s.name||"").trim()).filter(Boolean))];
+  select.innerHTML = names.length ? names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("") : `<option value="">لا توجد أقسام في هذا الفرع</option>`;
 }
 
 async function addChef(){
   const name=document.getElementById("chefName").value.trim();
   const section=document.getElementById("chefSection").value;
-  if(!name||!section) return;
-  if(chefs.some(c=>c.name===name && c.section===section)){
+  const branchId=document.getElementById("chefBranch")?.value || settingsBranch;
+  if(!name){ showToast("اكتب اسم الشيف","error"); return; }
+  if(!branchId){ showToast("اختر الفرع","error"); return; }
+  if(!section){ showToast("اختر القسم — لا توجد أقسام في هذا الفرع","error"); return; }
+  if((pcRaw.chefs||chefs).some(c=>c.name===name && c.section===section && pcBranchOf(c)===branchId)){
     showToast("الاسم موجود في هذا القسم","error");
     return;
   }
   const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
-  await addDoc(collection(db,"chefs"),{name,section,branchId:settingsBranch,createdAt:serverTimestamp()});
+  await addDoc(collection(db,"chefs"),{name,section,branchId,createdAt:serverTimestamp()});
   document.getElementById("chefName").value="";
+  showToast(`تمت إضافة ${name} إلى ${section} · ${pcBranchName(branchId)}`);
 }
 
-function drawChefs(){const box=document.getElementById("chefsContainer"); if(!box)return; const q=(document.getElementById("chefSettingsSearch")?.value||"").trim().toLowerCase(); const list=chefs.filter(c=>String(c.name||"").toLowerCase().includes(q)||String(c.section||"").toLowerCase().includes(q)); box.innerHTML=list.length?`<table class="premium-table"><thead><tr><th>الشيف</th><th>القسم</th><th>إجراء</th></tr></thead><tbody>${list.map(c=>`<tr><td><b>${escapeHtml(c.name||"")}</b></td><td>${escapeHtml(c.section||"")}</td><td><button class="mini-danger" onclick="deleteDocByPath('chefs','${c.id}')">حذف</button></td></tr>`).join("")}</tbody></table>`:`<div class="placeholder">لا يوجد شيفات</div>`;}
+function drawChefs(){const box=document.getElementById("chefsContainer"); if(!box)return; const q=(document.getElementById("chefSettingsSearch")?.value||"").trim().toLowerCase(); const list=chefs.filter(c=>String(c.name||"").toLowerCase().includes(q)||String(c.section||"").toLowerCase().includes(q)); box.innerHTML=list.length?`<table class="premium-table"><thead><tr><th>الشيف</th><th>الفرع</th><th>القسم</th><th>إجراء</th></tr></thead><tbody>${list.map(c=>`<tr><td><b>${escapeHtml(c.name||"")}</b></td><td>${escapeHtml(pcBranchName(pcBranchOf(c)))}</td><td>${escapeHtml(c.section||"")}</td><td><button class="mini-danger" onclick="deleteDocByPath('chefs','${c.id}')">حذف</button></td></tr>`).join("")}</tbody></table>`:`<div class="placeholder">لا يوجد شيفات</div>`;}
 
 function renderSettingsWarehouseItems(){settingsShell("warehouse","أصناف المستودع",`<div class="premium-toolbar"><input id="warehouseSearch" placeholder="بحث بالكود أو العربي أو English" oninput="drawWarehouseItems()"><button class="btn btn-main" onclick="document.getElementById('warehouseItemForm').classList.toggle('hide')">إضافة صنف</button><button class="btn btn-light" onclick="openSettingsTab('excel')">استيراد Excel</button><button class="btn btn-light" onclick="exportWarehouseCSV()">تصدير Excel</button></div><div id="warehouseItemForm" class="premium-form hide"><label>الكود اختياري</label><input id="warehouseItemCode" placeholder="مثال: 4016"><label>اسم الصنف عربي / English</label><input id="warehouseItemName" placeholder="مثال: بصل برياني / Onion Biryani"><label>الوحدة</label><select id="warehouseItemUnit"><option>كجم</option><option>جرام</option><option>لتر</option><option>مل</option><option>حبة</option><option>علبة</option><option>كيس</option><option>كرتون</option><option>صندوق</option><option>ربطة</option></select><label>التصنيف (اختياري، يُخمَّن تلقائياً إن تُرك فارغاً)</label><input id="warehouseItemCategory" list="warehouseCatList" placeholder="مثال: لحوم ودواجن"><label>الكمية المتاحة (اختياري، يظهر للمستودع ويُخصم عند الصرف)</label><input id="warehouseItemStock" type="number" min="0" step="any" inputmode="decimal" placeholder="اتركها فارغة إن لم تريد التتبع"><datalist id="warehouseCatList">${PC70_CATS.map(c=>`<option value="${c[0]}">`).join("")}</datalist><button class="btn btn-main" onclick="addWarehouseItem()">حفظ الصنف</button></div><div id="warehouseItemsContainer" class="premium-table-wrap"></div>`);drawWarehouseItems();}
 
@@ -1733,7 +1744,6 @@ function pc21GoSection(type){
 
 var PC18_NAV = [
   ["home","fa-house","الرئيسية","renderHome()"],
-  ["chefs","fa-utensils","الشيفات","renderChefs()"],
   ["cleaning","fa-broom","النظافة","renderCleaning()"],
   ["operations","fa-gears","التشغيل","renderOperations()"]];
 function pc18BottomNav(active="home"){
@@ -4443,15 +4453,16 @@ function pc60Empty(icon, text){
 function renderChefs(){
   currentChef = null;
   const many = pcActiveBranches().length > 1;
+  if(!pcActiveBranches().some(b=>b.id === currentBranch)) currentBranch = pcActiveBranches()[0]?.id || "main";
+  pcSetScope(currentBranch);
   pageLayout("الشيفات", `
-    ${pc60Bar({title:"الشيفات", sub:many ? pcBranchName(currentBranch) : "اختر قسمك للدخول", back:"renderHome()",
-      trailing:many ? `<button type="button" class="pc60-back" onclick="renderBranches()" aria-label="تغيير الفرع"><i class="fa-solid fa-building"></i></button>` : ""})}
+    ${pc60Bar({title:"الشيفات", sub:"اختر فرعك ثم قسمك", back:"renderGateway()"})}
     <section class="pc60-page">
-      <div class="pc50-section-title"><h2>الأقسام</h2>${pcViewToggle("chefsec")}</div>
+      ${many ? `<div class="pc60-chips pc101-branches">${pcActiveBranches().map(b=>`<button type="button" class="pc60-fchip ${b.id===currentBranch?"active":""}" data-b="${escapeHtml(b.id)}" onclick="pcChefsBranch(this.dataset.b)">${escapeHtml(b.name||"")}</button>`).join("")}</div>` : ""}
+      <div class="pc50-section-title"><h2>الأقسام · ${escapeHtml(pcBranchName(currentBranch))}</h2>${pcViewToggle("chefsec")}</div>
       <div id="chefSectionsView"></div>
     </section>
-    ${pc18BottomNav("chefs")}
-  `,"renderHome()");
+  `,"renderGateway()");
   drawChefSectionsView();
 }
 
@@ -6232,7 +6243,6 @@ function pc61HomeHtml(){
 
     <div class="pc50-section-title"><h2>الأقسام</h2>${pcViewToggle("home")}</div>
     <section class="pc50-grid ${mode==="list"?"is-list":""}" data-view-scope="home">
-      ${pc61Card("fa-utensils","الشيفات",chSub,"renderChefs()", s.pending ? s.pending : "", s.pending ? "warn" : "")}
       ${pc61Card("fa-broom","النظافة",clSub,"renderCleaning()", s.cs.missing ? s.cs.missing : "", s.cs.missing ? "warn" : "")}
       ${pc61Card("fa-gears","التشغيل",opSub,"renderOperations()", s.os.missing ? s.os.missing : "", s.os.missing ? "warn" : "")}
       ${pcStoreHomeCard()}
@@ -6598,6 +6608,7 @@ function renderGateway(){
   currentChef = null;
   const doors = [
     ["fa-building","pc94-g","الفروع","جميع الفروع، ادخل أي فرع","renderBranches()"],
+    ["fa-utensils","pc94-c","الشيفات","ادخل باسمك من أي فرع","renderChefsHub()"],
     ["fa-gear","pc94-s","الإعدادات","كل إعدادات النظام","renderSettingsGate()"],
     ["fa-shield-halved","pc94-o","الإدارة","جميع البيانات والتقارير","renderAdminGate()"],
     ["fa-boxes-stacked","pc94-w","المستودع","استقبال الطلبات والإشراف عليها","renderWarehouseGate()"]];
@@ -7383,6 +7394,17 @@ async function pcStoreSave(rec, okMsg){
     showToast(okMsg);
   }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
   finally{ pc60Busy = false; pcDrawStore(); }
+}
+
+/* ----- Chefs entry from the main screen (outside branches) ----- */
+function renderChefsHub(){
+  if(!pcActiveBranches().some(b=>b.id === currentBranch)) currentBranch = pcActiveBranches()[0]?.id || "main";
+  renderChefs();
+}
+function pcChefsBranch(id){
+  currentBranch = id;
+  pcSetScope(id);
+  renderChefs();
 }
 
 /* ----- New warehouse order from inside a section ----- */
