@@ -402,7 +402,7 @@ function drawSections(){
       <i class="fa-solid fa-chevron-left pc94-chev"></i></button>`).join("")}</section>` : `<div class="placeholder">لا توجد أقسام</div>`;
 }
 
-function renderSettingsChefs(){pcSettingsEnter();settingsShell("chefs","إدارة الشيفات",`${pcSettingsBar("renderSettingsChefs")}<div class="premium-toolbar"><input id="chefSettingsSearch" placeholder="بحث باسم الشيف أو القسم" oninput="drawChefs()"><button class="btn btn-main" onclick="document.getElementById('chefForm').classList.toggle('hide')">إضافة شيف</button></div><div id="chefForm" class="premium-form hide"><label>اسم الشيف</label><input id="chefName" placeholder="مثال: أحمد"><label>الفرع</label><select id="chefBranch" onchange="drawChefSectionOptions()"></select><label>القسم</label><select id="chefSection"></select><button class="btn btn-main" onclick="addChef()">حفظ الشيف</button></div><div id="chefsContainer" class="premium-table-wrap"></div>`);drawChefSectionOptions();drawChefs();}
+function renderSettingsChefs(){pcSettingsEnter();settingsShell("chefs","إدارة الشيفات",`${pcSettingsBar("renderSettingsChefs")}<div class="premium-toolbar"><input id="chefSettingsSearch" placeholder="بحث باسم الشيف أو القسم" oninput="drawChefs()"><button class="btn btn-main" onclick="document.getElementById('chefForm').classList.toggle('hide')">إضافة شيف</button></div><div id="chefForm" class="premium-form hide"><label>اسم الشيف</label><input id="chefName" placeholder="مثال: أحمد"><label>الفرع</label><select id="chefBranch" onchange="drawChefSectionOptions()"></select><label>القسم</label><select id="chefSection"></select>${pcChefExtraFields("chef",{})}<button class="btn btn-main" onclick="addChef()">حفظ الشيف</button></div><div id="chefsContainer" class="premium-table-wrap"></div>`);drawChefSectionOptions();drawChefs();}
 
 function drawChefSectionOptions(){
   const bsel=document.getElementById("chefBranch");
@@ -428,13 +428,16 @@ async function addChef(){
     showToast("الاسم موجود في هذا القسم","error");
     return;
   }
+  const extra = pcChefExtraRead("chef");
+  if(extra.error){ showToast(extra.error,"error"); return; }
   const {db,addDoc,collection,serverTimestamp}=window.firebaseDB;
-  await addDoc(collection(db,"chefs"),{name,section,branchId,createdAt:serverTimestamp()});
+  await addDoc(collection(db,"chefs"),{name,section,branchId,...extra.data,createdAt:serverTimestamp()});
   document.getElementById("chefName").value="";
+  pcChefExtraClear("chef");
   showToast(`تمت إضافة ${name} إلى ${section} · ${pcBranchName(branchId)}`);
 }
 
-function drawChefs(){const box=document.getElementById("chefsContainer"); if(!box)return; const q=(document.getElementById("chefSettingsSearch")?.value||"").trim().toLowerCase(); const list=chefs.filter(c=>String(c.name||"").toLowerCase().includes(q)||String(c.section||"").toLowerCase().includes(q)); box.innerHTML=list.length?`<table class="premium-table"><thead><tr><th>الشيف</th><th>الفرع</th><th>القسم</th><th>إجراء</th></tr></thead><tbody>${list.map(c=>`<tr><td><b>${escapeHtml(c.name||"")}</b></td><td>${escapeHtml(pcBranchName(pcBranchOf(c)))}</td><td>${escapeHtml(c.section||"")}</td><td><button class="mini-btn" data-id="${escapeHtml(c.id)}" onclick="pcEditChef(this.dataset.id)">تعديل</button> <button class="mini-danger" onclick="deleteDocByPath('chefs','${c.id}')">حذف</button></td></tr>`).join("")}</tbody></table>`:`<div class="placeholder">لا يوجد شيفات</div>`;}
+function drawChefs(){const box=document.getElementById("chefsContainer"); if(!box)return; const q=(document.getElementById("chefSettingsSearch")?.value||"").trim().toLowerCase(); const list=chefs.filter(c=>String(c.name||"").toLowerCase().includes(q)||String(c.section||"").toLowerCase().includes(q)); box.innerHTML=list.length?`<table class="premium-table"><thead><tr><th>الشيف</th><th>الفرع</th><th>القسم</th><th>الرقم الوظيفي</th><th>الدوام</th><th>الجوال</th><th>إجراء</th></tr></thead><tbody>${list.map(c=>`<tr><td><b>${escapeHtml(c.name||"")}</b>${c.email?`<br><small dir="ltr">${escapeHtml(c.email)}</small>`:""}</td><td>${escapeHtml(pcBranchName(pcBranchOf(c)))}</td><td>${escapeHtml(c.section||"")}</td><td>${escapeHtml(c.odooEmployeeId||"—")}</td><td>${pcChefShiftText(c)}</td><td dir="ltr">${escapeHtml(c.phone||"—")}</td><td><button class="mini-btn" data-id="${escapeHtml(c.id)}" onclick="pcEditChef(this.dataset.id)">تعديل</button> <button class="mini-danger" onclick="deleteDocByPath('chefs','${c.id}')">حذف</button></td></tr>`).join("")}</tbody></table>`:`<div class="placeholder">لا يوجد شيفات</div>`;}
 
 function renderSettingsWarehouseItems(){settingsShell("warehouse","أصناف المستودع",`<div class="premium-toolbar"><input id="warehouseSearch" placeholder="بحث بالكود أو العربي أو English" oninput="drawWarehouseItems()"><button class="btn btn-main" onclick="document.getElementById('warehouseItemForm').classList.toggle('hide')">إضافة صنف</button><button class="btn btn-light" onclick="openSettingsTab('excel')">استيراد Excel</button><button class="btn btn-light" onclick="exportWarehouseCSV()">تصدير Excel</button></div><div id="warehouseItemForm" class="premium-form hide"><label>الكود اختياري</label><input id="warehouseItemCode" placeholder="مثال: 4016"><label>اسم الصنف عربي / English</label><input id="warehouseItemName" placeholder="مثال: بصل برياني / Onion Biryani"><label>الوحدة</label><select id="warehouseItemUnit"><option>كجم</option><option>جرام</option><option>لتر</option><option>مل</option><option>حبة</option><option>علبة</option><option>كيس</option><option>كرتون</option><option>صندوق</option><option>ربطة</option></select><label>التصنيف (اختياري، يُخمَّن تلقائياً إن تُرك فارغاً)</label><input id="warehouseItemCategory" list="warehouseCatList" placeholder="مثال: لحوم ودواجن"><label>الكمية المتاحة (اختياري، يظهر للمستودع ويُخصم عند الصرف)</label><input id="warehouseItemStock" type="number" min="0" step="any" inputmode="decimal" placeholder="اتركها فارغة إن لم تريد التتبع"><datalist id="warehouseCatList">${PC70_CATS.map(c=>`<option value="${c[0]}">`).join("")}</datalist><button class="btn btn-main" onclick="addWarehouseItem()">حفظ الصنف</button></div><div id="warehouseItemsContainer" class="premium-table-wrap"></div>`);drawWarehouseItems();}
 
@@ -7392,6 +7395,39 @@ async function pcStoreSave(rec, okMsg){
   finally{ pc60Busy = false; pcDrawStore(); }
 }
 
+/* ----- Chef contact, Odoo employee number and shift times ----- */
+var PC_CHEF_EXTRA = [
+  {k:"email",          label:"البريد الإلكتروني", type:"email", ph:"name@example.com", dir:"ltr"},
+  {k:"phone",          label:"رقم الجوال",       type:"tel",   ph:"05xxxxxxxx",        dir:"ltr"},
+  {k:"odooEmployeeId", label:"الرقم الوظيفي على أودو", type:"text", ph:"مثال: 1024",   dir:"ltr"},
+  {k:"shiftStart",     label:"موعد الحضور",       type:"time"},
+  {k:"shiftEnd",       label:"موعد الانصراف",     type:"time"}];
+function pcChefExtraFields(prefix, c, sheet){
+  const lb = sheet ? `class="pc94-lb"` : "";
+  const cls = sheet ? `class="pc93-name"` : "";
+  const f = x=>`<label ${lb}>${x.label} <small>(اختياري)</small></label><input id="${prefix}_${x.k}" ${cls} type="${x.type}" ${x.dir?`dir="${x.dir}"`:""} ${x.ph?`placeholder="${escapeHtml(x.ph)}"`:""} value="${escapeHtml(c[x.k]||"")}" autocomplete="off">`;
+  const [email, phone, emp, st, en] = PC_CHEF_EXTRA;
+  return `${f(email)}${f(phone)}${f(emp)}<div class="pc102-shift"><div>${f(st)}</div><div>${f(en)}</div></div>`;
+}
+function pcChefExtraRead(prefix){
+  const data = {};
+  PC_CHEF_EXTRA.forEach(x=>{ data[x.k] = String(document.getElementById(`${prefix}_${x.k}`)?.value || "").trim(); });
+  data.phone = data.phone.replace(/[\s-]/g, "");
+  if(data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) return {error:"البريد الإلكتروني غير صحيح", data};
+  if(data.phone && !/^\+?\d{7,15}$/.test(data.phone)) return {error:"رقم الجوال غير صحيح — أرقام فقط (7 إلى 15 رقمًا)", data};
+  if((data.shiftStart && !data.shiftEnd) || (!data.shiftStart && data.shiftEnd)) return {error:"اكتب موعد الحضور والانصراف معًا", data};
+  return {data};
+}
+function pcChefExtraClear(prefix){
+  PC_CHEF_EXTRA.forEach(x=>{ const el = document.getElementById(`${prefix}_${x.k}`); if(el) el.value = ""; });
+}
+function pcChefShiftText(c){
+  if(!c.shiftStart || !c.shiftEnd) return "—";
+  const fmt = t=>{ const [h,m] = String(t).split(":").map(Number); const ap = h < 12 ? "ص" : "م"; return `${((h+11)%12)+1}:${String(m).padStart(2,"0")} ${ap}`; };
+  const overnight = c.shiftEnd <= c.shiftStart;
+  return `${fmt(c.shiftStart)} – ${fmt(c.shiftEnd)}${overnight ? " <small>(لليوم التالي)</small>" : ""}`;
+}
+
 /* ----- Edit a chef from settings (name, branch, section) ----- */
 function pcChefSecNames(branchId){
   return [...new Set((pcRaw.chefSections||chefSections||[]).filter(s=>pcBranchOf(s)===branchId).map(s=>String(s.name||"").trim()).filter(Boolean))];
@@ -7413,20 +7449,23 @@ async function pcEditChef(id){
     <select id="pc102Branch" class="pc93-name" onchange="pcEditChefSecs()">${pcActiveBranches().map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===curB?"selected":""}>${escapeHtml(b.name||"")}</option>`).join("")}</select>
     <label class="pc94-lb">القسم</label>
     <select id="pc102Sec" class="pc93-name">${pcChefSecNames(curB).map(n=>`<option value="${escapeHtml(n)}" ${n===String(c.section||"").trim()?"selected":""}>${escapeHtml(n)}</option>`).join("")}</select>
+    ${pcChefExtraFields("pc102", c, true)}
     <p class="pc85-hint">السجلات السابقة (الإنتاج والطلبات والهدر) تبقى على القسم والفرع اللذين سُجّلت عليهما.</p>`,
     actions:[
-      {label:"حفظ التعديل", kind:"btn-main", value:h=>({name:h.querySelector("#pc102Name").value.trim(), branchId:h.querySelector("#pc102Branch").value, section:h.querySelector("#pc102Sec").value})},
+      {label:"حفظ التعديل", kind:"btn-main", value:h=>({name:h.querySelector("#pc102Name").value.trim(), branchId:h.querySelector("#pc102Branch").value, section:h.querySelector("#pc102Sec").value, extra:pcChefExtraRead("pc102")})},
       {label:"إلغاء", kind:"btn-light", value:null}]});
   if(!v) return;
   if(!v.name){ showToast("اكتب اسم الشيف","error"); return; }
   if(!v.section){ showToast("اختر القسم — لا توجد أقسام في هذا الفرع","error"); return; }
+  if(v.extra.error){ showToast(v.extra.error,"error"); return; }
   if((pcRaw.chefs||chefs).some(x=>x.id!==id && x.name===v.name && x.section===v.section && pcBranchOf(x)===v.branchId)){
     showToast("يوجد شيف بنفس الاسم في هذا القسم","error"); return;
   }
-  if(v.name===c.name && v.section===c.section && v.branchId===curB){ showToast("لا يوجد تغيير"); return; }
+  const sameExtra = Object.keys(v.extra.data).every(k=>String(v.extra.data[k]||"")===String(c[k]||""));
+  if(v.name===c.name && v.section===c.section && v.branchId===curB && sameExtra){ showToast("لا يوجد تغيير"); return; }
   try{
     const {db,doc,updateDoc} = window.firebaseDB;
-    await updateDoc(doc(db,"chefs",id), {name:v.name, section:v.section, branchId:v.branchId, updatedAtMs:Date.now()});
+    await updateDoc(doc(db,"chefs",id), {name:v.name, section:v.section, branchId:v.branchId, ...v.extra.data, updatedAtMs:Date.now()});
     showToast("تم حفظ بيانات الشيف");
   }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
 }
