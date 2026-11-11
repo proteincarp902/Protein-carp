@@ -1320,6 +1320,7 @@ async function submitWarehouseOrderCore(){
   });
   currentCart=[];
   showToast("تم إرسال الطلب للمستودع");
+  if(pcStoreBackFromOrder()) return;
   renderChefDashboard(currentChef);
 }
 
@@ -7207,6 +7208,7 @@ function pcDrawStore(){
   const store = pcStoreCur;
   const y = window.scrollY;
   const head = `
+    <button type="button" class="btn btn-main pc100-new" onclick="pcStoreNewOrder()"><i class="fa-solid fa-cart-plus"></i> طلب جديد من المستودع</button>
     <div class="pc100-seg" role="tablist">
       ${["raw","prod"].map(st=>`<button type="button" role="tab" class="${store===st?"active":""}" onclick="pcStoreCur='${st}';pcStoreQ='';pcDrawStore()">
         <i class="fa-solid ${PC_STORES[st].icon}"></i> ${PC_STORES[st].name}</button>`).join("")}
@@ -7381,6 +7383,32 @@ async function pcStoreSave(rec, okMsg){
     showToast(okMsg);
   }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
   finally{ pc60Busy = false; pcDrawStore(); }
+}
+
+/* ----- New warehouse order from inside a section ----- */
+var pcStoreOrderRet = null;
+function pcStoreSecChefs(){
+  return pcStoreMine(pcStoreRawList("chefs", chefs)).filter(c=>String(c.section||"").trim() === pcStoreSec);
+}
+async function pcStoreNewOrder(){
+  const list = pcStoreSecChefs();
+  if(!list.length){ showToast("لا يوجد شيف في هذا القسم — أضفه من الإعدادات","error"); return; }
+  let chef = list[0];
+  if(list.length > 1){
+    chef = await pcSheet({title:"من صاحب الطلب؟", icon:"fa-user", body:`<p class="pc85-hint">القسم: <b>${escapeHtml(pcStoreSec)}</b></p>`,
+      actions:[...list.map(c=>({label:c.name||"شيف", kind:"btn-light", value:c})), {label:"إلغاء", kind:"btn-light", value:null}]});
+    if(!chef) return;
+  }
+  currentChef = chef;
+  pcStoreOrderRet = {chefId:chef.id, sec:pcStoreSec, store:pcStoreCur, branch:currentBranch, at:Date.now()};
+  renderWarehouseRequest();
+}
+function pcStoreBackFromOrder(){
+  const r = pcStoreOrderRet;
+  pcStoreOrderRet = null;
+  if(!r || !currentChef || r.chefId !== currentChef.id || r.branch !== currentBranch || Date.now() - r.at > 30*60e3) return false;
+  renderBranchStore(r.sec, r.store);
+  return true;
 }
 
 pcHydrate();
