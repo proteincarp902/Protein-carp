@@ -8273,12 +8273,30 @@ function pcEmpChef(e){ return pcHrList("chefs", chefs).find(c=>!c.inactive && (c
 function pcEmpTopHtml(e){
   const open = pcHrOpenRecord(e.id);
   const chef = e.role === "شيف" ? pcEmpChef(e) : null;
-  return `<div class="pc105-me">
-    <button type="button" class="pc105-punch ${open?"in":""}" data-id="${escapeHtml(e.id)}" onclick="pcHrPunch(this.dataset.id).then(()=>pcEmpHome())">
-      <i class="fa-solid fa-user-clock"></i><span><b>${open ? "تسجيل انصراف" : "تسجيل حضور"}</b><small>${open ? `حاضر منذ ${pcHrClock(open.inMs)}` : (e.shiftStart ? `الدوام ${pcChefShiftText(e)}` : "")}</small></span></button>
-    ${chef ? `<button type="button" class="pc105-dash" data-id="${escapeHtml(chef.id)}" onclick="pcEnterChef(this.dataset.id)"><i class="fa-solid fa-kitchen-set"></i><span><b>لوحة الشيف</b><small>الإنتاج والهدر وطلباتي</small></span></button>` : ""}
-  </div>
-  ${chef ? `<button type="button" class="btn btn-main pc100-new" onclick="pcStoreNewOrder()"><i class="fa-solid fa-cart-plus"></i> طلب جديد من المستودع</button>` : ""}`;
+  const punch = `<button type="button" class="pc105-punch ${open?"in":""}" data-id="${escapeHtml(e.id)}" onclick="pcHrPunch(this.dataset.id).then(()=>pcEmpHome())">
+      <i class="fa-solid fa-user-clock"></i><span><b>${open ? "انصراف" : "حضور"}</b><small>${open ? `منذ ${pcHrClock(open.inMs)}` : (e.shiftStart ? pcChefShiftText(e).replace(/<[^>]+>/g,"") : "")}</small></span></button>`;
+  if(!chef) return `<div class="pc105-me is-solo">${punch}</div>`;
+  return `<div class="pc105-me">${pcEmpChefChips(chef, punch)}</div>`;
+}
+
+/* Chef tools shown as chips beside attendance on the employee's home. */
+function pcEmpChefChips(chef, lead){
+  if(!currentChef || currentChef.id !== chef.id){ currentChef = chef; productionDraft = productionDraft || []; currentCart = currentCart || []; }
+  const draft = (productionDraft||[]).length, cart = (currentCart||[]).length;
+  const ready = pc60ChefOrders().filter(o=>o.status==="جاهز").length;
+  const chips = [
+    ["today","fa-house","اليوم",0], ["production","fa-chart-line","إنتاج",draft], ["waste","fa-trash-can","هدر",0],
+    ["request","fa-cart-shopping","طلب",cart], ["orders","fa-clipboard-list","طلباتي",ready]];
+  return `<div class="pc105-chips" role="group" aria-label="أدوات الشيف">${lead||""}${chips.map(c=>`
+    <button type="button" onclick="pcEmpGo('${c[0]}')"><i class="fa-solid ${c[1]}"></i><span>${c[2]}</span>${c[3]?`<em class="pc60-badge${c[0]==="orders"?" hot":""}">${c[3]}</em>`:""}</button>`).join("")}</div>`;
+}
+function pcEmpGo(tab){
+  const e = pcEmpCurrent();
+  const chef = e && pcEmpChef(e);
+  if(!chef){ showToast("لا يوجد حساب شيف مرتبط بك","error"); return; }
+  currentChef = chef; pc60SeenStatus = null;
+  if(tab === "request"){ pcStoreOrderRet = {chefId:chef.id, sec:pcStoreSec, store:pcStoreCur, branch:currentBranch, at:Date.now()}; return renderWarehouseRequest(); }
+  ({today:()=>renderChefDashboard(chef), production:renderProduction, waste:renderWaste, orders:renderMyOrders}[tab] || (()=>renderChefDashboard(chef)))();
 }
 
 /* Lock navigation to the employee's own section while signed in. */

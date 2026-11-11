@@ -4536,3 +4536,18 @@ button.pc70-unit{border:0;font:inherit;cursor:pointer}
 .pc105-me b{font-size:15px;color:var(--app-ink)}.pc105-me small{font-size:12px;color:var(--app-muted)}
 .pc105-me .pc105-punch.in{border-color:#F3B4B1;background:#FFF5F5}
 .pc105-me .pc105-punch.in i{color:#B42318}
+.pc105-me{display:block}
+.pc105-chips{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.pc105-chips button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:1px solid var(--app-line);background:var(--app-surface);border-radius:14px;padding:10px 2px;font:inherit;cursor:pointer;position:relative;text-align:center;min-width:0}
+.pc105-chips button i{font-size:18px;color:var(--app-brand)}
+.pc105-chips button span{display:flex;flex-direction:column;align-items:center;min-width:0}
+.pc105-chips button b,.pc105-chips button>span{font-size:12px;font-weight:800;color:var(--app-ink)}
+.pc105-chips button small{font-size:10px;color:var(--app-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.pc105-chips .pc105-punch{border-color:#9BD07A;background:#F3FAEE}
+.pc105-chips .pc105-punch.in{border-color:#F3B4B1;background:#FFF5F5}
+.pc105-chips .pc105-punch.in i{color:#B42318}
+.pc105-chips .pc60-badge{position:absolute;top:4px;inset-inline-start:6px}
+.pc105-me.is-solo .pc105-punch{width:100%;flex-direction:row;justify-content:flex-start;gap:10px;padding:14px;border:1px solid var(--app-line);background:var(--app-surface);border-radius:16px;font:inherit;cursor:pointer;display:flex;align-items:center}
+.pc105-me.is-solo .pc105-punch i{font-size:22px;color:var(--app-brand)}
+.pc105-me.is-solo .pc105-punch span{display:flex;flex-direction:column}
+.pc105-me.is-solo .pc105-punch.in{border-color:#F3B4B1;background:#FFF5F5}
