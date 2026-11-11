@@ -379,6 +379,7 @@ function pcBaseRefreshViews(){
   if(document.getElementById("operationRunBox")) drawOperationRunBox();
   if(document.getElementById("productionAdminBox")) drawProductionAdmin();
   if(document.getElementById("wasteAdminBox")) drawWasteAdmin();
+  if(document.getElementById("pcStoreSecBox")) pcDrawStoreSections();
   if(document.getElementById("pcStoreBox")){
     if(document.activeElement && document.activeElement.id === "pcStoreSearch") pcStoreDrawBalRows(); else pcDrawStore();
   }
@@ -6233,15 +6234,14 @@ function pc61HomeHtml(){
       ${pc61Card("fa-utensils","الشيفات",chSub,"renderChefs()", s.pending ? s.pending : "", s.pending ? "warn" : "")}
       ${pc61Card("fa-broom","النظافة",clSub,"renderCleaning()", s.cs.missing ? s.cs.missing : "", s.cs.missing ? "warn" : "")}
       ${pc61Card("fa-gears","التشغيل",opSub,"renderOperations()", s.os.missing ? s.os.missing : "", s.os.missing ? "warn" : "")}
-      ${pc61Card(PC_STORES.raw.icon,"مستودع الخام",pcStoreSub("raw"),"renderBranchStore('raw')", pcStoreNeg("raw")||"", pcStoreNeg("raw") ? "warn" : "")}
-      ${pc61Card(PC_STORES.prod.icon,"مستودع الإنتاج",pcStoreSub("prod"),"renderBranchStore('prod')", pcStoreNeg("prod")||"", pcStoreNeg("prod") ? "warn" : "")}
+      ${pcStoreHomeCard()}
     </section>`;
 }
 
 function pc61LiveHome(){
   const main = document.querySelector("main.pc61-home");
   if(!main) return;
-  const sig = JSON.stringify(pc61Stats()) + pcStoreSub("raw") + pcStoreSub("prod") + pcViewMode("home") + pc80Home.slides.length + pc93Unread() + pcSynced();
+  const sig = JSON.stringify(pc61Stats()) + pcStoreSub() + pcViewMode("home") + pc80Home.slides.length + pc93Unread() + pcSynced();
   if(sig === pc61Sig) return;
   pc61Sig = sig;
   const y = window.scrollY;
@@ -6998,16 +6998,18 @@ async function pc92Save(){
 }
 
 
-/* ===== V10 Branch stores: each branch has a raw store and a production store =====
+/* ===== V10 Section stores: every section of a branch has a raw store and a production store =====
    Balances are never stored; they are recomputed from source documents so every figure is traceable:
    raw  (+) warehouse orders confirmed received (issued qty)      (−) raw waste, manual issues      (±) stock counts
    prod (+) production logs                                       (−) product waste, manual issues  (±) stock counts
+   Each document belongs to the section written on it (orders, production and waste already carry `section`).
    Only documents dated on/after the branch's stockStartMs are counted (go-live date, set once per branch). */
 var branchStockMoves = [];
-var pcStoreView = "bal", pcStoreQ = "", pcStoreCur = "raw";
+var pcStoreView = "bal", pcStoreQ = "", pcStoreCur = "raw", pcStoreSec = "";
+var PC_NO_SEC = "بدون قسم";
 var PC_STORES = {
-  raw:  {name:"مستودع الخام",   icon:"fa-boxes-stacked", issueReasons:["صرف للإنتاج","استهلاك تشغيلي","تحويل لفرع آخر","أخرى"]},
-  prod: {name:"مستودع الإنتاج", icon:"fa-box-open",      issueReasons:["بيع / توزيع","وجبات موظفين","ضيافة","تحويل لفرع آخر","أخرى"]}
+  raw:  {name:"مستودع الخام",   short:"خام",   icon:"fa-boxes-stacked", issueReasons:["صرف للإنتاج","استهلاك تشغيلي","تحويل لقسم آخر","تحويل لفرع آخر","أخرى"]},
+  prod: {name:"مستودع الإنتاج", short:"إنتاج", icon:"fa-box-open",      issueReasons:["بيع / توزيع","وجبات موظفين","ضيافة","تحويل لقسم آخر","تحويل لفرع آخر","أخرى"]}
 };
 
 function pcStoreRawList(key, fallback){
@@ -7020,6 +7022,18 @@ function pcStoreStart(){ return Number(pcStoreBranch().stockStartMs||0) || 0; }
 function pcStoreMs(x){
   return Number(x && (x.timeMs || x.createdAtMs) || 0) || (typeof getTimeValue === "function" ? (getTimeValue(x)||0) : 0);
 }
+function pcStoreSecOf(x){ return String(x && x.section || "").trim() || PC_NO_SEC; }
+
+/* Sections of the current branch, in setup order, de-duplicated by name. Any section that appears on
+   counted documents but is no longer set up is still listed, so no balance is hidden. */
+function pcStoreSections(){
+  const names = [];
+  const add = n=>{ n = String(n||"").trim(); if(n && !names.includes(n)) names.push(n); };
+  pcStoreMine(pcStoreRawList("chefSections", chefSections)).forEach(s=>add(s.name));
+  if(pcStoreStart()) ["raw","prod"].forEach(st=>pcStoreMoves(st).forEach(m=>add(m.section)));
+  return names;
+}
+
 function pcStoreConv(q, from, to){
   if(!from || !to || from === to) return {ok:true, q:Number(q||0)};
   const a = PC70_UNITS[from], b = PC70_UNITS[to];
@@ -7060,54 +7074,55 @@ function pcStoreWasteStore(w){
   return pc86Find({name:w.productName, code:w.itemCode}) ? "raw" : "prod";
 }
 
-/* All movements of one store for the current branch, oldest first. */
-function pcStoreMoves(store){
+/* All movements of one store type for the current branch (optionally one section), oldest first. */
+function pcStoreMoves(store, sec){
   const start = pcStoreStart();
   const out = [];
-  const after = ms => start && ms >= start;
+  const keep = (ms, x)=>start && ms >= start && (!sec || pcStoreSecOf(x) === sec);
   if(store === "raw"){
     pcStoreMine(pcStoreRawList("warehouseOrders", warehouseOrders)).forEach(o=>{
       if(o.status !== "تم الاستلام") return;
       const ms = Number(o.receiveReview?.atMs || o.issuedAtMs || 0) || pcStoreMs(o);
-      if(!after(ms)) return;
+      if(!keep(ms, o)) return;
       const lines = (o.items||[]).map(i=>pcStoreItem("raw", {...i, qty:(i.issuedQty ?? i.qty)})).filter(l=>l.qty);
       const short = (o.receiveReview?.items||[]).some(x=>x.ok === false);
-      if(lines.length) out.push({ms, sign:1, type:"receipt", icon:"fa-truck", tone:"ok",
+      if(lines.length) out.push({ms, sign:1, type:"receipt", icon:"fa-truck", tone:"ok", section:pcStoreSecOf(o),
         title:`استلام طلب #${o.orderId||""}`, by:o.chefName||"", note:short ? "أُبلغ عن نقص عند الاستلام — راجع بجرد" : "", lines});
     });
   } else {
     pcStoreMine(pcStoreRawList("productionLogs", productionLogs)).forEach(l=>{
       if(l.noProduction) return;
       const ms = pcStoreMs(l);
-      if(!after(ms)) return;
+      if(!keep(ms, l)) return;
       const lines = (l.items||[]).map(i=>pcStoreItem("prod", i)).filter(x=>x.qty);
-      if(lines.length) out.push({ms, sign:1, type:"production", icon:"fa-kitchen-set", tone:"ok",
-        title:`إنتاج ${l.section||""}`, by:l.chefName||"", note:l.note||"", lines});
+      if(lines.length) out.push({ms, sign:1, type:"production", icon:"fa-kitchen-set", tone:"ok", section:pcStoreSecOf(l),
+        title:"إنتاج", by:l.chefName||"", note:l.note||"", lines});
     });
   }
   pcStoreMine(pcStoreRawList("wasteLogs", wasteLogs)).forEach(w=>{
     if(pcStoreWasteStore(w) !== store) return;
     const ms = pcStoreMs(w);
-    if(!after(ms)) return;
+    if(!keep(ms, w)) return;
     const line = pcStoreItem(store, {name:w.productName, code:w.itemCode, qty:w.qty, unit:w.unit});
-    if(line.qty) out.push({ms, sign:-1, type:"waste", icon:"fa-trash-can", tone:"warn",
+    if(line.qty) out.push({ms, sign:-1, type:"waste", icon:"fa-trash-can", tone:"warn", section:pcStoreSecOf(w),
       title:"هدر", by:w.chefName||"", note:w.reason||"", lines:[line]});
   });
   pcStoreMine(pcStoreRawList("branchStockMoves", branchStockMoves)).forEach(m=>{
     if(m.store !== store || m.cancelled) return;
     const ms = pcStoreMs(m);
-    if(!after(ms)) return;
-    if(m.type === "count") out.push({ms, sign:1, type:"count", icon:"fa-clipboard-list", tone:"info",
-      title:"جرد فعلي", by:m.by||"", note:m.note||"", lines:(m.lines||[]).map(x=>({...x, qty:Number(x.qty||0)}))});
-    else out.push({ms, sign:-1, type:"issue", icon:"fa-right-from-bracket", tone:"info",
-      title:m.reason || "صرف", by:m.by||"", note:m.note||"", lines:(m.lines||[]).map(x=>({...x, qty:Number(x.qty||0)}))});
+    if(!keep(ms, m)) return;
+    const lines = (m.lines||[]).map(x=>({...x, qty:Number(x.qty||0)}));
+    if(m.type === "count") out.push({ms, sign:1, type:"count", icon:"fa-clipboard-list", tone:"info", section:pcStoreSecOf(m),
+      title:"جرد فعلي", by:m.by||"", note:m.note||"", lines});
+    else out.push({ms, sign:-1, type:"issue", icon:"fa-right-from-bracket", tone:"info", section:pcStoreSecOf(m),
+      title:m.reason || "صرف", by:m.by||"", note:m.note||"", lines});
   });
   return out.sort((a,b)=>a.ms-b.ms);
 }
 
-function pcStoreBalances(store){
+function pcStoreBalances(store, sec){
   const map = {};
-  pcStoreMoves(store).forEach(m=>m.lines.forEach(l=>{
+  pcStoreMoves(store, sec).forEach(m=>m.lines.forEach(l=>{
     const r = map[l.key] || (map[l.key] = {key:l.key, itemId:l.itemId||"", name:l.name, code:l.code||"", unit:l.unit, qty:0, inQ:0, outQ:0, lastMs:0});
     const q = m.sign * Number(l.qty||0);
     r.qty = pc70R(r.qty + q);
@@ -7116,44 +7131,86 @@ function pcStoreBalances(store){
   }));
   return Object.values(map).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ar"));
 }
+function pcStoreStat(store, sec){
+  const bal = pcStoreBalances(store, sec);
+  return {items:bal.filter(r=>r.qty !== 0).length, neg:bal.filter(r=>r.qty < 0).length};
+}
 
-function pcStoreSub(store){
+/* ----- Branch home card ----- */
+function pcStoreSub(){
   if(!pcStoreStart()) return "غير مفعّل بعد";
-  const bal = pcStoreBalances(store).filter(r=>r.qty !== 0);
-  const neg = bal.filter(r=>r.qty < 0).length;
-  return `${bal.length} صنف برصيد${neg ? ` · ${neg} سالب` : ""}`;
+  const n = pcStoreSections().length;
+  const neg = pcStoreNeg();
+  return `${n} قسم · خام وإنتاج${neg ? ` · ${neg} رصيد سالب` : ""}`;
 }
-function pcStoreNeg(store){
-  return pcStoreStart() ? pcStoreBalances(store).filter(r=>r.qty < 0).length : 0;
+function pcStoreNeg(){
+  return pcStoreStart() ? pcStoreStat("raw").neg + pcStoreStat("prod").neg : 0;
+}
+function pcStoreHomeCard(){
+  const neg = pcStoreNeg();
+  return pc61Card("fa-warehouse","مستودعات الأقسام",pcStoreSub(),"renderStoreSections()", neg||"", neg ? "warn" : "");
 }
 
-function renderBranchStore(store){
+/* ----- Sections list ----- */
+function renderStoreSections(){
+  pageLayout("مستودعات الأقسام", `
+    ${pc60Bar({title:"مستودعات الأقسام", sub:pcBranchName(currentBranch), back:"renderHome()"})}
+    <section class="pc60-page has-bar pc100-page"><div id="pcStoreSecBox"></div></section>`, "renderHome()");
+  pcDrawStoreSections();
+}
+function pcDrawStoreSections(){
+  const box = document.getElementById("pcStoreSecBox");
+  if(!box) return;
+  if(!pcStoreStart()){ box.innerHTML = pcStoreIntroHtml(); return; }
+  const secs = pcStoreSections();
+  box.innerHTML = `
+    <small class="pc100-since">الاحتساب من ${escapeHtml(new Date(pcStoreStart()).toLocaleDateString("ar-SA"))} · لكل قسم مستودع خام ومستودع إنتاج</small>
+    ${secs.length ? `<div class="pc100-secs">${secs.map(sec=>{
+      const r = pcStoreStat("raw", sec), p = pcStoreStat("prod", sec);
+      const js = escapeHtml(JSON.stringify(sec));
+      return `<div class="pc100-sec ${r.neg||p.neg?"neg":""}">
+        <b>${escapeHtml(sec)}</b>
+        <div class="pc100-sec-btns">
+          <button type="button" onclick='renderBranchStore(${js},"raw")'>
+            <i class="fa-solid ${PC_STORES.raw.icon}"></i><span>خام</span><em>${r.items} صنف${r.neg?` · ${r.neg} سالب`:""}</em></button>
+          <button type="button" onclick='renderBranchStore(${js},"prod")'>
+            <i class="fa-solid ${PC_STORES.prod.icon}"></i><span>إنتاج</span><em>${p.items} صنف${p.neg?` · ${p.neg} سالب`:""}</em></button>
+        </div></div>`;
+    }).join("")}</div>` : pc60Empty("fa-layer-group","لا توجد أقسام في هذا الفرع — أضفها من الإعدادات")}`;
+}
+function pcStoreIntroHtml(){
+  return `
+    <div class="pc100-intro">
+      <span class="pc100-intro-ic"><i class="fa-solid fa-warehouse"></i></span>
+      <b>مستودعات الأقسام غير مفعّلة لهذا الفرع</b>
+      <p>عند التفعيل يصبح لكل قسم مستودع خام ومستودع إنتاج، ويبدأ احتساب الحركات من تاريخ التفعيل فقط، ولا تدخل البيانات القديمة في الأرصدة.
+      بعد التفعيل سجّل جردًا افتتاحيًا لكل صنف موجود فعليًا في كل قسم.</p>
+      <button type="button" class="btn btn-main" onclick="pcStoreActivate()">تفعيل مستودعات الفرع من الآن</button>
+    </div>`;
+}
+
+/* ----- One section's store ----- */
+function renderBranchStore(sec, store){
+  pcStoreSec = String(sec||"").trim() || PC_NO_SEC;
   pcStoreCur = store === "prod" ? "prod" : "raw";
   pcStoreView = "bal"; pcStoreQ = "";
-  const S = PC_STORES[pcStoreCur];
-  pageLayout(S.name, `
-    ${pc60Bar({title:S.name, sub:pcBranchName(currentBranch), back:"renderHome()"})}
-    <section class="pc60-page has-bar pc100-page"><div id="pcStoreBox"></div></section>`, "renderHome()");
+  pageLayout(pcStoreSec, `
+    ${pc60Bar({title:pcStoreSec, sub:`${pcBranchName(currentBranch)} · مستودعات القسم`, back:"renderStoreSections()"})}
+    <section class="pc60-page has-bar pc100-page"><div id="pcStoreBox"></div></section>`, "renderStoreSections()");
   pcDrawStore();
 }
 
 function pcDrawStore(){
   const box = document.getElementById("pcStoreBox");
   if(!box) return;
-  const store = pcStoreCur, S = PC_STORES[store];
-  if(!pcStoreStart()){
-    box.innerHTML = `
-      <div class="pc100-intro">
-        <span class="pc100-intro-ic"><i class="fa-solid ${S.icon}"></i></span>
-        <b>${S.name} غير مفعّل لهذا الفرع</b>
-        <p>عند التفعيل يبدأ احتساب الحركات من تاريخ التفعيل فقط، ولا تدخل البيانات القديمة في الأرصدة.
-        بعد التفعيل سجّل جردًا افتتاحيًا لكل صنف موجود فعليًا في المستودعين.</p>
-        <button type="button" class="btn btn-main" onclick="pcStoreActivate()">تفعيل مستودعات الفرع من الآن</button>
-      </div>`;
-    return;
-  }
+  if(!pcStoreStart()){ box.innerHTML = pcStoreIntroHtml(); return; }
+  const store = pcStoreCur;
   const y = window.scrollY;
   const head = `
+    <div class="pc100-seg" role="tablist">
+      ${["raw","prod"].map(st=>`<button type="button" role="tab" class="${store===st?"active":""}" onclick="pcStoreCur='${st}';pcStoreQ='';pcDrawStore()">
+        <i class="fa-solid ${PC_STORES[st].icon}"></i> ${PC_STORES[st].name}</button>`).join("")}
+    </div>
     <div class="pc100-head">
       <div class="pc60-chips">
         <button type="button" class="pc60-fchip ${pcStoreView==="bal"?"active":""}" onclick="pcStoreView='bal';pcDrawStore()">الأرصدة</button>
@@ -7165,23 +7222,24 @@ function pcDrawStore(){
       </div>
     </div>
     <small class="pc100-since">الاحتساب من ${escapeHtml(new Date(pcStoreStart()).toLocaleDateString("ar-SA"))}</small>`;
-  box.innerHTML = head + (pcStoreView === "bal" ? pcStoreBalHtml(store) : pcStoreMovHtml(store));
-  const inp = document.getElementById("pcStoreSearch");
-  if(inp && document.activeElement !== inp && pcStoreQ){ inp.value = pcStoreQ; }
+  box.innerHTML = head + (pcStoreView === "bal" ? pcStoreBalHtml() : pcStoreMovHtml());
   window.scrollTo(0,y);
 }
 
-function pcStoreBalHtml(store){
+function pcStoreFilterRows(all){
   const q = pcStoreQ.trim().toLowerCase();
-  const all = pcStoreBalances(store).filter(r=>r.qty !== 0 || r.inQ || r.outQ);
-  const rows = all.filter(r=>!q || String(r.name).toLowerCase().includes(q) || String(r.code).toLowerCase().includes(q));
+  return all.filter(r=>(r.qty !== 0 || r.inQ || r.outQ) &&
+    (!q || String(r.name).toLowerCase().includes(q) || String(r.code).toLowerCase().includes(q)));
+}
+function pcStoreBalHtml(){
+  const all = pcStoreBalances(pcStoreCur, pcStoreSec);
   const neg = all.filter(r=>r.qty < 0).length;
   return `
     <label class="pc60-search pc100-search"><i class="fa-solid fa-magnifying-glass"></i>
       <input id="pcStoreSearch" type="search" placeholder="ابحث عن صنف أو كود" value="${escapeHtml(pcStoreQ)}"
         oninput="pcStoreQ=this.value;pcStoreDrawBalRows()" autocomplete="off"></label>
     ${neg ? `<div class="pc100-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${neg} صنف برصيد سالب: صرف أكثر من الوارد المسجّل. راجع المستندات أو سجّل جردًا.</div>` : ""}
-    <div id="pcStoreBalRows">${pcStoreBalRows(rows)}</div>`;
+    <div id="pcStoreBalRows">${pcStoreBalRows(pcStoreFilterRows(all))}</div>`;
 }
 function pcStoreBalRows(rows){
   if(!rows.length) return pc60Empty("fa-folder-open","لا توجد أرصدة بعد — ابدأ بجرد افتتاحي");
@@ -7193,14 +7251,11 @@ function pcStoreBalRows(rows){
 }
 function pcStoreDrawBalRows(){
   const el = document.getElementById("pcStoreBalRows");
-  if(!el) return;
-  const q = pcStoreQ.trim().toLowerCase();
-  el.innerHTML = pcStoreBalRows(pcStoreBalances(pcStoreCur).filter(r=>(r.qty !== 0 || r.inQ || r.outQ) &&
-    (!q || String(r.name).toLowerCase().includes(q) || String(r.code).toLowerCase().includes(q))));
+  if(el) el.innerHTML = pcStoreBalRows(pcStoreFilterRows(pcStoreBalances(pcStoreCur, pcStoreSec)));
 }
 
-function pcStoreMovHtml(store){
-  const moves = pcStoreMoves(store).slice().reverse().slice(0,150);
+function pcStoreMovHtml(){
+  const moves = pcStoreMoves(pcStoreCur, pcStoreSec).slice().reverse().slice(0,150);
   if(!moves.length) return pc60Empty("fa-clock-rotate-left","لا توجد حركات منذ التفعيل");
   return `<div class="pc60-timeline pc100-mov">${moves.map(m=>`
     <div class="pc60-tl ${m.tone}">
@@ -7217,7 +7272,7 @@ function pcStoreMovHtml(store){
 
 async function pcStoreActivate(){
   const b = pcStoreBranch();
-  if(!(await pcConfirm(`تفعيل مستودع الخام ومستودع الإنتاج لفرع ${pcBranchName(currentBranch)} من الآن؟ لا يمكن تغيير تاريخ البداية من هذه الشاشة بعد التفعيل.`,{title:"تفعيل المستودعات", okText:"تفعيل"}))) return;
+  if(!(await pcConfirm(`تفعيل مستودعات الأقسام لفرع ${pcBranchName(currentBranch)} من الآن؟ لا يمكن تغيير تاريخ البداية من هذه الشاشة بعد التفعيل.`,{title:"تفعيل المستودعات", okText:"تفعيل"}))) return;
   try{
     const {db,doc,setDoc} = window.firebaseDB;
     const data = {stockStartMs:Date.now()};
@@ -7225,8 +7280,8 @@ async function pcStoreActivate(){
     await setDoc(doc(db,"branches",currentBranch), data, {merge:true});
     if(b.virtual) branches = [...(branches||[]), {id:currentBranch, ...data}];
     else branches = (branches||[]).map(x=>x.id===currentBranch ? {...x, ...data} : x);
-    showToast("تم تفعيل المستودعات — سجّل الجرد الافتتاحي");
-    pcDrawStore();
+    showToast("تم تفعيل المستودعات — سجّل الجرد الافتتاحي لكل قسم");
+    pcDrawStoreSections(); pcDrawStore();
   }catch(err){ console.error(err); showToast("تعذر التفعيل، تحقق من الاتصال","error"); }
 }
 
@@ -7250,7 +7305,7 @@ function pcStoreLineFor(store, cat, qty){
   return pcStoreItem(store, {itemId:cat.id, code:cat.code, name:pc17ItemName(cat), qty, unit:pcStoreCatUnit(store, cat)});
 }
 function pcStoreBookOf(store, key){
-  return (pcStoreBalances(store).find(r=>r.key===key) || {qty:0}).qty;
+  return (pcStoreBalances(store, pcStoreSec).find(r=>r.key===key) || {qty:0}).qty;
 }
 function pcStoreByName(){
   try{ return localStorage.getItem("pcStoreBy") || ""; }catch(e){ return ""; }
@@ -7262,6 +7317,7 @@ function pcStoreSaveBy(v){
 async function pcStoreIssue(){
   const store = pcStoreCur, S = PC_STORES[store];
   const v = await pcSheet({title:`صرف من ${S.name}`, icon:"fa-right-from-bracket", body:`
+    <p class="pc85-hint">القسم: <b>${escapeHtml(pcStoreSec)}</b></p>
     <label class="pc94-lb">الصنف</label>${pcStoreItemPicker(store)}
     <label class="pc94-lb">الكمية (بوحدة الصنف)</label><input id="pc100Qty" class="pc93-name" type="text" inputmode="decimal" placeholder="0">
     <label class="pc94-lb">السبب</label>
@@ -7287,7 +7343,7 @@ async function pcStoreIssue(){
 async function pcStoreCount(){
   const store = pcStoreCur, S = PC_STORES[store];
   const v = await pcSheet({title:`جرد ${S.name}`, icon:"fa-clipboard-list", body:`
-    <p class="pc85-hint">اكتب الكمية الموجودة فعليًا على الرف. يسجّل النظام الفرق بين الدفتري والفعلي كتسوية جرد.</p>
+    <p class="pc85-hint">القسم: <b>${escapeHtml(pcStoreSec)}</b>. اكتب الكمية الموجودة فعليًا على الرف، ويسجّل النظام الفرق بين الدفتري والفعلي كتسوية جرد.</p>
     <label class="pc94-lb">الصنف</label>${pcStoreItemPicker(store)}
     <label class="pc94-lb">الكمية الفعلية (بوحدة الصنف)</label><input id="pc100Qty" class="pc93-name" type="text" inputmode="decimal" placeholder="0">
     <label class="pc94-lb">اسم القائم بالجرد</label><input id="pc100By" class="pc93-name" maxlength="40" value="${escapeHtml(pcStoreByName())}">
@@ -7305,7 +7361,7 @@ async function pcStoreCount(){
   const base = pcStoreLineFor(store, cat, actual);
   const book = pcStoreBookOf(store, base.key);
   const diff = pc70R(actual - book);
-  if(!(await pcConfirm(`${base.name}: الدفتري ${pc60Num(book)} · الفعلي ${pc60Num(actual)} · الفرق ${diff>=0?"+":""}${pc60Num(diff)} ${base.unit}`,{title:"تأكيد الجرد", okText:"اعتماد الجرد"}))) return;
+  if(!(await pcConfirm(`${pcStoreSec} · ${base.name}: الدفتري ${pc60Num(book)} · الفعلي ${pc60Num(actual)} · الفرق ${diff>=0?"+":""}${pc60Num(diff)} ${base.unit}`,{title:"تأكيد الجرد", okText:"اعتماد الجرد"}))) return;
   await pcStoreSave({store, type:"count", by:v.by, note:v.note, lines:[{...base, qty:diff, book, actual}]},
     diff ? "تم اعتماد الجرد وتسجيل الفرق" : "تم اعتماد الجرد — لا يوجد فرق");
 }
@@ -7319,8 +7375,9 @@ async function pcStoreSave(rec, okMsg){
     const lines = rec.lines.map(l=>({key:l.key, itemId:l.itemId||"", code:l.code||"", name:l.name||"", unit:l.unit||"", qty:pc70R(l.qty),
       ...(rec.type==="count" ? {book:pc70R(l.book), actual:pc70R(l.actual)} : {})}));
     const now = Date.now();
-    await addDoc(collection(db,"branch_stock_moves"), {branchId:currentBranch, store:rec.store, type:rec.type, reason:rec.reason||"",
-      by:rec.by, note:rec.note||"", lines, createdAtMs:now, timeMs:now, createdAtText:nowText(), createdAt:serverTimestamp()});
+    await addDoc(collection(db,"branch_stock_moves"), {branchId:currentBranch, section:pcStoreSec === PC_NO_SEC ? "" : pcStoreSec,
+      store:rec.store, type:rec.type, reason:rec.reason||"", by:rec.by, note:rec.note||"", lines,
+      createdAtMs:now, timeMs:now, createdAtText:nowText(), createdAt:serverTimestamp()});
     showToast(okMsg);
   }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
   finally{ pc60Busy = false; pcDrawStore(); }
