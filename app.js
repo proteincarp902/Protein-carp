@@ -390,6 +390,7 @@ function pcBaseRefreshViews(){
   if(document.getElementById("pcHrDocBox") && document.activeElement?.id !== "pcHrDocSearch") pcHrDrawDocs();
   if(document.getElementById("pcHrKioskBox")) pcHrDrawKiosk();
   if(document.getElementById("pcEmpWait")) pcEmpResume();
+  if(document.getElementById("pcOrderBox")) pcOrdDraw(false);
   if(document.getElementById("pcStoreBox")){
     if(document.activeElement && document.activeElement.id === "pcStoreSearch") pcStoreDrawBalRows(); else pcDrawStore();
   }
@@ -1407,14 +1408,14 @@ function renderWarehouse(){
       <section class="pc19-warehouse-kpis">
         <div><i class="fa-solid fa-file-circle-plus"></i><span>طلبات جديدة</span><b>${c.newOrders}</b></div>
         <div><i class="fa-solid fa-hourglass-half"></i><span>قيد الصرف</span><b>${c.inProgress}</b></div>
-        <div><i class="fa-solid fa-circle-check"></i><span>تم الصرف</span><b>${c.doneToday}</b></div>
+        <div><i class="fa-solid fa-circle-check"></i><span>تم التسليم</span><b>${c.doneToday}</b></div>
         <div><i class="fa-solid fa-arrow-right-arrow-left"></i><span>صرف داخلي</span><b>${c.internal}</b></div>
       </section>
 
       <section class="pc19-tabs">
         <button class="${pc19WarehouseTab==="new"?"active":""}" onclick="pc19WarehouseTab='new';drawWarehouseOrders()">جديد</button>
         <button class="${pc19WarehouseTab==="progress"?"active":""}" onclick="pc19WarehouseTab='progress';drawWarehouseOrders()">قيد الصرف</button>
-        <button class="${pc19WarehouseTab==="done"?"active":""}" onclick="pc19WarehouseTab='done';drawWarehouseOrders()">تم الصرف</button>
+        <button class="${pc19WarehouseTab==="done"?"active":""}" onclick="pc19WarehouseTab='done';drawWarehouseOrders()">تم التسليم</button>
         <button onclick="renderInternalIssue()">صرف داخلي</button>
       </section>
 
@@ -1480,7 +1481,7 @@ function pc19OrderCard(o){
       </div>
 
       ${opened ? pc19OrderIssueForm(o) : `
-        <button class="pc19-open-btn" onclick="pc19OpenWarehouseOrderId='${o.id}';drawWarehouseOrders()">فتح الطلب</button>
+        <button class="pc19-open-btn" onclick="renderOrder('${o.id}','warehouse')">${(o.status==="جديد"||!o.status) ? "فتح الطلب وتسليمه" : "عرض الطلب"}</button>
       `}
     </article>
   `;
@@ -5284,7 +5285,7 @@ var pc60OrderFilter = "all";
 
 function pc60OrderStatusLabel(o){
   if(o.status === "جديد" || !o.status) return "بانتظار المستودع";
-  if(o.status === "جاهز") return "جاهز للاستلام";
+  if(o.status === "جاهز" || o.status === "تم الصرف") return "تم التسليم — أكّد الاستلام";
   return o.status;
 }
 
@@ -5505,7 +5506,7 @@ function pc60OrderCard(o){
   const names = items.slice(0,2).map(i=>i.name).filter(Boolean).join("، ");
   const more = items.length > 2 ? ` +${items.length-2}` : "";
   return `
-    <article class="pc60-order pc73-card ${o.status==="جاهز"?"ready":""}" onclick="pc73Details('${escapeHtml(o.id)}')">
+    <article class="pc60-order pc73-card ${o.status==="جاهز"?"ready":""}" onclick="renderOrder('${escapeHtml(o.id)}','chef')">
       <header>
         <div><b>طلب #${escapeHtml(o.orderId||"")}</b><small>${escapeHtml(o.createdAtText||"")}</small></div>
         <span class="pc60-chip ${pc60OrderTone(o)}">${pc60OrderStatusLabel(o)}</span>
@@ -5513,7 +5514,7 @@ function pc60OrderCard(o){
       ${pc73Tracker(o)}
       <p class="pc73-sum">${items.length} ${items.length===1?"صنف":"أصناف"}: ${escapeHtml(names)}${more}</p>
       ${partial ? `<p class="pc60-order-warn">${escapeHtml(o.issueStatus)}</p>` : ""}
-      ${o.status==="جاهز" ? `<button type="button" class="btn btn-main pc60-wide" onclick="event.stopPropagation();pc60Receive('${escapeHtml(o.id)}')">تأكيد الاستلام</button>` : ""}
+      ${o.status==="جاهز" ? `<button type="button" class="btn btn-main pc60-wide" onclick="event.stopPropagation();renderOrder('${escapeHtml(o.id)}','chef')">تأكيد الاستلام</button>` : ""}
     </article>`;
 }
 function pc73Details(id){
@@ -8167,6 +8168,135 @@ async function pcHrPunch(empId){
     showToast(open ? `تم تسجيل انصراف ${e.name}` : `تم تسجيل حضور ${e.name}`);
   }catch(err){ console.error(err); showToast("تعذر التسجيل، تحقق من الاتصال","error"); }
   finally{ pc60Busy = false; pcHrDrawKiosk(); }
+}
+
+/* =========================== One order screen =========================== *
+ * The same screen serves the chef and the warehouse. Each sees the order's three steps and acts on its own step:
+ *   1 تم الطلب (chef)  →  2 تم التسليم (warehouse: delivered qty per item)  →  3 تأكيد الاستلام (chef: complete / short per item)
+ * Stored statuses stay as before ("جديد" → "تم الصرف" → "تم الاستلام") so stores and reports keep working. */
+var pcOrd = {id:null, as:"chef", marks:{}, qty:{}, shown:""};
+function pcOrdFind(id){ return (pcRaw.warehouseOrders || warehouseOrders || []).find(o=>o.id===id) || null; }
+function pcOrdStep(o){
+  if(o.status === "تم الاستلام") return 3;
+  if(["تم الصرف","جاهز"].includes(o.status) || o.issuedAtMs) return 2;
+  return 1;
+}
+function pcOrdWhen(ms, txt){ return ms ? new Date(ms).toLocaleString("ar-SA",{day:"numeric", month:"short", hour:"numeric", minute:"2-digit"}) : (txt||""); }
+function pcOrdIsMine(o){
+  const me = pcEmpCurrent && pcEmpCurrent();
+  if(me) return o.chefId ? (o.chefId === (pcEmpChef(me)||{}).id) : o.chefName === me.name;
+  return currentChef ? pcMine(o) : false;
+}
+function renderOrder(id, as){
+  const o = pcOrdFind(id);
+  if(!o){ showToast("الطلب غير موجود","error"); return; }
+  if(pcEmpSessionRaw && pcEmpSessionRaw()) as = "chef";
+  pcOrd = {id, as:as==="warehouse" ? "warehouse" : "chef", marks:{}, qty:{}, shown:""};
+  const back = pcOrd.as === "warehouse" ? "renderWarehouse()" : "renderMyOrders()";
+  pageLayout(`طلب #${o.orderId||""}`, `
+    ${pc60Bar({title:`طلب #${o.orderId||""}`, sub:`${o.section||""} · ${pcBranchName(pcBranchOf(o))}`, back})}
+    <section class="pc60-page has-bar pc106-page"><div id="pcOrderBox"></div></section>`, back);
+  pcOrdDraw(true);
+}
+function pcOrdDraw(force){
+  const box = document.getElementById("pcOrderBox");
+  const o = pcOrdFind(pcOrd.id);
+  if(!box || !o) return;
+  const sig = `${o.status}|${o.issuedAtMs||0}|${o.receiveReview?.atMs||0}`;
+  if(!force && sig === pcOrd.shown) return;   /* keep what the user is typing unless the order moved on */
+  pcOrd.shown = sig;
+  const step = pcOrdStep(o), items = o.items || [];
+  const wh = pcOrd.as === "warehouse", mine = pcOrdIsMine(o);
+  const canDeliver = wh && step === 1, canReceive = !wh && mine && step === 2;
+  const rv = o.receiveReview || {};
+  const steps = [
+    {n:1, t:"تم الطلب",        who:o.chefName||"", when:pcOrdWhen(o.createdAtMs, o.createdAtText)},
+    {n:2, t:"تم التسليم",       who:o.deliveredBy||"المستودع", when:step>=2 ? pcOrdWhen(o.issuedAtMs, o.issuedAtText) : ""},
+    {n:3, t:"تأكيد الاستلام",   who:rv.by||o.chefName||"", when:step>=3 ? pcOrdWhen(rv.atMs) : ""}];
+  box.innerHTML = `
+    <ol class="pc106-steps">${steps.map(x=>`<li class="${x.n<=step?"done":""} ${x.n===step+1?"next":""}">
+      <span class="pc106-dot">${x.n<=step?'<i class="fa-solid fa-check"></i>':x.n}</span>
+      <div><b>${x.t}</b><small>${x.n<=step ? `${escapeHtml(x.who)} · ${escapeHtml(x.when)}` : (x.n===step+1 ? (x.n===2 ? "بانتظار المستودع" : "بانتظار تأكيد الشيف") : "")}</small></div></li>`).join("")}</ol>
+
+    ${canDeliver ? `<div class="pc106-banner wh"><i class="fa-solid fa-truck-ramp-box"></i> اكتب الكمية المسلّمة لكل صنف ثم اضغط «تم التسليم»</div>` : ""}
+    ${canReceive ? `<div class="pc106-banner rc"><i class="fa-solid fa-box-open"></i> راجع الأصناف وعلّم أي صنف ناقص ثم اضغط «تأكيد الاستلام»</div>` : ""}
+
+    <div class="pc106-items">
+      <div class="pc106-row head"><span>الصنف</span><span>المطلوب</span><span>المسلّم</span><span>${step>=2||canReceive?"الاستلام":""}</span></div>
+      ${items.map((i,k)=>{
+        const req = Number(i.qty||0);
+        const del = (i.issuedQty===undefined||i.issuedQty===null) ? null : Number(i.issuedQty);
+        const rvi = (rv.items||[])[k];
+        const short = del!==null && del!==req;
+        return `<div class="pc106-row ${short?"diff":""} ${rvi&&rvi.ok===false?"bad":""}">
+          <span><b>${escapeHtml(i.name||"")}</b>${i.code?`<small>${escapeHtml(i.code)}</small>`:""}${pc90ItemOut(i)?`<em class="pc90-tag">غير متوفر</em>`:""}</span>
+          <span>${pc60Num(req)} <small>${escapeHtml(i.unit||"")}</small></span>
+          <span>${canDeliver ? `<input type="number" min="0" step="any" inputmode="decimal" value="${escapeHtml(String(pcOrd.qty[k] ?? req))}" oninput="pcOrd.qty[${k}]=this.value" aria-label="الكمية المسلّمة من ${escapeHtml(i.name||"")}">`
+            : (del===null ? "—" : `${pc60Num(del)}`)}</span>
+          <span>${canReceive ? `<span class="pc85-seg" data-rk="${k}"><button type="button" class="${pcOrd.marks[k]===false?"":"on"}" onclick="pcOrdMark(${k},true)">مكتمل</button><button type="button" class="${pcOrd.marks[k]===false?"on":""}" onclick="pcOrdMark(${k},false)">ناقص</button></span>`
+            : (rvi ? (rvi.ok===false ? `<em class="pc103-tag bad">ناقص</em>` : `<em class="pc103-tag ok">مكتمل</em>`) : "")}</span>
+        </div>`;
+      }).join("")}
+    </div>
+
+    ${o.note ? `<p class="pc106-note"><b>ملاحظة الطلب:</b> ${escapeHtml(o.note)}</p>` : ""}
+    ${o.issueNote ? `<p class="pc106-note"><b>ملاحظة المستودع:</b> ${escapeHtml(o.issueNote)}</p>` : ""}
+    ${rv.note ? `<p class="pc106-note"><b>ملاحظة الاستلام:</b> ${escapeHtml(rv.note)}</p>` : ""}
+
+    ${canDeliver ? `
+      <label class="pc94-lb" for="pcOrdNote">ملاحظة للشيف (اختياري)</label><textarea id="pcOrdNote" class="pc70-cartnote" maxlength="200"></textarea>
+      <label class="pc94-lb" for="pcOrdBy">اسم المسلِّم</label><input id="pcOrdBy" class="pc93-name" maxlength="40" value="${escapeHtml(pcStoreByName())}">
+      <button type="button" class="btn btn-main pc106-act" onclick="pcOrdDeliver()"><i class="fa-solid fa-truck-ramp-box"></i> تم التسليم</button>` : ""}
+    ${canReceive ? `
+      <label class="pc94-lb" for="pcOrdNote">ملاحظة (اختياري)</label><textarea id="pcOrdNote" class="pc70-cartnote" maxlength="200"></textarea>
+      <button type="button" class="btn btn-main pc106-act" onclick="pcOrdReceive()"><i class="fa-solid fa-clipboard-check"></i> تأكيد الاستلام</button>` : ""}
+    ${!canDeliver && !canReceive && step < 3 ? `<p class="pc85-hint pc106-wait">${step===1 ? "الطلب عند المستودع الآن، وسيظهر هنا فور تسليمه." : (wh ? "تم التسليم، بانتظار تأكيد الشيف." : "تم التسليم، بانتظار تأكيد صاحب الطلب.")}</p>` : ""}`;
+}
+function pcOrdMark(k, ok){
+  pcOrd.marks[k] = ok;
+  const seg = document.querySelector(`[data-rk="${k}"]`);
+  if(seg) seg.querySelectorAll("button").forEach((b,i)=>b.classList.toggle("on", i===0 ? ok : !ok));
+  seg?.closest(".pc106-row")?.classList.toggle("bad", !ok);
+}
+async function pcOrdDeliver(){
+  const o = pcOrdFind(pcOrd.id);
+  if(!o || pc60Busy) return;
+  if(pcOrdStep(o) !== 1){ showToast("تم تسليم هذا الطلب بالفعل","error"); return pcOrdDraw(true); }
+  const by = document.getElementById("pcOrdBy")?.value.trim() || "";
+  if(!by){ showToast("اكتب اسم المسلِّم","error"); return; }
+  const items = (o.items||[]).map((i,k)=>{
+    const raw = pcOrd.qty[k] ?? i.qty;
+    const q = Number(String(raw).replace(",", "."));
+    return {...i, issuedQty: isFinite(q) && q >= 0 ? q : Number(i.qty||0)};
+  });
+  const full = items.every(i=>Number(i.issuedQty)===Number(i.qty)), none = items.every(i=>Number(i.issuedQty)===0);
+  const issueStatus = none ? "لم يصرف" : (full ? "تم الصرف" : "صرف جزئي");
+  if(none && !(await pcConfirm("كل الكميات المسلّمة صفر. تسجيل الطلب كـ«لم يُسلَّم»؟",{title:"لا توجد كميات", okText:"تسجيل"}))) return;
+  pc60Busy = true;
+  try{
+    pcStoreSaveBy(by);
+    const {db,doc,updateDoc} = window.firebaseDB;
+    await updateDoc(doc(db,"warehouse_orders",o.id), {items, issueNote:document.getElementById("pcOrdNote")?.value.trim()||"", issueStatus,
+      status:"تم الصرف", deliveredBy:by, issuedAtMs:Date.now(), issuedAtText:nowText()});
+    if(typeof pc86Deduct === "function") await pc86Deduct(items);
+    showToast(full ? "تم التسليم — بانتظار تأكيد الشيف" : `تم التسليم (${issueStatus}) — بانتظار تأكيد الشيف`);
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+  finally{ pc60Busy = false; pcOrdDraw(true); }
+}
+async function pcOrdReceive(){
+  const o = pcOrdFind(pcOrd.id);
+  if(!o || pc60Busy) return;
+  if(pcOrdStep(o) !== 2){ showToast("حالة الطلب تغيّرت","error"); return pcOrdDraw(true); }
+  const items = o.items || [];
+  const review = {items:items.map((i,k)=>({name:i.name||"", ok:pcOrd.marks[k]!==false})), note:document.getElementById("pcOrdNote")?.value.trim()||"",
+    atMs:Date.now(), by:(pcEmpCurrent && pcEmpCurrent()?.name) || currentChef?.name || o.chefName || ""};
+  pc60Busy = true;
+  try{
+    const {db,doc,updateDoc} = window.firebaseDB;
+    await updateDoc(doc(db,"warehouse_orders",o.id), {status:"تم الاستلام", receiveReview:review});
+    showToast(review.items.some(x=>!x.ok) ? "تم الاستلام وأُبلغ المستودع بالنقص" : "تم تأكيد الاستلام");
+  }catch(err){ console.error(err); showToast("تعذر تأكيد الاستلام","error"); }
+  finally{ pc60Busy = false; pcOrdDraw(true); }
 }
 
 /* =========================== Employee accounts =========================== *
