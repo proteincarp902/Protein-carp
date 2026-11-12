@@ -394,6 +394,7 @@ function pcBaseRefreshViews(){
   if(document.getElementById("pcHrDocBox") && document.activeElement?.id !== "pcHrDocSearch") pcHrDrawDocs();
   if(document.getElementById("pcHrKioskBox")) pcHrDrawKiosk();
   if(document.getElementById("pcAccBox") && typeof pcAccDraw === "function") pcAccDraw();
+  if(document.getElementById("pcSiBox") && !document.getElementById("pcSheetHost")?.children.length){ const y = window.scrollY; pcSiDraw(); window.scrollTo(0, y); }
   if(document.getElementById("pcEmpWait")) pcEmpResume();
   if(document.getElementById("pcStartWait")) pcStartDecide();
   if(document.getElementById("pcOrderBox")) pcOrdDraw(false);
@@ -8353,77 +8354,136 @@ function pcAllSectionNames(){
   return [...new Set((pcRaw.chefSections || chefSections || []).map(s=>String(s.name||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ar"));
 }
 
-var pcSi = {sec:"", store:"raw", q:"", sel:null, dirty:false, onlySel:false};
+/* Section items: pick by buttons (section chips → group chips → tap items). An item may belong to any
+   number of sections; the «الأقسام» button on an item assigns it to several sections at once.
+   Groups are the item categories when the catalog has them, otherwise the first letter of the name. */
+var pcSi = {sec:"", store:"raw", grp:"", sel:null, dirty:false};
+function pcSiAll(){ return pcSi.store === "raw" ? (pcRaw.warehouseItems || warehouseItems || []) : (pcRaw.menuItems || menuItems || []); }
+function pcSiLetter(i){
+  const c = String(pc17ItemName(i) || i.name || "").trim().charAt(0);
+  return ({"أ":"ا","إ":"ا","آ":"ا","ٱ":"ا","ى":"ي","ة":"ه","ؤ":"و","ئ":"ي"})[c] || (/[a-z]/i.test(c) ? c.toUpperCase() : /\d/.test(c) ? "#" : c || "#");
+}
+function pcSiUseCats(){ const all = pcSiAll(); return all.length && all.filter(i=>String(i.category||"").trim()).length / all.length >= 0.5; }
+function pcSiGroupOf(i){ return pcSiUseCats() ? (String(i.category||"").trim() || "بدون تصنيف") : pcSiLetter(i); }
+function pcSiGroups(){
+  const m = new Map();
+  pcSiAll().forEach(i=>{ const g = pcSiGroupOf(i); const x = m.get(g) || {n:0, on:0}; x.n++; if(pcSi.sel.has(String(i.id))) x.on++; m.set(g, x); });
+  return [...m.entries()].sort((a,b)=>a[0].localeCompare(b[0],"ar"));
+}
+/* Other sections that already hold this item (saved lists). */
+function pcSiOtherSecs(id){
+  return (pcRaw.sectionItems || sectionItems || []).filter(r=>r.section !== pcSi.sec && Array.isArray(r[pcSi.store]) && r[pcSi.store].map(String).includes(String(id))).map(r=>r.section);
+}
 function renderSettingsSecItems(){
   pcSettingsEnter();
   const names = pcAllSectionNames();
   if(!pcSi.sec || !names.includes(pcSi.sec)) pcSi.sec = names[0] || "";
   pcSiReset();
   settingsShell("secItems", "الأقسام", `
-    <p class="pc85-hint">حدّد الأصناف الخاصة بكل قسم. القسم سيرى هذه الأصناف فقط في الطلب والإنتاج والجرد والصرف. القائمة مشتركة بين كل الفروع.</p>
-    <div class="pc108-top">
-      <select id="pcSiSec" class="pc93-name" onchange="pcSiPick(this.value)">${names.map(n=>`<option ${n===pcSi.sec?"selected":""}>${escapeHtml(n)}</option>`).join("")}</select>
-      <div class="pc60-chips">
-        <button type="button" class="pc60-fchip ${pcSi.store==="raw"?"active":""}" onclick="pcSiStore('raw')">مواد خام (المستودع)</button>
-        <button type="button" class="pc60-fchip ${pcSi.store==="prod"?"active":""}" onclick="pcSiStore('prod')">أصناف الإنتاج (المنيو)</button>
-      </div>
+    <p class="pc85-hint">اختر القسم، ثم افتح مجموعة واضغط على الأصناف لإضافتها أو إزالتها. الصنف ممكن يكون في أكثر من قسم — زر «الأقسام» على أي صنف يضيفه لعدة أقسام مرة واحدة. القائمة مشتركة بين كل الفروع.</p>
+    <h3 class="pc103-h">القسم</h3>
+    <div class="pc60-chips pc116-secs" id="pcSiSecs"></div>
+    <div class="pc60-chips pc116-store">
+      <button type="button" class="pc60-fchip ${pcSi.store==="raw"?"active":""}" onclick="pcSiStore('raw')">مواد خام (المستودع)</button>
+      <button type="button" class="pc60-fchip ${pcSi.store==="prod"?"active":""}" onclick="pcSiStore('prod')">أصناف الإنتاج (المنيو)</button>
     </div>
-    <div class="pc108-tools">
-      <label class="pc60-search"><i class="fa-solid fa-magnifying-glass"></i><input id="pcSiQ" type="search" placeholder="ابحث بالاسم أو الكود أو التصنيف" oninput="pcSi.q=this.value;pcSiDraw()" autocomplete="off"></label>
-      <div class="pc108-btns">
-        <button type="button" class="btn btn-light" onclick="pcSiUsed()">إضافة ما طلبه القسم سابقًا</button>
-        <button type="button" class="btn btn-light" onclick="pcSiToggleShown(true)">تحديد النتائج</button>
-        <button type="button" class="btn btn-light" onclick="pcSiToggleShown(false)">إلغاء تحديد النتائج</button>
-      </div>
-    </div>
+    <h3 class="pc103-h">${pcSiUseCats() ? "التصنيفات" : "الحرف الأول من اسم الصنف"}</h3>
+    <div class="pc116-grps" id="pcSiGrps"></div>
     <div id="pcSiBox"></div>
     <div class="pc107-foot pc108-foot"><div id="pcSiSum" class="pc107-sum"></div>
-      <div class="pc107-foot-row"><button type="button" class="btn btn-light" onclick="pcSi.onlySel=!pcSi.onlySel;pcSiDraw()">المحددة فقط / الكل</button>
+      <div class="pc107-foot-row"><button type="button" class="btn btn-light" onclick="pcSiUsed()">إضافة ما طلبه القسم سابقًا</button>
       <button type="button" class="btn btn-main" onclick="pcSiSave()"><i class="fa-solid fa-floppy-disk"></i> حفظ أصناف القسم</button></div></div>`);
   pcSiDraw();
 }
 function pcSiReset(){
   const ids = pcSecIds(pcSi.sec, pcSi.store);
-  pcSi.sel = new Set(ids ? [...ids] : []); pcSi.dirty = false; pcSi.onlySel = false;
+  pcSi.sel = new Set(ids ? [...ids] : []); pcSi.dirty = false;
+  if(!pcSi.grp) pcSi.grp = pcSi.sel.size ? "__sel" : "";
 }
 async function pcSiPick(sec){
-  if(pcSi.dirty && !(await pcConfirm("لديك تغييرات غير محفوظة على هذا القسم. تجاهلها؟",{title:"تغييرات غير محفوظة", okText:"تجاهل"}))){
-    document.getElementById("pcSiSec").value = pcSi.sec; return;
-  }
-  pcSi.sec = sec; pcSiReset(); pcSiDraw();
+  if(sec === pcSi.sec) return;
+  if(pcSi.dirty && !(await pcConfirm(`لديك تغييرات غير محفوظة على قسم ${pcSi.sec}. تجاهلها؟`,{title:"تغييرات غير محفوظة", okText:"تجاهل"}))) return;
+  pcSi.sec = sec; pcSi.grp = ""; pcSiReset(); pcSiDraw();
 }
 async function pcSiStore(st){
+  if(st === pcSi.store) return;
   if(pcSi.dirty && !(await pcConfirm("لديك تغييرات غير محفوظة. تجاهلها؟",{title:"تغييرات غير محفوظة", okText:"تجاهل"}))) return;
-  pcSi.store = st; renderSettingsSecItems();
+  pcSi.store = st; pcSi.grp = ""; renderSettingsSecItems();
 }
+function pcSiGrp(g){ pcSi.grp = pcSi.grp === g ? "" : g; pcSiDraw(); document.getElementById("pcSiBox")?.scrollIntoView({block:"start", behavior:"smooth"}); }
 function pcSiList(){
-  const all = pcSi.store === "raw" ? (pcRaw.warehouseItems || warehouseItems || []) : (pcRaw.menuItems || menuItems || []);
-  const q = pcSi.q.trim().toLowerCase();
-  return all.filter(i=>(!pcSi.onlySel || pcSi.sel.has(String(i.id))) &&
-    (!q || [i.nameAr, i.name, i.nameEn, i.code, i.category, i.section].some(v=>String(v||"").toLowerCase().includes(q))))
-    .sort((a,b)=>(pcSi.sel.has(String(b.id)) - pcSi.sel.has(String(a.id))) || String(pc17ItemName(a)).localeCompare(String(pc17ItemName(b)),"ar"));
+  const all = pcSiAll();
+  const list = pcSi.grp === "__sel" ? all.filter(i=>pcSi.sel.has(String(i.id))) : pcSi.grp ? all.filter(i=>pcSiGroupOf(i) === pcSi.grp) : [];
+  return list.sort((a,b)=>String(pc17ItemName(a)).localeCompare(String(pc17ItemName(b)),"ar"));
 }
 function pcSiDraw(){
+  const secs = document.getElementById("pcSiSecs");
+  if(secs) secs.innerHTML = pcAllSectionNames().map(n=>{
+    const c = n === pcSi.sec ? pcSi.sel.size : (pcSecIds(n, pcSi.store)?.size || 0);
+    return `<button type="button" class="pc60-fchip ${n===pcSi.sec?"active":""}" data-s="${escapeHtml(n)}" onclick="pcSiPick(this.dataset.s)">${escapeHtml(n)}${c?` <em>${c}</em>`:""}</button>`;
+  }).join("");
+  const grps = document.getElementById("pcSiGrps");
+  if(grps) grps.innerHTML = `<button type="button" class="pc116-g sel ${pcSi.grp==="__sel"?"active":""}" onclick="pcSiGrp('__sel')"><b>المحددة</b><small>${pcSi.sel.size}</small></button>` +
+    pcSiGroups().map(([g,x])=>`<button type="button" class="pc116-g ${pcSi.grp===g?"active":""} ${x.on?"has":""}" data-g="${escapeHtml(g)}" onclick="pcSiGrp(this.dataset.g)"><b>${escapeHtml(g)}</b><small>${x.on?`${x.on}/`:""}${x.n}</small></button>`).join("");
   const box = document.getElementById("pcSiBox");
-  if(!box) return;
-  const list = pcSiList(), shown = list.slice(0, 300);
-  box.innerHTML = list.length ? `<div class="pc108-list">${shown.map(i=>{
-    const on = pcSi.sel.has(String(i.id));
-    return `<label class="pc108-row ${on?"on":""}"><input type="checkbox" ${on?"checked":""} data-id="${escapeHtml(String(i.id))}" onchange="pcSiTick(this)">
-      <span><b>${escapeHtml(pc17ItemName(i)||i.name||"")}</b><small>${escapeHtml(i.code||"")}${i.category?` · ${escapeHtml(i.category)}`:""}${i.unit?` · ${escapeHtml(i.unit)}`:""}</small></span></label>`;
-  }).join("")}</div>${list.length>shown.length?`<p class="pc85-hint">يظهر أول ${shown.length} من ${list.length} — استخدم البحث لتضييق النتائج.</p>`:""}`
-    : pc60Empty("fa-magnifying-glass", "لا توجد أصناف مطابقة");
+  if(box){
+    const list = pcSiList();
+    if(!pcSi.grp) box.innerHTML = `<p class="pc85-hint pc116-pick">اختر مجموعة من الأزرار بالأعلى لعرض أصنافها.</p>`;
+    else if(!list.length) box.innerHTML = pc60Empty("fa-box-open", pcSi.grp === "__sel" ? "لم تحدد أصنافًا لهذا القسم بعد" : "لا توجد أصناف");
+    else {
+      const allOn = list.every(i=>pcSi.sel.has(String(i.id)));
+      box.innerHTML = `<div class="pc116-head"><b>${pcSi.grp === "__sel" ? "الأصناف المحددة" : escapeHtml(pcSi.grp)} · ${list.length}</b>
+          ${pcSi.grp === "__sel" ? "" : `<button type="button" class="btn btn-light" onclick="pcSiToggleShown(${allOn?"false":"true"})">${allOn ? "إلغاء تحديد المجموعة" : "تحديد المجموعة كلها"}</button>`}</div>
+        <div class="pc108-list">${list.map(i=>{
+          const id = String(i.id), on = pcSi.sel.has(id), other = pcSiOtherSecs(id);
+          return `<div class="pc116-row ${on?"on":""}">
+            <button type="button" class="pc116-tick" data-id="${escapeHtml(id)}" onclick="pcSiTick(this.dataset.id)" aria-pressed="${on}">
+              <i class="fa-solid ${on?"fa-circle-check":"fa-circle-plus"}"></i>
+              <span><b>${escapeHtml(pc17ItemName(i)||i.name||"")}</b><small>${escapeHtml(i.code||"")}${i.unit?` · ${escapeHtml(i.unit)}`:""}${other.length?` · <span class="pc116-oth">أيضًا في: ${other.map(escapeHtml).join("، ")}</span>`:""}</small></span></button>
+            <button type="button" class="pc116-multi" data-id="${escapeHtml(id)}" onclick="pcSiMulti(this.dataset.id)" title="إضافة لعدة أقسام"><i class="fa-solid fa-layer-group"></i> الأقسام${other.length+(on?1:0)?` (${other.length+(on?1:0)})`:""}</button>
+          </div>`;
+        }).join("")}</div>`;
+    }
+  }
   pcSiSum();
 }
-function pcSiTick(inp){
-  const id = inp.dataset.id;
-  if(inp.checked) pcSi.sel.add(id); else pcSi.sel.delete(id);
-  inp.closest(".pc108-row")?.classList.toggle("on", inp.checked);
-  pcSi.dirty = true; pcSiSum();
+function pcSiTick(id){
+  if(pcSi.sel.has(id)) pcSi.sel.delete(id); else pcSi.sel.add(id);
+  pcSi.dirty = true;
+  const y = window.scrollY; pcSiDraw(); window.scrollTo(0, y);
 }
 function pcSiToggleShown(on){
-  pcSiList().slice(0,300).forEach(i=>on ? pcSi.sel.add(String(i.id)) : pcSi.sel.delete(String(i.id)));
-  pcSi.dirty = true; pcSiDraw();
+  pcSiList().forEach(i=>on ? pcSi.sel.add(String(i.id)) : pcSi.sel.delete(String(i.id)));
+  pcSi.dirty = true; const y = window.scrollY; pcSiDraw(); window.scrollTo(0, y);
+}
+/* Assign one item to several sections. Other sections are saved immediately; the open section joins its unsaved list. */
+async function pcSiMulti(id){
+  const item = pcSiAll().find(i=>String(i.id)===String(id)); if(!item) return;
+  const names = pcAllSectionNames();
+  const has = n=>n === pcSi.sec ? pcSi.sel.has(String(id)) : !!pcSecIds(n, pcSi.store)?.has(String(id));
+  const v = await pcSheet({title:pc17ItemName(item)||item.name||"", icon:"fa-layer-group", body:`
+    <p class="pc85-hint">اختر الأقسام التي يظهر فيها هذا الصنف (${pcSi.store==="raw"?"مواد خام":"أصناف إنتاج"}).</p>
+    <div class="pc116-secpick">${names.map(n=>`<label><input type="checkbox" class="siM" value="${escapeHtml(n)}" ${has(n)?"checked":""}><span>${escapeHtml(n)}</span></label>`).join("")}</div>`,
+    actions:[{label:"حفظ", kind:"btn-main", value:h=>[...h.querySelectorAll(".siM:checked")].map(x=>x.value)},{label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  const want = new Set(v), sid = String(id);
+  const changes = names.filter(n=>n !== pcSi.sec && has(n) !== want.has(n));
+  if(want.has(pcSi.sec) !== pcSi.sel.has(sid)){ want.has(pcSi.sec) ? pcSi.sel.add(sid) : pcSi.sel.delete(sid); pcSi.dirty = true; }
+  if(changes.length){
+    try{
+      const {db,doc,setDoc,writeBatch} = window.firebaseDB;
+      const recs = changes.map(n=>{
+        const ids = new Set(pcSecIds(n, pcSi.store) || []);
+        want.has(n) ? ids.add(sid) : ids.delete(sid);
+        return [n, {section:n, [pcSi.store]:[...ids], updatedAtMs:Date.now()}];
+      });
+      if(writeBatch){ const b = writeBatch(db); recs.forEach(([n,d])=>b.set(doc(db,"section_items",pcSecDocId(n)), d, {merge:true})); await b.commit(); }
+      else for(const [n,d] of recs) await setDoc(doc(db,"section_items",pcSecDocId(n)), d, {merge:true});
+      showToast(`تم تحديث ${changes.length} ${changes.length===1?"قسم":"أقسام"}${pcSi.dirty ? ` — احفظ قسم ${pcSi.sec} لتثبيت تغييره` : ""}`);
+    }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+  } else if(pcSi.dirty) showToast(`احفظ قسم ${pcSi.sec} لتثبيت التغيير`);
+  const redraw = ()=>{ if(!document.getElementById("pcSiBox") || document.getElementById("pcSheetHost")) return; const y = window.scrollY; pcSiDraw(); window.scrollTo(0, y); };
+  redraw(); setTimeout(redraw, 500); setTimeout(redraw, 1500);   /* other sections' lists arrive through the listener */
 }
 function pcSiUsed(){
   let n = 0;
@@ -8434,7 +8494,7 @@ function pcSiUsed(){
     (pcRaw.productionLogs || productionLogs || []).filter(l=>String(l.section||"").trim()===pcSi.sec).forEach(l=>(l.items||[]).forEach(it=>{
       const c = pcStoreMenuFind(it); if(c && !pcSi.sel.has(String(c.id))){ pcSi.sel.add(String(c.id)); n++; } }));
   }
-  pcSi.dirty = pcSi.dirty || n > 0; pcSiDraw();
+  pcSi.dirty = pcSi.dirty || n > 0; if(n) pcSi.grp = "__sel"; pcSiDraw();
   showToast(n ? `أضيف ${n} صنف من سجل القسم — راجعها ثم احفظ` : "لا توجد أصناف جديدة في سجل هذا القسم");
 }
 function pcSiSum(){

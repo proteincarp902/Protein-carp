@@ -4744,3 +4744,33 @@ div.pc112-line{cursor:default}
 
 /* ===== pc115 personal gateway (attendance on top) ===== */
 .pc115-me{width:100%;max-width:520px;margin:0 auto 14px}
+
+/* ===== pc116 section items by buttons ===== */
+.pc116-secs,.pc116-store{flex-wrap:wrap;margin-bottom:8px}
+.pc116-secs em{font-style:normal;font-size:11px;background:rgba(0,0,0,.08);border-radius:999px;padding:1px 7px;margin-inline-start:4px}
+.pc116-grps{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;margin-bottom:12px}
+.pc116-g{border:1px solid var(--app-line);background:var(--app-surface);border-radius:12px;padding:8px 4px;font:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}
+.pc116-g b{font-size:15px;color:var(--app-ink);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pc116-g small{font-size:11px;color:var(--app-muted)}
+.pc116-g.has{border-color:#9BCB7A;background:#F3FAEE}
+.pc116-g.active{background:var(--app-brand);border-color:var(--app-brand)}
+.pc116-g.active b,.pc116-g.active small{color:#fff}
+.pc116-g.sel{grid-column:span 2}
+.pc116-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.pc116-head .btn{padding:8px 12px;font-size:13px}
+.pc116-pick{text-align:center;padding:20px 0}
+.pc116-row{display:flex;align-items:stretch;border-top:1px solid var(--app-line)}
+.pc116-row:first-child{border-top:0}
+.pc116-row.on{background:#F3FAEE}
+.pc116-tick{flex:1;min-width:0;display:flex;align-items:center;gap:12px;border:0;background:transparent;padding:11px 12px;font:inherit;text-align:start;cursor:pointer}
+.pc116-tick i{font-size:22px;color:#B7BDB0;flex:none}
+.pc116-row.on .pc116-tick i{color:var(--app-brand)}
+.pc116-tick span{display:flex;flex-direction:column;min-width:0}
+.pc116-tick b{font-size:14px;color:var(--app-ink)}
+.pc116-tick small{font-size:11px;color:var(--app-muted)}
+.pc116-oth{color:#1D4ED8}
+.pc116-multi{flex:none;border:0;border-inline-start:1px solid var(--app-line);background:transparent;padding:0 12px;font:inherit;font-size:12px;font-weight:700;color:#5B6152;cursor:pointer;white-space:nowrap}
+.pc116-secpick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.pc116-secpick label{display:flex;align-items:center;gap:8px;border:1px solid var(--app-line);border-radius:12px;padding:10px;cursor:pointer;font-size:13.5px}
+.pc116-secpick input{width:19px;height:19px;margin:0;accent-color:var(--app-brand)}
+.pc116-secpick label:has(input:checked){background:#F3FAEE;border-color:#9BCB7A}
