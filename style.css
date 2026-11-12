@@ -4732,3 +4732,12 @@ div.pc112-line{cursor:default}
 .pc113-g label{margin:0!important;min-height:0;align-items:center}
 .pc113-g label span{flex:1;line-height:1.5}
 .pc113-g input{padding:0!important;min-height:0!important;box-shadow:none!important}
+
+/* ===== pc114 branch location ===== */
+.pc114-geo{margin-top:14px}
+.pc114-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.pc114-row .btn{flex:1 1 160px;text-decoration:none;justify-content:center}
+.pc114-st{display:block;margin-top:6px;font-size:12px;color:#5B6152;direction:rtl;line-height:1.6}
+.pc114-tag{display:inline-block;margin-inline-start:6px;text-decoration:none;vertical-align:middle}
+.pc114-geo{border:1px solid var(--app-line);border-radius:14px;padding:6px 12px 12px;min-width:0}
+.pc114-geo legend{font-weight:800;font-size:14px;padding:0 6px;color:#14321F}

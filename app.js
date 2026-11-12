@@ -1332,6 +1332,7 @@ async function submitWarehouseOrderCore(){
     return;
   }
   const note=document.getElementById("warehouseOrderNote")?.value?.trim() || "";
+  const g = await pcGeoCheck(currentBranch, "الطلب", "record");
   const {db,addDoc,collection,serverTimestamp,doc,setDoc}=window.firebaseDB;
   const orderId = systemSettings.orderCounter || 1001;
   try{ await setDoc(doc(db,"settings","system"),{orderCounter:orderId+1},{merge:true}); }catch(e){}
@@ -1345,6 +1346,7 @@ async function submitWarehouseOrderCore(){
     note,
     status:"جديد",
     issueStatus:"بانتظار الصرف",
+    ...(g.geo ? {geo:g.geo} : {}),
     createdAt:serverTimestamp(),
     createdAtMs:Date.now(),
     createdAtText:nowText()
@@ -6676,7 +6678,7 @@ function renderSettingsBranches(){
         const n = (pcRaw.chefs||[]).filter(c=>pcBranchOf(c)===b.id).length;
         return `<button type="button" class="pc94-row ${b.active===false?"off":""}" data-id="${escapeHtml(b.id)}" onclick="pc94Edit(this.dataset.id)">
           <span class="pc94-av">${escapeHtml((b.name||"?").trim().charAt(0))}</span>
-          <span class="pc94-txt"><b>${escapeHtml(b.name||"")}</b><small>${b.id==="main"?"الأساسي • ":""}${b.city?escapeHtml(b.city)+" • ":""}${n} موظف</small></span>
+          <span class="pc94-txt"><b>${escapeHtml(b.name||"")}</b><small>${b.id==="main"?"الأساسي • ":""}${b.city?escapeHtml(b.city)+" • ":""}${n} موظف${pcGeoBranch(b.id)?` • 📍 ${Number(b.geoRadius)||PC_GEO_DEF_RADIUS} م`:" • بدون موقع"}</small></span>
           <em class="pc94-tag ${b.active===false?"off":""}">${b.active===false?"معطّل":"نشط"}</em></button>`;
       }).join("")}
     </section>`);
@@ -6687,17 +6689,33 @@ async function pc94Edit(id){
   const body = `
     <label class="pc94-lb">اسم الفرع</label><input id="pc94Name" class="pc93-name" maxlength="40" value="${escapeHtml(b?.name||"")}" placeholder="مثال: فرع الشمال">
     <label class="pc94-lb">المدينة (اختياري)</label><input id="pc94City" class="pc93-name" maxlength="40" value="${escapeHtml(b?.city||"")}">
-    ${b && b.id==="main" ? "" : `<label class="pc94-sw"><input id="pc94Active" type="checkbox" ${!b||b.active!==false?"checked":""}><span>نشط ويظهر في البوابة</span></label>`}`;
+    ${b && b.id==="main" ? "" : `<label class="pc94-sw"><input id="pc94Active" type="checkbox" ${!b||b.active!==false?"checked":""}><span>نشط ويظهر في البوابة</span></label>`}
+    <fieldset class="pc114-geo"><legend><i class="fa-solid fa-location-dot"></i> موقع الفرع</legend>
+      <p class="pc85-hint">الحضور والصرف والجرد تُسجّل من داخل نطاق الفرع فقط. الطلبات تُسجّل موقعها للمراجعة. اتركه فارغًا لإيقاف التحقق.</p>
+      <label class="pc94-lb" for="pc94Geo">رابط خرائط جوجل أو الإحداثيات</label>
+      <input id="pc94Geo" class="pc93-name" dir="ltr" placeholder="https://www.google.com/maps/@24.71,46.67,17z أو 24.71, 46.67" value="${b && isFinite(b.geoLat) && b.geoLat !== null ? `${b.geoLat}, ${b.geoLng}` : ""}" oninput="pcGeoPreview()">
+      <div class="pc114-row"><button type="button" class="btn btn-light" onclick="pcGeoUseHere()"><i class="fa-solid fa-location-crosshairs"></i> استخدم موقعي الحالي</button>
+        <a id="pc94GeoLink" class="btn btn-light" target="_blank" rel="noopener" ${b && pcGeoBranch(b.id) ? `href="${pcGeoMapUrl(b.geoLat,b.geoLng)}"` : "hidden"}><i class="fa-solid fa-map"></i> عرض على الخريطة</a></div>
+      <small id="pc94GeoSt" class="pc114-st"></small>
+      <label class="pc94-lb" for="pc94Rad">النطاق المسموح (متر)</label>
+      <input id="pc94Rad" class="pc93-name" type="number" min="30" max="2000" step="10" value="${escapeHtml(String(b?.geoRadius || PC_GEO_DEF_RADIUS))}">
+    </fieldset>`;
   const v = await pcSheet({title:b?"تعديل الفرع":"فرع جديد", body, actions:[
-    {label:"حفظ الفرع", kind:"btn-main", value:h=>({name:h.querySelector("#pc94Name").value.trim(), city:h.querySelector("#pc94City").value.trim(), active:h.querySelector("#pc94Active")?h.querySelector("#pc94Active").checked:true})},
+    {label:"حفظ الفرع", kind:"btn-main", value:h=>({name:h.querySelector("#pc94Name").value.trim(), city:h.querySelector("#pc94City").value.trim(), active:h.querySelector("#pc94Active")?h.querySelector("#pc94Active").checked:true,
+      geo:h.querySelector("#pc94Geo").value.trim(), rad:Number(h.querySelector("#pc94Rad").value||0)})},
     {label:"إلغاء", kind:"btn-light", value:null}]});
   if(!v) return;
   if(!v.name){ showToast("اكتب اسم الفرع","error"); return; }
+  const gp = v.geo ? pcGeoParse(v.geo) : null;
+  if(v.geo && !gp){ showToast("لم أتعرف على الإحداثيات — الصق الرابط الكامل من خرائط جوجل أو اكتب خط العرض، خط الطول","error"); return; }
+  if(gp && !(v.rad >= 30 && v.rad <= 2000)){ showToast("النطاق بين 30 و2000 متر","error"); return; }
+  const geo = gp ? {geoLat:gp.lat, geoLng:gp.lng, geoRadius:Math.round(v.rad), geoSetBy:pcStoreByName()||"", geoSetAtMs:Date.now()} : {geoLat:null, geoLng:null};
   const {db,doc,setDoc,addDoc,collection} = window.firebaseDB;
   try{
-    if(b){ await setDoc(doc(db,"branches",b.id), {name:v.name, city:v.city, active:v.active, createdAtMs:b.createdAtMs||0}, {merge:true}); }
-    else await addDoc(collection(db,"branches"), {name:v.name, city:v.city, active:true, createdAtMs:Date.now()});
+    if(b){ await setDoc(doc(db,"branches",b.id), {name:v.name, city:v.city, active:v.active, createdAtMs:b.createdAtMs||0, ...geo}, {merge:true}); }
+    else await addDoc(collection(db,"branches"), {name:v.name, city:v.city, active:true, createdAtMs:Date.now(), ...geo});
     showToast("تم حفظ الفرع");
+    setTimeout(()=>{ if(document.querySelector(".pc32-settings-page .pc94-list")) renderSettingsBranches(); }, 400);
   }catch(err){ console.error(err); showToast("تعذر حفظ الفرع","error"); }
 }
 
@@ -7148,9 +7166,9 @@ function pcStoreMoves(store, sec){
     if(!keep(ms, m)) return;
     const lines = (m.lines||[]).map(x=>({...x, qty:Number(x.qty||0)}));
     if(m.type === "count") out.push({ms, sign:1, type:"count", icon:"fa-clipboard-list", tone:"info", section:pcStoreSecOf(m),
-      title:"جرد فعلي", by:m.by||"", note:m.note||"", lines});
+      title:"جرد فعلي", by:m.by||"", note:m.note||"", lines, geo:m.geo});
     else out.push({ms, sign:-1, type:"issue", icon:"fa-right-from-bracket", tone:"info", section:pcStoreSecOf(m),
-      title:m.reason || "صرف", by:m.by||"", note:m.note||"", lines});
+      title:m.reason || "صرف", by:m.by||"", note:m.note||"", lines, geo:m.geo});
   });
   return out.sort((a,b)=>a.ms-b.ms);
 }
@@ -7305,7 +7323,7 @@ function pcStoreMovHtml(){
   return `<div class="pc60-timeline pc100-mov">${moves.map(m=>`
     <div class="pc60-tl ${m.tone}">
       <span class="pc60-tl-icon"><i class="fa-solid ${m.icon}"></i></span>
-      <div><b>${escapeHtml(m.title)}${m.by?` · ${escapeHtml(m.by)}`:""}</b>
+      <div><b>${escapeHtml(m.title)}${m.by?` · ${escapeHtml(m.by)}`:""}</b>${pcGeoTag(m.geo)}
         <small>${m.lines.map(l=>{
           const v = m.type === "count" ? `${l.qty>=0?"+":""}${pc60Num(l.qty)}` : `${m.sign<0?"−":"+"}${pc60Num(l.qty)}`;
           return `${escapeHtml(l.name)} ${v} ${escapeHtml(l.unit||"")}${m.type==="count"?` (دفتري ${pc60Num(l.book)} ← فعلي ${pc60Num(l.actual)})`:""}`;
@@ -7422,6 +7440,8 @@ async function pcStoreCount(){
 
 async function pcStoreSave(rec, okMsg){
   if(pc60Busy) return;
+  const g = await pcGeoCheck(currentBranch, rec.type === "count" ? "الجرد" : "الصرف");
+  if(!g) return;
   pc60Busy = true;
   try{
     pcStoreSaveBy(rec.by);
@@ -7430,7 +7450,7 @@ async function pcStoreSave(rec, okMsg){
       ...(rec.type==="count" ? {book:pc70R(l.book), actual:pc70R(l.actual)} : {})}));
     const now = Date.now();
     await addDoc(collection(db,"branch_stock_moves"), {branchId:currentBranch, section:pcStoreSec === PC_NO_SEC ? "" : pcStoreSec,
-      store:rec.store, type:rec.type, reason:rec.reason||"", by:rec.by, note:rec.note||"", lines,
+      store:rec.store, type:rec.type, reason:rec.reason||"", by:rec.by, note:rec.note||"", lines, ...(g.geo ? {geo:g.geo} : {}),
       createdAtMs:now, timeMs:now, createdAtText:nowText(), createdAt:serverTimestamp()});
     showToast(okMsg);
   }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
@@ -7826,7 +7846,7 @@ function pcHrDayHtml(){
       ${rows.map(({e,r})=>`<tr>
         <td><b>${escapeHtml(e.name)}</b><br><small>${escapeHtml(e.role||"")}</small></td>
         <td>${r.sh ? pcChefShiftText(e) : "—"}</td>
-        <td>${pcHrClock(r.inMs)}</td><td>${pcHrClock(r.outMs)}</td>
+        <td>${pcHrClock(r.inMs)}${pcGeoTag(r.recs[0]?.inGeo)}</td><td>${pcHrClock(r.outMs)}${pcGeoTag(r.recs[r.recs.length-1]?.outGeo)}</td>
         <td>${r.late>=1 ? pcHrDur(r.late) : "—"}</td><td>${r.early>=1 ? pcHrDur(r.early) : "—"}</td>
         <td>${r.recs.length ? pcHrDur(r.worked) : "—"}</td>
         <td><em class="pc103-tag ${r.tone}">${escapeHtml(r.status)}</em>${r.recs.some(a=>a.editedBy)?` <small title="معدّل يدويًا">✎</small>`:""}</td>
@@ -8194,12 +8214,14 @@ async function pcHrPunch(empId){
   }
   const now = Date.now();
   if(!(await pcConfirm(`${open ? "تسجيل انصراف" : "تسجيل حضور"} ${e.name} الساعة ${pcHrClock(now)}؟`,{title:open?"انصراف":"حضور", okText:"تأكيد"}))) return;
+  const g = await pcGeoCheck(currentBranch, open ? "تسجيل الانصراف" : "تسجيل الحضور");
+  if(!g) return;
   pc60Busy = true;
   const {db,addDoc,collection,doc,updateDoc,serverTimestamp} = window.firebaseDB;
   try{
-    if(open) await updateDoc(doc(db,"hr_attendance",open.id), {outMs:Date.now(), outAt:serverTimestamp()});
+    if(open) await updateDoc(doc(db,"hr_attendance",open.id), {outMs:Date.now(), outAt:serverTimestamp(), ...(g.geo ? {outGeo:g.geo} : {})});
     else await addDoc(collection(db,"hr_attendance"), {employeeId:e.id, name:e.name, branchId:currentBranch, day:pcHrToday(), inMs:Date.now(), outMs:0,
-      source:"self", inAt:serverTimestamp(), createdAtMs:Date.now()});
+      source:"self", inAt:serverTimestamp(), createdAtMs:Date.now(), ...(g.geo ? {inGeo:g.geo} : {})});
     showToast(open ? `تم تسجيل انصراف ${e.name}` : `تم تسجيل حضور ${e.name}`);
   }catch(err){ console.error(err); showToast("تعذر التسجيل، تحقق من الاتصال","error"); }
   finally{ pc60Busy = false; pcHrDrawKiosk(); }
@@ -8591,7 +8613,7 @@ function pcOrdDraw(force){
   box.innerHTML = `
     <ol class="pc106-steps">${steps.map(x=>`<li class="${x.n<=step?"done":""} ${x.n===step+1?"next":""}">
       <span class="pc106-dot">${x.n<=step?'<i class="fa-solid fa-check"></i>':x.n}</span>
-      <div><b>${x.t}</b><small>${x.n<=step ? `${escapeHtml(x.who)} · ${escapeHtml(x.when)}` : (x.n===step+1 ? (x.n===2 ? "بانتظار المستودع" : "بانتظار تأكيد الشيف") : "")}</small></div></li>`).join("")}</ol>
+      <div><b>${x.t}</b><small>${x.n<=step ? `${escapeHtml(x.who)} · ${escapeHtml(x.when)}` : (x.n===step+1 ? (x.n===2 ? "بانتظار المستودع" : "بانتظار تأكيد الشيف") : "")}</small>${x.n===1 ? pcGeoTag(o.geo) : ""}</div></li>`).join("")}</ol>
 
     ${canDeliver ? `<div class="pc106-banner wh"><i class="fa-solid fa-truck-ramp-box"></i> اكتب الكمية المسلّمة لكل صنف ثم اضغط «تم التسليم»</div>` : ""}
     ${canReceive ? `<div class="pc106-banner rc"><i class="fa-solid fa-box-open"></i> راجع الأصناف وعلّم أي صنف ناقص ثم اضغط «تأكيد الاستلام»</div>` : ""}
@@ -8868,6 +8890,96 @@ var pcEmpOrig = {};
     return pcEmpHome();
   };
 });
+
+/* =========================== Branch location (geofence) =========================== *
+ * Each branch may hold a point (geoLat/geoLng) and a radius in metres (geoRadius). When set:
+ *  - attendance, stock issue and stock count need the device to be inside the radius; when the location
+ *    cannot be read the action is refused. A signed-in system admin is not restricted.
+ *  - warehouse orders only record where they were made.
+ * Every check stores {lat,lng,acc,dist,inside} with the record for review. The phone's position is read by
+ * the browser; no Google API key is used. GPS indoors is typically off by 10–50 m. */
+var PC_GEO_DEF_RADIUS = 150;
+function pcGeoBranch(id){ const b = pcBranches().find(x=>x.id===id); return b && isFinite(b.geoLat) && isFinite(b.geoLng) && b.geoLat !== null ? b : null; }
+function pcGeoParse(t){
+  t = String(t||"").trim();
+  const pats = [/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/, /@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/,
+    /[?&](?:q|query|ll|destination|center)=(-?\d+(?:\.\d+)?)(?:,|%2C)\s*(-?\d+(?:\.\d+)?)/i, /^(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)$/];
+  for(const re of pats){
+    const m = t.match(re);
+    if(m){ const lat = Number(m[1]), lng = Number(m[2]); if(Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && (lat || lng)) return {lat, lng}; }
+  }
+  return null;
+}
+function pcGeoDist(a, b){
+  const R = 6371000, r = x=>x*Math.PI/180;
+  const dLat = r(b.lat-a.lat), dLng = r(b.lng-a.lng);
+  const h = Math.sin(dLat/2)**2 + Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2;
+  return Math.round(2*R*Math.asin(Math.sqrt(h)));
+}
+function pcGeoHere(timeout, maxAge){
+  return new Promise((res, rej)=>{
+    if(!navigator.geolocation) return rej({code:0});
+    setTimeout(()=>rej({code:3}), 60000);                /* never hang, even if a permission prompt is left open */
+    navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy||0)}),
+      e=>rej(e), {enableHighAccuracy:true, timeout:timeout||15000, maximumAge:maxAge ?? 0});
+  });
+}
+function pcGeoErr(e){
+  return e && e.code === 1 ? "اسمح للتطبيق بالوصول إلى موقعك من إعدادات المتصفح أو الجوال ثم حاول مرة أخرى"
+    : e && e.code === 3 ? "تعذر تحديد موقعك في الوقت المحدد — تأكد من تشغيل الموقع (GPS) وحاول مرة أخرى"
+    : "تعذر تحديد موقعك — تأكد من تشغيل الموقع (GPS)";
+}
+function pcGeoMapUrl(lat, lng){ return `https://www.google.com/maps?q=${lat},${lng}`; }
+/* Check before an action. Returns the geo record to store, or null when the action must stop.
+   mode "enforce": refuse outside the radius or without a location; "record": never refuse. */
+async function pcGeoCheck(branchId, what, mode){
+  const b = pcGeoBranch(branchId);
+  if(!b) return {};
+  const enforce = mode !== "record" && !pcEmpIsAdmin();
+  let pos;
+  showToast("جاري تحديد موقعك…");
+  try{ pos = await pcGeoHere(enforce ? 15000 : 8000, enforce ? 0 : 60000); }
+  catch(e){
+    if(!enforce) return {geo:{none:true, err:e && e.code || 0}};
+    await pcSheet({title:"الموقع مطلوب", icon:"fa-location-crosshairs", body:`<p class="pc85-hint">${pcGeoErr(e)}.</p><p class="pc85-hint">${escapeHtml(what)} في ${escapeHtml(b.name||"")} يحتاج تحديد موقعك داخل الفرع.</p>`,
+      actions:[{label:"حسنًا", kind:"btn-main", value:null}]});
+    return null;
+  }
+  const radius = Number(b.geoRadius) || PC_GEO_DEF_RADIUS;
+  const dist = pcGeoDist(pos, {lat:b.geoLat, lng:b.geoLng});
+  const slack = Math.min(pos.acc || 0, 100);              /* forgive the phone's reported error, up to 100 m */
+  const inside = dist - slack <= radius;
+  const geo = {lat:Math.round(pos.lat*1e6)/1e6, lng:Math.round(pos.lng*1e6)/1e6, acc:pos.acc, dist, inside, radius};
+  if(!inside && enforce){
+    await pcSheet({title:"خارج نطاق الفرع", icon:"fa-location-dot", body:`<p class="pc85-hint">موقعك يبعد <b>${dist.toLocaleString("en-US")} م</b> عن ${escapeHtml(b.name||"")} (المسموح ${radius} م، دقة الجوال ±${pos.acc} م).</p>
+      <p class="pc85-hint">${escapeHtml(what)} متاح من داخل الفرع فقط. إن كنت داخل الفرع، اقترب من نافذة أو انتظر قليلًا وحاول مرة أخرى.</p>`,
+      actions:[{label:"حسنًا", kind:"btn-main", value:null}]});
+    return null;
+  }
+  return {geo};
+}
+function pcGeoTag(g){
+  if(!g) return "";
+  if(g.none) return `<em class="pc103-tag warn" title="لم يُحدد الموقع">📍 بدون موقع</em>`;
+  return `<a class="pc103-tag ${g.inside?"ok":"bad"} pc114-tag" href="${pcGeoMapUrl(g.lat,g.lng)}" target="_blank" rel="noopener" title="دقة ±${g.acc} م">📍 ${g.inside?"":"خارج "}${Number(g.dist).toLocaleString("en-US")} م</a>`;
+}
+async function pcGeoUseHere(){
+  const st = document.getElementById("pc94GeoSt");
+  if(st) st.textContent = "جاري تحديد موقعك…";
+  try{
+    const p = await pcGeoHere(20000);
+    document.getElementById("pc94Geo").value = `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`;
+    if(st) st.textContent = `تم — دقة ±${p.acc} م${p.acc > 50 ? " (ضعيفة؛ يفضل الخروج لمكان مفتوح والمحاولة مرة أخرى)" : ""}`;
+    pcGeoPreview();
+  }catch(e){ if(st) st.textContent = pcGeoErr(e); }
+}
+function pcGeoPreview(){
+  const v = document.getElementById("pc94Geo")?.value || "", st = document.getElementById("pc94GeoSt"), a = document.getElementById("pc94GeoLink");
+  const p = pcGeoParse(v);
+  if(a){ a.hidden = !p; if(p) a.href = pcGeoMapUrl(p.lat, p.lng); }
+  if(st && v && !p && !/جاري/.test(st.textContent)) st.textContent = /goo\.gl|maps\.app/.test(v) ? "الرابط المختصر لا يحتوي على الإحداثيات — افتحه في المتصفح وانسخ الرابط الكامل، أو اضغط مطولًا على الموقع في خرائط جوجل وانسخ الإحداثيات" : "لم أتعرف على الإحداثيات";
+  else if(st && p && !/تم/.test(st.textContent)) st.textContent = `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`;
+}
 
 /* =========================== Permissions =========================== *
  * Each employee file holds a list of permission keys (perms) and the template it started from (permTpl).
