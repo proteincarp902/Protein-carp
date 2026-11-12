@@ -1,5 +1,5 @@
 /* Service worker: caches the app shell only. Firestore/Firebase/CDN calls are never cached. */
-const VERSION = "pc-v70";
+const VERSION = "pc-v71";
 const SHELL = ["./","index.html","style.css","app.js","manifest.json","assets/icon-192.png"];
 self.addEventListener("install", e=>{
   e.waitUntil(caches.open(VERSION).then(c=>c.addAll(SHELL).catch(()=>{})));

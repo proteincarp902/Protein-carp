@@ -4882,7 +4882,7 @@ function pc60DrawList(kind){
   const mode = pcViewMode("catalog");
   if(!list.length){
     box.innerHTML = pc60Empty("fa-face-meh", f==="picked" ? "لم تختر أي صنف بعد" :
-      (q ? "لا توجد نتائج مطابقة" : (kind==="prod" ? "لا توجد أصناف إنتاج لقسمك. اطلب من الإدارة إضافتها." : "لا توجد أصناف مستودع لقسمك.")));
+      (q ? "لا توجد نتائج مطابقة" : (kind==="prod" ? "لا توجد أصناف إنتاج لقسمك. اطلب من الإدارة إضافتها." : "لا توجد أصناف مستودع لقسمك. اطلب من الإدارة تحديدها.")));
     pc60UpdateBar(kind);
     return;
   }
@@ -7344,7 +7344,15 @@ function pcStoreLineFor(store, cat, qty){
 function pcStoreBookOf(store, key){
   return (pcStoreBalances(store, pcStoreSec).find(r=>r.key===key) || {qty:0}).qty;
 }
+/* Who is acting: the signed-in account when there is one, otherwise a typed name (remembered on the device). */
+function pcAccountName(){ const e = typeof pcEmpCurrent === "function" ? pcEmpCurrent() : null; return e ? String(e.name||"").trim() : ""; }
+function pcByField(id, label, compact){
+  const me = pcAccountName();
+  if(me) return `<input type="hidden" id="${id}" value="${escapeHtml(me)}"><p class="pc111-by"><i class="fa-solid fa-user-check"></i> ${escapeHtml(label.replace(/^اسم /,""))}: <b>${escapeHtml(me)}</b></p>`;
+  return `${compact ? "" : `<label class="pc94-lb" for="${id}">${label}</label>`}<input id="${id}" class="pc93-name" maxlength="40" ${compact?`placeholder="${label}"`:""} value="${escapeHtml(pcStoreByName())}">`;
+}
 function pcStoreByName(){
+  const me = pcAccountName(); if(me) return me;
   try{ return localStorage.getItem("pcStoreBy") || ""; }catch(e){ return ""; }
 }
 function pcStoreSaveBy(v){
@@ -7359,7 +7367,7 @@ async function pcStoreIssue(){
     <label class="pc94-lb">الكمية (بوحدة الصنف)</label><input id="pc100Qty" class="pc93-name" type="text" inputmode="decimal" placeholder="0">
     <label class="pc94-lb">السبب</label>
     <select id="pc100Reason" class="pc93-name">${S.issueReasons.map(r=>`<option>${r}</option>`).join("")}</select>
-    <label class="pc94-lb">اسم المسؤول عن الصرف</label><input id="pc100By" class="pc93-name" maxlength="40" value="${escapeHtml(pcStoreByName())}">
+    ${pcByField("pc100By","اسم المسؤول عن الصرف")}
     <label class="pc94-lb">ملاحظة (اختياري)</label><input id="pc100Note" class="pc93-name" maxlength="120">`,
     actions:[
       {label:"تسجيل الصرف", kind:"btn-main", value:h=>({item:h.querySelector("#pc100Item").value, qty:h.querySelector("#pc100Qty").value,
@@ -7383,7 +7391,7 @@ async function pcStoreCount(){
     <p class="pc85-hint">القسم: <b>${escapeHtml(pcStoreSec)}</b>. اكتب الكمية الموجودة فعليًا على الرف، ويسجّل النظام الفرق بين الدفتري والفعلي كتسوية جرد.</p>
     <label class="pc94-lb">الصنف</label>${pcStoreItemPicker(store)}
     <label class="pc94-lb">الكمية الفعلية (بوحدة الصنف)</label><input id="pc100Qty" class="pc93-name" type="text" inputmode="decimal" placeholder="0">
-    <label class="pc94-lb">اسم القائم بالجرد</label><input id="pc100By" class="pc93-name" maxlength="40" value="${escapeHtml(pcStoreByName())}">
+    ${pcByField("pc100By","اسم القائم بالجرد")}
     <label class="pc94-lb">ملاحظة (اختياري)</label><input id="pc100Note" class="pc93-name" maxlength="120" placeholder="مثال: جرد افتتاحي">`,
     actions:[
       {label:"متابعة", kind:"btn-main", value:h=>({item:h.querySelector("#pc100Item").value, qty:h.querySelector("#pc100Qty").value,
@@ -7858,7 +7866,7 @@ async function pcHrManualAtt(){
     <div class="pc102-shift"><div><label class="pc94-lb">الحضور</label><input id="hrmIn" class="pc93-name" type="time"></div>
       <div><label class="pc94-lb">الانصراف (اختياري)</label><input id="hrmOut" class="pc93-name" type="time"></div></div>
     <label class="pc94-lb">السبب (مطلوب)</label><input id="hrmWhy" class="pc93-name" maxlength="120" placeholder="مثال: نسي التسجيل">
-    <label class="pc94-lb">اسم المسؤول</label><input id="hrmBy" class="pc93-name" maxlength="40" value="${escapeHtml(pcStoreByName())}">`,
+    ${pcByField("hrmBy","اسم المسؤول")}`,
     actions:[{label:"حفظ", kind:"btn-main", value:h=>({emp:h.querySelector("#hrmEmp").value, day:h.querySelector("#hrmDay").value, tin:h.querySelector("#hrmIn").value,
       tout:h.querySelector("#hrmOut").value, why:h.querySelector("#hrmWhy").value.trim(), by:h.querySelector("#hrmBy").value.trim()})},{label:"إلغاء", kind:"btn-light", value:null}]});
   if(!v) return;
@@ -7886,7 +7894,7 @@ async function pcHrFixAtt(recId){
     <div class="pc102-shift"><div><label class="pc94-lb">الحضور</label><input id="hrfIn" class="pc93-name" type="time" value="${t(a.inMs)}"></div>
       <div><label class="pc94-lb">الانصراف</label><input id="hrfOut" class="pc93-name" type="time" value="${t(a.outMs)}"></div></div>
     <label class="pc94-lb">سبب التصحيح (مطلوب)</label><input id="hrfWhy" class="pc93-name" maxlength="120">
-    <label class="pc94-lb">اسم المسؤول</label><input id="hrfBy" class="pc93-name" maxlength="40" value="${escapeHtml(pcStoreByName())}">`,
+    ${pcByField("hrfBy","اسم المسؤول")}`,
     actions:[{label:"حفظ التصحيح", kind:"btn-main", value:h=>({tin:h.querySelector("#hrfIn").value, tout:h.querySelector("#hrfOut").value, why:h.querySelector("#hrfWhy").value.trim(), by:h.querySelector("#hrfBy").value.trim()})},
       {label:"إلغاء السجل", kind:"btn-light", value:h=>({void:true, why:h.querySelector("#hrfWhy").value.trim(), by:h.querySelector("#hrfBy").value.trim()})},
       {label:"رجوع", kind:"btn-light", value:null}]});
@@ -7972,7 +7980,7 @@ async function pcHrAddLeave(){
 }
 async function pcHrDecideLeave(id, status){
   const v = await pcSheet({title:status==="معتمدة"?"اعتماد الإجازة":"رفض الإجازة", icon:"fa-signature", body:`
-    <label class="pc94-lb">اسم المعتمد</label><input id="hrdBy" class="pc93-name" maxlength="40" value="${escapeHtml(pcStoreByName())}">`,
+    ${pcByField("hrdBy","اسم المعتمد")}`,
     actions:[{label:status==="معتمدة"?"اعتماد":"رفض", kind:"btn-main", value:h=>h.querySelector("#hrdBy").value.trim()},{label:"إلغاء", kind:"btn-light", value:null}]});
   if(v === null || v === undefined) return;
   if(!v){ showToast("اكتب اسم المعتمد","error"); return; }
@@ -8208,7 +8216,7 @@ function renderStoreCount(){
       <div class="pc107-foot">
         <div id="pcCntSum" class="pc107-sum"></div>
         <div class="pc107-foot-row">
-          <input id="pcCntBy" class="pc93-name" maxlength="40" placeholder="اسم القائم بالجرد" value="${escapeHtml(pcStoreByName())}">
+          ${pcByField("pcCntBy","اسم القائم بالجرد", true)}
           <button type="button" class="btn btn-main" onclick="pcCntSubmit()"><i class="fa-solid fa-clipboard-check"></i> اعتماد الجرد</button>
         </div>
       </div>
@@ -8305,7 +8313,8 @@ function pcSecIds(sec, store){
 }
 function pcSecFilter(sec, store, list){
   const ids = pcSecIds(sec, store);
-  return ids ? list.filter(i=>ids.has(String(i.id))) : null;
+  if(ids) return list.filter(i=>ids.has(String(i.id)));
+  return (typeof pcEmpLocked === "function" && pcEmpLocked()) ? [] : null;   /* a signed-in employee never sees the whole catalog */
 }
 function pcAllSectionNames(){
   return [...new Set((pcRaw.chefSections || chefSections || []).map(s=>String(s.name||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ar"));
@@ -8600,7 +8609,7 @@ function pcOrdDraw(force){
 
     ${canDeliver ? `
       <label class="pc94-lb" for="pcOrdNote">ملاحظة للشيف (اختياري)</label><textarea id="pcOrdNote" class="pc70-cartnote" maxlength="200"></textarea>
-      <label class="pc94-lb" for="pcOrdBy">اسم المسلِّم</label><input id="pcOrdBy" class="pc93-name" maxlength="40" value="${escapeHtml(pcStoreByName())}">
+      ${pcByField("pcOrdBy","اسم المسلِّم")}
       <button type="button" class="btn btn-main pc106-act" onclick="pcOrdDeliver()"><i class="fa-solid fa-truck-ramp-box"></i> تم التسليم</button>` : ""}
     ${canReceive ? `
       <label class="pc94-lb" for="pcOrdNote">ملاحظة (اختياري)</label><textarea id="pcOrdNote" class="pc70-cartnote" maxlength="200"></textarea>

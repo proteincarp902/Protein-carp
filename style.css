@@ -4656,3 +4656,6 @@ button.pc70-unit{border:0;font:inherit;cursor:pointer}
   background:#312E81;color:#fff;border-radius:999px;padding:6px 6px 6px 14px;font-size:12px;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,.18);max-width:calc(100% - 32px)}
 .pc110-bar span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;gap:6px;align-items:center}
 .pc110-bar button{border:0;background:#fff;color:#312E81;border-radius:999px;padding:6px 12px;font:inherit;font-weight:800;cursor:pointer}
+.pc111-by{margin:8px 0 0;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--app-muted)}
+.pc111-by b{color:var(--app-ink)}.pc111-by i{color:var(--app-brand)}
+.pc107-foot-row .pc111-by{margin:0;flex:1;min-width:0}
