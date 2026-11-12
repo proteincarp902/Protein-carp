@@ -7849,7 +7849,7 @@ function pcHrDayHtml(){
         <td>${pcHrClock(r.inMs)}${pcGeoTag(r.recs[0]?.inGeo)}</td><td>${pcHrClock(r.outMs)}${pcGeoTag(r.recs[r.recs.length-1]?.outGeo)}</td>
         <td>${r.late>=1 ? pcHrDur(r.late) : "—"}</td><td>${r.early>=1 ? pcHrDur(r.early) : "—"}</td>
         <td>${r.recs.length ? pcHrDur(r.worked) : "—"}</td>
-        <td><em class="pc103-tag ${r.tone}">${escapeHtml(r.status)}</em>${r.recs.some(a=>a.editedBy)?` <small title="معدّل يدويًا">✎</small>`:""}</td>
+        <td><em class="pc103-tag ${r.tone}">${escapeHtml(r.status)}</em>${r.recs.some(a=>a.editedBy)?` <em class="pc103-tag warn" title="سُجّل أو عُدّل يدويًا من الموارد البشرية">يدوي</em>`:""}</td>
         <td>${r.recs.length ? `<button class="mini-btn" data-id="${escapeHtml(r.recs[r.recs.length-1].id)}" onclick="pcHrFixAtt(this.dataset.id)">تصحيح</button>` : ""}</td>
       </tr>`).join("")}</tbody></table></div>` : `<div class="placeholder">لا يوجد موظفون في هذا الفرع</div>`}`;
 }
@@ -8214,7 +8214,7 @@ async function pcHrPunch(empId){
   }
   const now = Date.now();
   if(!(await pcConfirm(`${open ? "تسجيل انصراف" : "تسجيل حضور"} ${e.name} الساعة ${pcHrClock(now)}؟`,{title:open?"انصراف":"حضور", okText:"تأكيد"}))) return;
-  const g = await pcGeoCheck(currentBranch, open ? "تسجيل الانصراف" : "تسجيل الحضور");
+  const g = await pcGeoCheck(pcBranchOf(e), open ? "تسجيل الانصراف" : "تسجيل الحضور", "strict");   /* the employee's own branch */
   if(!g) return;
   pc60Busy = true;
   const {db,addDoc,collection,doc,updateDoc,serverTimestamp} = window.firebaseDB;
@@ -8893,8 +8893,9 @@ var pcEmpOrig = {};
 
 /* =========================== Branch location (geofence) =========================== *
  * Each branch may hold a point (geoLat/geoLng) and a radius in metres (geoRadius). When set:
- *  - attendance, stock issue and stock count need the device to be inside the radius; when the location
- *    cannot be read the action is refused. A signed-in system admin is not restricted.
+ *  - attendance needs the device inside the radius of the EMPLOYEE'S OWN branch, for everyone (admins included);
+ *  - stock issue and count need it inside the radius of the branch being worked on; a system admin is not restricted;
+ *  - when the location cannot be read the action is refused.
  *  - warehouse orders only record where they were made.
  * Every check stores {lat,lng,acc,dist,inside} with the record for review. The phone's position is read by
  * the browser; no Google API key is used. GPS indoors is typically off by 10–50 m. */
@@ -8935,7 +8936,7 @@ function pcGeoMapUrl(lat, lng){ return `https://www.google.com/maps?q=${lat},${l
 async function pcGeoCheck(branchId, what, mode){
   const b = pcGeoBranch(branchId);
   if(!b) return {};
-  const enforce = mode !== "record" && !pcEmpIsAdmin();
+  const enforce = mode === "strict" || (mode !== "record" && !pcEmpIsAdmin());   /* attendance is strict for everyone */
   let pos;
   showToast("جاري تحديد موقعك…");
   try{ pos = await pcGeoHere(enforce ? 15000 : 8000, enforce ? 0 : 60000); }
