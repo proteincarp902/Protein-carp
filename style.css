@@ -4719,3 +4719,16 @@ div.pc112-line{cursor:default}
 .pc112-pay{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .pc112-pay>div{display:flex;flex-direction:column;gap:3px;min-width:0}.pc112-pay small{font-size:11px;color:#6B7065}
 @media (max-width:420px){.pc112-pay{grid-template-columns:1fr}}
+
+/* ===== pc113 permissions ===== */
+.pc113-sum{margin:12px 0 0;padding:10px 12px;border-radius:12px;background:#F3F4EF;font-size:13px;line-height:1.6;color:#3F4638}
+.pc113-sum i{color:#4C920E}
+.pc113-g{border:1px solid var(--app-line);border-radius:14px;padding:6px 12px 10px;margin:10px 0 0;display:flex;flex-direction:column;gap:2px;min-width:0}
+.pc113-g legend{display:flex;align-items:center;gap:6px;font-weight:800;font-size:14px;padding:0 6px;color:#14321F}
+.pc113-g legend button{border:1px solid var(--app-line);background:var(--app-surface);border-radius:999px;font:inherit;font-size:11px;font-weight:700;padding:2px 9px;cursor:pointer;color:#5B6152}
+.pc113-g label{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid #EEF0EA;font-size:13.5px;cursor:pointer}
+.pc113-g label:first-of-type{border-top:0}
+.pc113-g input{width:19px;height:19px;margin:1px 0 0;flex:none;accent-color:#4C920E}
+.pc113-g label{margin:0!important;min-height:0;align-items:center}
+.pc113-g label span{flex:1;line-height:1.5}
+.pc113-g input{padding:0!important;min-height:0!important;box-shadow:none!important}

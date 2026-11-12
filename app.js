@@ -6276,6 +6276,7 @@ function pc61LiveHome(){
 }
 
 function openSettingsTab(tab){
+  if(!pcSetCan(tab)){ showToast("ليس لديك صلاحية لهذا الجزء","error"); tab = "overview"; }
   setSettingsTab(tab);
   const map = {branches:renderSettingsBranches, overview:renderSettingsOverview, chefs:renderSettingsChefs, sections:renderSettingsSections, warehouse:renderSettingsWarehouseItems, menu:renderSettingsMenuItems, excel:renderSettingsExcel, cleaning:renderSettingsCleaning, operations:renderSettingsOperations, internal:renderSettingsInternalIssue, home:renderSettingsHome, passwords:renderSettingsPasswords, about:renderSettingsAbout,
     secItems:renderSettingsSecItems, hrEmp:renderSettingsHrEmployees, chefs:()=>{ pcHrRole = "شيف"; renderSettingsHrEmployees(); }, hrAtt:renderSettingsHrAttendance, hrLeave:renderSettingsHrLeaves, hrDocs:renderSettingsHrDocs};
@@ -6401,7 +6402,7 @@ function pc84GroupOf(tab){
 }
 
 function pc51SettingsGroupsHtml(){
-  return PC84_GROUPS.map(g=>`
+  return PC84_GROUPS.map(g=>({...g, rows:g.rows.map(r=>({...r, tabs:r.tabs.filter(pcSetCan)})).filter(r=>r.tabs.length)})).filter(g=>g.rows.length).map(g=>`
     <section class="pc84-group">
       <h2>${g.title}</h2>
       <div class="pc84-list">
@@ -6418,7 +6419,9 @@ function pc51SettingsGroupsHtml(){
 function pc84Tabs(active){
   const g = pc84GroupOf(active);
   if(!g || g.tabs.length < 2) return "";
-  return `<nav class="pc84-tabs" aria-label="${g.name}">${g.tabs.map(t=>
+  const tabs = g.tabs.filter(pcSetCan);
+  if(tabs.length < 2) return "";
+  return `<nav class="pc84-tabs" aria-label="${g.name}">${tabs.map(t=>
     `<button type="button" class="${t===active?"on":""}" onclick="openSettingsTab('${t}')">${PC84_TAB_NAMES[t]}</button>`).join("")}</nav>`;
 }
 
@@ -6435,7 +6438,7 @@ function settingsShell(active,title,bodyHtml){
           <span>${isOverview ? "" : "الإعدادات"}</span>
           <h1>${escapeHtml(isOverview ? "الإعدادات" : (g ? g.name : title))}</h1>
         </div>
-        <button type="button" onclick="renderGateway()" aria-label="البوابة"><i class="fa-solid fa-house"></i></button>
+        <button type="button" onclick="renderGateway()" aria-label="الرئيسية"><i class="fa-solid fa-house"></i></button>
       </section>
       ${isOverview ? pc51SettingsGroupsHtml() : `${pc84Tabs(active)}<section class="pc32-settings-body">${bodyHtml}</section>`}
     </main>
@@ -7243,8 +7246,8 @@ function pcDrawStore(){
   const box = document.getElementById("pcStoreBox");
   if(!box) return;
   const me = pcEmpLocked();
-  const top = me ? pcEmpTopHtml(me) : pcStoreChefsHtml() + `
-    <button type="button" class="btn btn-main pc100-new" onclick="pcStoreNewOrder()"><i class="fa-solid fa-cart-plus"></i> طلب جديد من المستودع</button>`;
+  const top = me ? pcEmpTopHtml(me) : pcStoreChefsHtml() + (pcStoreCan("order") ? `
+    <button type="button" class="btn btn-main pc100-new" onclick="pcStoreNewOrder()"><i class="fa-solid fa-cart-plus"></i> طلب جديد من المستودع</button>` : "");
   if(!pcStoreStart()){ box.innerHTML = top + pcStoreIntroHtml(true); return; }
   const store = pcStoreCur;
   const y = window.scrollY;
@@ -7259,8 +7262,8 @@ function pcDrawStore(){
         <button type="button" class="pc60-fchip ${pcStoreView==="mov"?"active":""}" onclick="pcStoreView='mov';pcDrawStore()">الحركات</button>
       </div>
       <div class="pc100-acts">
-        <button type="button" class="btn btn-light" onclick="pcStoreIssue()"><i class="fa-solid fa-right-from-bracket"></i> صرف</button>
-        <button type="button" class="btn btn-main" onclick="renderStoreCount()"><i class="fa-solid fa-clipboard-list"></i> جرد</button>
+        ${pcStoreCan("issue") ? `<button type="button" class="btn btn-light" onclick="pcStoreIssue()"><i class="fa-solid fa-right-from-bracket"></i> صرف</button>` : ""}
+        ${pcStoreCan("count") ? `<button type="button" class="btn btn-main" onclick="renderStoreCount()"><i class="fa-solid fa-clipboard-list"></i> جرد</button>` : ""}
       </div>
     </div>
     <small class="pc100-since">الاحتساب من ${escapeHtml(new Date(pcStoreStart()).toLocaleDateString("ar-SA"))}</small>`;
@@ -7365,6 +7368,7 @@ function pcStoreSaveBy(v){
 }
 
 async function pcStoreIssue(){
+  if(!pcStoreCan("issue")){ showToast("ليس لديك صلاحية الصرف","error"); return; }
   const store = pcStoreCur, S = PC_STORES[store];
   const v = await pcSheet({title:`صرف من ${S.name}`, icon:"fa-right-from-bracket", body:`
     <p class="pc85-hint">القسم: <b>${escapeHtml(pcStoreSec)}</b></p>
@@ -7522,6 +7526,7 @@ function pcStoreChefsHtml(){
       : `<p class="pc100-none">لا يوجد شيف في هذا القسم — أضفه من الإعدادات ← الموارد البشرية</p>`}</div>`;
 }
 async function pcStoreNewOrder(){
+  if(!pcStoreCan("order")){ showToast("ليس لديك صلاحية طلب جديد","error"); return; }
   const me = pcEmpLocked();
   const list = me ? pcStoreSecChefs().filter(c=>c.id===me.chefId || c.employeeId===me.id) : pcStoreSecChefs();
   if(!list.length){ showToast("لا يوجد شيف في هذا القسم — أضفه من الإعدادات ← الموارد البشرية","error"); return; }
@@ -7549,7 +7554,7 @@ function pcStoreBackFromOrder(){
    Attendance is recorded by the employee from the branch's "الحضور" card; managers can correct it
    from settings, and every correction keeps who changed it and why. */
 var hrEmployees = [], hrAttendance = [], hrLeaves = [], hrDocs = [];
-var PC_HR_ROLES = ["شيف","مساعد شيف","نظافة","كاشير","توصيل","مستودع","إداري","أخرى"];
+var PC_HR_ROLES = ["شيف","مساعد شيف","نظافة","كاشير","توصيل","مستودع","محاسب","إداري","أخرى"];
 var PC_HR_STATUS = ["نشط","موقوف","منتهي الخدمة"];
 var PC_HR_LEAVE_TYPES = ["سنوية","مرضية","اضطرارية","بدون راتب","أخرى"];
 var PC_HR_DOC_TYPES = ["الشهادة الصحية","عقد العمل","رخصة القيادة","شهادة تدريب","أخرى"];
@@ -7664,7 +7669,7 @@ function pcHrDrawEmployees(){
       <span class="pc103-emp-txt"><b>${escapeHtml(e.name||"")}</b>
         <small>${escapeHtml(e.role||"")}${e.section?` · ${escapeHtml(e.section)}`:""}${e.odooEmployeeId?` · #${escapeHtml(e.odooEmployeeId)}`:""}</small>
         <small>${e.shiftStart&&e.shiftEnd ? pcChefShiftText(e) : "بدون دوام محدد"}</small></span>
-      <span class="pc103-tags">${e.isAdmin ? `<em class="pc103-tag info">مدير النظام</em>` : ""}${e.isAccountant ? `<em class="pc103-tag info">محاسب</em>` : ""}
+      <span class="pc103-tags">${e.isAdmin ? `<em class="pc103-tag info">مدير النظام</em>` : pcPermsOf(e).length ? `<em class="pc103-tag info">${escapeHtml(pcPermTplName(e))}</em>` : ""}
         ${pcHrActive(e) ? "" : `<em class="pc103-tag muted">${escapeHtml(e.status)}</em>`}
         ${docs.expired ? `<em class="pc103-tag bad">${docs.expired} منتهي</em>` : ""}
         ${docs.soon ? `<em class="pc103-tag warn">${docs.soon} قارب الانتهاء</em>` : ""}
@@ -7721,20 +7726,19 @@ async function pcHrEditEmployee(id, preset){
     </div>
     <label class="pc94-lb">الرقم السري لحساب الموظف <small>${e.pwHash||e.pinHash ? "— محفوظ، اتركه فارغًا لعدم التغيير" : "(4 إلى 8 أرقام — يدخل به برقمه الوظيفي)"}</small></label>
     <input id="hrPin" class="pc93-name" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password" placeholder="••••">
-    <label class="pc110-adm"><input type="checkbox" id="hrAdmin" ${e.isAdmin?"checked":""}>
-      <span><b>مدير النظام</b><small>تحكم كامل: كل الفروع والإعدادات والإدارة والمستودع بدون كلمات مرور إضافية. يتطلب رقمًا وظيفيًا ورقمًا سريًا.</small></span></label>
-    <label class="pc110-adm"><input type="checkbox" id="hrAcc" ${e.isAccountant?"checked":""}>
-      <span><b>محاسب</b><small>يفتح حسابه على قسم المحاسبة فقط (الموردين والمبيعات). يتطلب رقمًا وظيفيًا ورقمًا سريًا.</small></span></label>
+    ${id ? `<p class="pc113-sum"><i class="fa-solid fa-key"></i> <b>الصلاحيات:</b> ${escapeHtml(pcPermSummary(e))}</p>` : ""}
     ${id ? `<p class="pc85-hint">${pcHrEmpSummary(e)}</p>` : ""}`,
     actions:[
       {label:"حفظ", kind:"btn-main", value:h=>({
         name:h.querySelector("#hrName").value.trim(), role:h.querySelector("#hrRole").value, status:h.querySelector("#hrStatus").value,
         branchId:h.querySelector("#hrBranch").value, section:h.querySelector("#hrSection").value,
         hireDate:h.querySelector("#hrHire").value, annualLeaveDays:Number(h.querySelector("#hrAnnual").value||0),
-        workDays:[...h.querySelectorAll(".hrDay:checked")].map(x=>Number(x.value)), pin:h.querySelector("#hrPin").value.trim(), isAdmin:h.querySelector("#hrAdmin").checked, isAccountant:h.querySelector("#hrAcc").checked,
+        workDays:[...h.querySelectorAll(".hrDay:checked")].map(x=>Number(x.value)), pin:h.querySelector("#hrPin").value.trim(),
         extra:pcChefExtraRead("hr")})},
+      ...(id && pcPermEditor() ? [{label:"الصلاحيات", kind:"btn-light", value:"perms"}] : []),
       ...(id ? [{label:"المستندات والإجازات", kind:"btn-light", value:"docs"}] : []),
       {label:"إلغاء", kind:"btn-light", value:null}]});
+  if(v === "perms") return pcPermEdit(id);
   if(v === "docs"){ pcHrQ = e.name || ""; renderSettingsHrDocs(); return; }
   if(!v) return;
   if(!v.name){ showToast("اكتب اسم الموظف","error"); return; }
@@ -7742,20 +7746,16 @@ async function pcHrEditEmployee(id, preset){
   const isChef = v.role === "شيف";
   if(isChef && !v.section){ showToast("اختر قسم الشيف","error"); return; }
   if(v.pin && !/^\d{4,8}$/.test(v.pin)){ showToast("الرقم السري من 4 إلى 8 أرقام","error"); return; }
+  if(v.pin && id && (e.isAdmin || pcPermsOf(e).length) && !pcPermEditor()){ showToast("تغيير الرقم السري لموظف له صلاحيات من مدير النظام فقط","error"); return; }
   if(v.pin && !v.extra.data.odooEmployeeId){ showToast("سجّل الرقم الوظيفي أولًا — الموظف يدخل به مع الرقم السري","error"); return; }
   if(!v.workDays.length){ showToast("اختر يوم عمل واحدًا على الأقل","error"); return; }
-  if(v.isAdmin && !(v.pin || e.pwHash)){ showToast("حدّد رقمًا سريًا لمدير النظام","error"); return; }
-  if(v.isAdmin && !v.extra.data.odooEmployeeId){ showToast("مدير النظام يحتاج رقمًا وظيفيًا (اسم المستخدم)","error"); return; }
-  if(v.isAccountant && !(v.pin || e.pwHash)){ showToast("حدّد رقمًا سريًا للمحاسب","error"); return; }
-  if(v.isAccountant && !v.extra.data.odooEmployeeId){ showToast("المحاسب يحتاج رقمًا وظيفيًا (اسم المستخدم)","error"); return; }
-  if(!!e.isAccountant !== v.isAccountant && !(await pcConfirm(v.isAccountant ? `منح ${v.name} صلاحية المحاسبة (الموردين والمبيعات)؟` : `سحب صلاحية المحاسبة من ${v.name}؟`,{title:"صلاحية المحاسبة", okText:"تأكيد"}))) return;
-  if(!!e.isAdmin !== v.isAdmin && !(await pcConfirm(v.isAdmin ? `منح ${v.name} صلاحية مدير النظام (تحكم كامل في كل شيء)؟` : `سحب صلاحية مدير النظام من ${v.name}؟`,{title:"صلاحية مدير النظام", okText:"تأكيد"}))) return;
-  if(e.isAdmin && !v.isAdmin && !pcHrEmps().some(x=>x.id!==id && x.isAdmin && pcHrActive(x))){ showToast("لا يمكن سحب الصلاحية من آخر مدير نظام","error"); return; }
+  if(e.isAdmin && !v.extra.data.odooEmployeeId){ showToast("مدير النظام يحتاج رقمًا وظيفيًا (اسم المستخدم)","error"); return; }
+  if(e.isAdmin && v.status !== "نشط" && !pcHrEmps().some(x=>x.id!==id && x.isAdmin && pcHrActive(x))){ showToast("لا يمكن إيقاف آخر مدير نظام","error"); return; }
   if(v.extra.data.odooEmployeeId && pcHrEmps().some(x=>x.id!==id && String(x.odooEmployeeId||"")===v.extra.data.odooEmployeeId)){
     showToast("الرقم الوظيفي مستخدم لموظف آخر","error"); return;
   }
   const data = {name:v.name, role:v.role, status:v.status, branchId:v.branchId, section:isChef ? v.section : (v.section||""),
-    hireDate:v.hireDate, annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, isAdmin:v.isAdmin, isAccountant:v.isAccountant, ...v.extra.data, updatedAtMs:Date.now()};
+    hireDate:v.hireDate, annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, ...v.extra.data, updatedAtMs:Date.now()};
   try{
     const {db,addDoc,collection,doc,updateDoc} = window.firebaseDB;
     let empId = id;
@@ -8211,6 +8211,7 @@ function pcCntKey(){ return `pcCnt:${currentBranch}:${pcStoreSec}:${pcStoreCur}`
 function pcCntSave(){ try{ localStorage.setItem(pcCntKey(), JSON.stringify(pcCnt.vals)); }catch(e){} }
 function pcCntLoad(){ try{ return JSON.parse(localStorage.getItem(pcCntKey()) || "{}") || {}; }catch(e){ return {}; } }
 function renderStoreCount(){
+  if(!pcStoreCan("count")){ showToast("ليس لديك صلاحية الجرد","error"); return; }
   if(!pcStoreStart()){ showToast("فعّل المستودعات أولًا","error"); return; }
   const S = PC_STORES[pcStoreCur];
   pcCnt = {all:false, q:"", vals:pcCntLoad(), back:pcEmpLocked() ? "pcEmpHome()" : `renderBranchStore(${JSON.stringify(pcStoreSec)},"${pcStoreCur}")`};
@@ -8722,7 +8723,8 @@ function pcStartDecide(){
 }
 function pcEmpIsAdmin(){ const e = pcEmpCurrent(); return !!(e && e.isAdmin); }
 /* Signed-in employee whose screens are locked to their section (admins are never locked). */
-function pcEmpLocked(){ const e = pcEmpCurrent(); return e && !e.isAdmin ? e : null; }
+var pcEmpOwnView = false;
+function pcEmpLocked(){ const e = pcEmpCurrent(); return e && !e.isAdmin && (pcEmpOwnView || !pcPermsOf(e).length) ? e : null; }
 function pcEmpAdminBar(){
   const e = pcEmpCurrent();
   if(!e || !e.isAdmin || document.getElementById("pc110Bar")) return;
@@ -8777,7 +8779,7 @@ async function pcEmpLogout(){
   if(!(await pcConfirm("تسجيل الخروج من حسابك على هذا الجهاز؟",{title:"تسجيل الخروج", okText:"خروج"}))) return;
   pcEmpStore(PC_EMP_KEY, null);
   document.getElementById("pc110Bar")?.remove();
-  currentChef = null; productionDraft = []; currentCart = [];
+  currentChef = null; productionDraft = []; currentCart = []; pcEmpOwnView = false;
   pcEmpOrig.renderEmpLogin();
 }
 /* While employee data is still loading after a reload, wait on a small screen and resume. */
@@ -8792,12 +8794,17 @@ function pcEmpHome(){
   const e = pcEmpCurrent();
   if(!e){ document.getElementById("pc110Bar")?.remove(); showToast("انتهت الجلسة — سجّل الدخول مرة أخرى","error"); return pcEmpOrig.renderEmpLogin(); }
   if(e.isAdmin){ pcEmpAdminBar(); return pcEmpOrig.renderGateway(); }
-  if(e.isAccountant) return renderAccounting("sum");
+  if(pcPermsOf(e).length && !pcEmpOwnView){
+    const doors = pcEmpDoors(e);
+    if(doors.length === 1) return new Function(doors[0][4])();
+    return pcEmpGateway(e);
+  }
+  const multi = pcPermsOf(e).length > 0;
   currentBranch = pcBranchOf(e); pcSetScope(currentBranch);
   pcStoreSec = String(e.section||"").trim() || PC_NO_SEC;
   pcStoreView = "bal"; pcStoreQ = "";
   pageLayout(e.name, `
-    ${pc60Bar({title:e.section || e.role || "حسابي", sub:`${e.name} · ${pcBranchName(currentBranch)}`, back:"pcEmpHome()",
+    ${pc60Bar({title:e.section || e.role || "حسابي", sub:`${e.name} · ${pcBranchName(currentBranch)}`, back:multi ? "pcEmpOwnView=false;pcEmpHome()" : "pcEmpHome()",
       trailing:`<button type="button" class="pc60-back" onclick="pcEmpLogout()" aria-label="تسجيل الخروج"><i class="fa-solid fa-right-from-bracket"></i></button>`})}
     <section class="pc60-page has-bar pc100-page"><div id="pcStoreBox"></div></section>`, "pcEmpHome()");
   if(e.section) pcDrawStore();
@@ -8843,9 +8850,202 @@ var pcEmpOrig = {};
   window[n] = function(...a){
     if(!pcEmpSessionRaw()) return f.apply(this, a);
     if(Array.isArray(pcRaw.hrEmployees) && pcEmpIsAdmin()) return n === "renderEmpLogin" ? pcEmpOrig.renderGateway() : f.apply(this, a);
+    const e = pcEmpUser();
+    if(!e || pcEmpOwnView || n === "renderEmpLogin") return pcEmpHome();
+    if(n === "renderGateway") return pcEmpHome();
+    const own = pcBranchOf(e), all = pcCan("br.all");
+    const okBranch = id=>pcCan("br.open") && (all || id === own);
+    switch(n){
+      case "renderBranches": return pcCan("br.open") ? pcEmpBranches() : pcEmpHome();
+      case "pc94PickBranch": return okBranch(a[0]) ? f.apply(this, a) : pcEmpHome();
+      case "renderBranchAttendance": return pcCan("br.att") && (all || currentBranch === own) ? f.apply(this, a) : pcEmpHome();
+      case "renderHome": case "renderStoreSections": case "renderBranchStore": case "renderChefs":
+        return okBranch(currentBranch) ? f.apply(this, a) : pcEmpHome();
+      case "renderSettingsGate": return pcCanAny("set.") ? renderSettingsOverview() : pcEmpHome();
+      case "renderAdminGate": return pcCan("adm.open") ? pc21OpenAdmin() : pcEmpHome();
+      case "renderWarehouseGate": return pcCan("wh.open") ? pc22OpenWarehousePremium() : pcEmpHome();
+    }
     return pcEmpHome();
   };
 });
+
+/* =========================== Permissions =========================== *
+ * Each employee file holds a list of permission keys (perms) and the template it started from (permTpl).
+ * A system admin has everything. Permissions are granted and changed only by a system admin (or, while
+ * the fixed passwords are still in use, by whoever opened the settings with the admin password).
+ * Accounting opens by permission only. Settings, admin and warehouse still accept their fixed passwords
+ * for people without an account, until every user has one. */
+var PC_PERMS = [
+  {k:"br", name:"الفروع", ico:"fa-building", parts:[
+    ["br.open","دخول الفروع والأقسام وعرض الأرصدة والحركات"],
+    ["br.all","كل الفروع (بدونها: فرعه فقط)"],
+    ["br.issue","الصرف من مستودعات الأقسام"],
+    ["br.count","الجرد"],
+    ["br.order","طلب جديد من المستودع"],
+    ["br.att","حضور وانصراف موظفي الفرع"]]},
+  {k:"wh", name:"المستودع", ico:"fa-boxes-stacked", parts:[
+    ["wh.open","دخول المستودع: استلام الطلبات وتجهيزها وتسليمها"]]},
+  {k:"adm", name:"الإدارة", ico:"fa-shield-halved", parts:[
+    ["adm.open","لوحة الإدارة والتقارير"]]},
+  {k:"set", name:"الإعدادات", ico:"fa-gear", parts:[
+    ["set.branches","الفروع"],["set.sections","الأقسام"],["set.secItems","أصناف الأقسام"],["set.internal","الصرف الداخلي"],
+    ["set.cleaning","مهام النظافة"],["set.operations","مهام التشغيل"],["set.warehouse","أصناف المستودع"],["set.menu","المنيو والإنتاج"],
+    ["set.excel","استيراد وتصدير Excel"],["set.home","الرسالة الجماعية والسلايدر"],["set.about","حول البرنامج"]]},
+  {k:"hr", name:"الموارد البشرية", ico:"fa-id-card", parts:[
+    ["set.hrEmp","الموظفون: عرض الملفات وتعديلها"],["set.hrAtt","الحضور"],["set.hrLeave","الإجازات"],["set.hrDocs","المستندات"]]},
+  {k:"acc", name:"المحاسبة", ico:"fa-calculator", parts:[
+    ["acc.sum","الملخص"],
+    ["acc.sup","الموردين: عرض الأرصدة وكشوف الحساب"],
+    ["acc.supEdit","إضافة الموردين وتعديل بياناتهم"],
+    ["acc.bill","تسجيل فواتير المشتريات"],
+    ["acc.pay","تسجيل السداد للموردين"],
+    ["acc.credit","تسجيل المرتجعات والإشعارات الدائنة"],
+    ["acc.sales","المبيعات: عرض"],
+    ["acc.salesAdd","تسجيل المبيعات اليومية"],
+    ["acc.void","إلغاء القيود"],
+    ["acc.export","تصدير Excel"]]}
+];
+var PC_PERM_ALL = PC_PERMS.flatMap(g=>g.parts.map(p=>p[0]));
+var PC_PERM_ACC = PC_PERMS.find(g=>g.k==="acc").parts.map(p=>p[0]);
+var PC_PERM_TPL = [
+  ["custom","مخصص",[]],
+  ["accHead","رئيس حسابات", PC_PERM_ACC],
+  ["accSup","محاسب موردين",["acc.sum","acc.sup","acc.supEdit","acc.bill","acc.pay","acc.credit","acc.export"]],
+  ["accSales","محاسب مبيعات",["acc.sum","acc.sales","acc.salesAdd","acc.export"]],
+  ["wh","أمين مستودع",["wh.open","br.open","br.all","br.issue","br.count","set.warehouse","set.secItems"]],
+  ["brSup","مشرف فرع",["br.open","br.issue","br.count","br.order","br.att"]],
+  ["hr","موارد بشرية",["set.hrEmp","set.hrAtt","set.hrLeave","set.hrDocs","br.att"]],
+  ["ops","مدير تشغيل",["adm.open","wh.open","br.open","br.all","br.issue","br.count","br.order","br.att","set.sections","set.secItems","set.internal","set.cleaning","set.operations","set.warehouse","set.menu"]]
+];
+function pcPermsOf(e){
+  if(!e) return [];
+  if(Array.isArray(e.perms)) return e.perms.filter(k=>PC_PERM_ALL.includes(k));
+  return e.isAccountant ? PC_PERM_ACC.slice() : [];   /* files saved before the permission list */
+}
+function pcPermTplName(e){
+  const t = PC_PERM_TPL.find(x=>x[0]===e.permTpl);
+  return t && t[0] !== "custom" ? t[1] : "صلاحيات مخصصة";
+}
+function pcPermSummary(e){
+  if(e.isAdmin) return "مدير النظام — كل الصلاحيات";
+  const p = pcPermsOf(e);
+  if(!p.length) return e.section ? `قسمه فقط (${e.section})` : "لا توجد";
+  const groups = PC_PERMS.filter(g=>g.parts.some(x=>p.includes(x[0]))).map(g=>g.name);
+  return `${pcPermTplName(e)} — ${groups.join("، ")} (${p.length})`;
+}
+/* Does the signed-in account have this permission? Without an account (fixed-password use) this is false. */
+function pcCan(k){
+  const e = pcEmpCurrent();
+  if(!e) return false;
+  return !!e.isAdmin || pcPermsOf(e).includes(k);
+}
+function pcCanAny(prefix){
+  const e = pcEmpCurrent();
+  if(!e) return false;
+  return !!e.isAdmin || pcPermsOf(e).some(k=>k.startsWith(prefix));
+}
+/* A signed-in employee who is not an admin. */
+function pcEmpUser(){ const e = pcEmpCurrent(); return e && !e.isAdmin ? e : null; }
+/* Who may change permissions: a signed-in system admin, or (temporarily) someone working without an account
+   through the fixed settings password. */
+function pcPermEditor(){ return pcEmpIsAdmin() || !pcEmpSessionRaw(); }
+
+async function pcPermEdit(id){
+  if(!pcPermEditor()){ showToast("تعديل الصلاحيات لمدير النظام فقط","error"); return; }
+  const e = pcHrEmp(id); if(!e) return;
+  const cur = pcPermsOf(e);
+  const v = await pcSheet({title:`صلاحيات ${e.name}`, icon:"fa-key", body:`
+    ${e.odooEmployeeId && (e.pwHash||e.pinHash) ? "" : `<p class="pc106-note"><b>تنبيه:</b> الموظف ليس له حساب دخول بعد. حدّد له رقمًا وظيفيًا ورقمًا سريًا من ملفه حتى تعمل صلاحياته.</p>`}
+    <label class="pc110-adm"><input type="checkbox" id="pmAdmin" ${e.isAdmin?"checked":""} onchange="pcPermAdminToggle()">
+      <span><b>مدير النظام</b><small>كل الصلاحيات، ومنح الصلاحيات وسحبها، وكلمات المرور.</small></span></label>
+    <div id="pmBody" ${e.isAdmin?"hidden":""}>
+      <label class="pc94-lb">القالب</label>
+      <select id="pmTpl" class="pc93-name" onchange="pcPermApplyTpl()">${PC_PERM_TPL.map(t=>`<option value="${t[0]}" ${t[0]===(e.permTpl||"custom")?"selected":""}>${t[1]}</option>`).join("")}</select>
+      <p class="pc85-hint">اختر قالبًا ثم عدّل عليه. أي تعديل يدوي يحوّل القالب إلى «مخصص».${e.section ? ` قسمه (${escapeHtml(e.section)}) مفتوح له دائمًا.` : ""}</p>
+      ${PC_PERMS.map(g=>`<fieldset class="pc113-g">
+        <legend><i class="fa-solid ${g.ico}"></i> ${g.name}
+          <button type="button" onclick="pcPermGroup(this,true)">الكل</button><button type="button" onclick="pcPermGroup(this,false)">لا شيء</button></legend>
+        ${g.parts.map(p=>`<label><input type="checkbox" class="pmK" value="${p[0]}" ${cur.includes(p[0])?"checked":""} onchange="pcPermManual()"><span>${p[1]}</span></label>`).join("")}
+      </fieldset>`).join("")}
+    </div>`,
+    actions:[{label:"حفظ الصلاحيات", kind:"btn-main", value:h=>({admin:h.querySelector("#pmAdmin").checked, tpl:h.querySelector("#pmTpl").value,
+      perms:[...h.querySelectorAll(".pmK:checked")].map(x=>x.value)})},{label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  if(v.admin && !(e.odooEmployeeId && (e.pwHash||e.pinHash))){ showToast("مدير النظام يحتاج رقمًا وظيفيًا ورقمًا سريًا — حدّدهما من ملفه أولًا","error"); return; }
+  if(e.isAdmin && !v.admin && !pcHrEmps().some(x=>x.id!==id && x.isAdmin && pcHrActive(x))){ showToast("لا يمكن سحب الصلاحية من آخر مدير نظام","error"); return; }
+  if(!!e.isAdmin !== v.admin && !(await pcConfirm(v.admin ? `منح ${e.name} صلاحية مدير النظام (تحكم كامل في كل شيء)؟` : `سحب صلاحية مدير النظام من ${e.name}؟`,{title:"صلاحية مدير النظام", okText:"تأكيد"}))) return;
+  const before = new Set(cur), after = new Set(v.perms);
+  const add = v.perms.filter(k=>!before.has(k)).length, rem = cur.filter(k=>!after.has(k)).length;
+  try{
+    const {db,doc,updateDoc} = window.firebaseDB;
+    await updateDoc(doc(db,"hr_employees",id), {isAdmin:v.admin, perms:v.admin ? [] : v.perms, permTpl:v.admin ? "" : v.tpl, isAccountant:false,
+      permsAtMs:Date.now(), permsBy:pcStoreByName() || "كلمة مرور الإعدادات"});
+    showToast(v.admin ? `${e.name}: مدير النظام` : `تم حفظ صلاحيات ${e.name} (+${add} / −${rem})`);
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+}
+function pcPermAdminToggle(){ const b = document.getElementById("pmBody"); if(b) b.hidden = document.getElementById("pmAdmin").checked; }
+function pcPermApplyTpl(){
+  const t = PC_PERM_TPL.find(x=>x[0]===document.getElementById("pmTpl").value);
+  if(!t || t[0] === "custom") return;
+  document.querySelectorAll(".pmK").forEach(c=>{ c.checked = t[2].includes(c.value); });
+}
+function pcPermManual(){
+  const sel = document.getElementById("pmTpl"); if(!sel) return;
+  const t = PC_PERM_TPL.find(x=>x[0]===sel.value);
+  if(!t || t[0] === "custom") return;
+  const on = [...document.querySelectorAll(".pmK:checked")].map(x=>x.value).sort().join();
+  if(on !== t[2].slice().sort().join()) sel.value = "custom";
+}
+function pcPermGroup(btn, on){
+  btn.closest("fieldset").querySelectorAll(".pmK").forEach(c=>{ c.checked = on; });
+  pcPermManual();
+}
+
+/* Home for a signed-in employee with permissions beyond their own section. */
+function pcEmpDoors(e){
+  const d = [];
+  if(e.section) d.push(["fa-user","pc94-g", e.section, "قسمي: الحضور والأرصدة والطلبات", "pcEmpOwn()"]);
+  if(pcCan("br.open")) d.push(["fa-building","pc94-g","الفروع", pcCan("br.all") ? "جميع الفروع" : pcBranchName(pcBranchOf(e)), "pcEmpBranches()"]);
+  if(pcCan("wh.open")) d.push(["fa-boxes-stacked","pc94-w","المستودع","استقبال الطلبات وتسليمها","pc22OpenWarehousePremium()"]);
+  if(pcCan("adm.open")) d.push(["fa-shield-halved","pc94-o","الإدارة","لوحة الإدارة والتقارير","pc21OpenAdmin()"]);
+  if(pcCanAny("set.")) d.push(["fa-gear","pc94-s","الإعدادات","حسب صلاحياتك","renderSettingsOverview()"]);
+  if(pcCanAny("acc.")) d.push(["fa-calculator","pc94-a","المحاسبة","حسب صلاحياتك","renderAccounting()"]);
+  return d;
+}
+function pcEmpGateway(e){
+  pcEmpOwnView = false;
+  pcSetScope("all"); currentBackFn = "pcEmpHome()"; currentChef = null;
+  const doors = pcEmpDoors(e);
+  app.innerHTML = `
+    <main class="app pc94-gate">
+      <div class="pc94-brand">${pc50Logo()}<b>${escapeHtml(e.name)}</b><span>${escapeHtml(e.role||"")} · ${escapeHtml(pcBranchName(pcBranchOf(e)))}</span></div>
+      <section class="pc94-doors">
+        ${doors.map(d=>`
+          <button type="button" class="pc94-door" onclick="${d[4]}">
+            <span class="pc94-ic ${d[1]}"><i class="fa-solid ${d[0]}"></i></span>
+            <span class="pc94-txt"><b>${escapeHtml(d[2])}</b><small>${escapeHtml(d[3])}</small></span>
+            <i class="fa-solid fa-chevron-left pc94-chev"></i>
+          </button>`).join("")}
+      </section>
+      <div class="pc94-foot"><button type="button" class="btn btn-light" onclick="pcEmpLogout()"><i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج</button></div>
+    </main>`;
+}
+function pcEmpOwn(){ pcEmpOwnView = true; pcEmpHome(); }
+function pcEmpBranches(){
+  const e = pcEmpUser(); if(!e) return renderBranches();
+  if(pcCan("br.all")) return pcEmpOrig.renderBranches();
+  currentBranch = pcBranchOf(e); pcSetScope(currentBranch);
+  return pcEmpOrig.renderHome();
+}
+/* Store actions in a section: always allowed in the employee's own section; elsewhere by permission. */
+function pcStoreCan(a){ return !pcEmpSessionRaw() || pcEmpIsAdmin() || !!pcEmpLocked() || pcCan("br."+a); }
+function pcSetCan(tab){
+  if(tab === "chefs") tab = "hrEmp";
+  if(tab === "overview") return true;
+  if(!pcEmpSessionRaw() || pcEmpIsAdmin()) return true;
+  if(tab === "passwords") return false;
+  return pcCan("set."+tab);
+}
 
 /* =========================== Accounting: suppliers, their accounts, sales =========================== *
  * Records are kept in the site (acc_suppliers, acc_supplier_tx, acc_sales). Nothing is ever deleted:
@@ -8854,7 +9054,7 @@ var pcEmpOrig = {};
  * and credit notes to the oldest open amounts first (FIFO) and ages what is left by due date.
  * Access: system admin, employees with the accounting permission, or the admin password. */
 var accSuppliers = [], accSupplierTx = [], accSales = [];
-var pcAcc = {tab:"sum", q:"", sup:null, month:"", branch:"", unlocked:false};
+var pcAcc = {tab:"", q:"", sup:null, month:"", branch:""};
 var PC_ACC_CHANNELS = ["نقاط البيع","تطبيقات التوصيل","الاشتراكات","الطلبات أونلاين","أخرى"];
 var PC_ACC_METHODS = ["نقدي","تحويل بنكي","شيك","أخرى"];
 var PC_VAT = 0.15;
@@ -8864,36 +9064,42 @@ function accR(n){ return Math.round((Number(n)||0)*100)/100; }
 function accTxt(n){ return accR(n).toLocaleString("en-US",{minimumFractionDigits:2, maximumFractionDigits:2}); }
 function accFmt(n){ return `<span class="pc112-n">${accTxt(n)}</span>`; }
 function accNum(v){ const s = String(v ?? "").replace(/,/g,"").trim(); if(s === "") return NaN; const n = Number(s); return isFinite(n) ? n : NaN; }
-function pcEmpIsAcc(){ const e = typeof pcEmpCurrent === "function" ? pcEmpCurrent() : null; return !!(e && e.isAccountant && !e.isAdmin); }
-function accCanOpen(){ return pcEmpIsAdmin() || pcEmpIsAcc() || pcAcc.unlocked; }
+function accCan(k){ return pcCan("acc."+k); }
+function accCanOpen(){ return pcCanAny("acc."); }
+var PC_ACC_TABS = [["sum","الملخص","fa-chart-pie"],["sup","الموردين","fa-truck-field"],["sales","المبيعات","fa-cash-register"]];
 function accBranchOptions(sel, withGeneral){
   return `${withGeneral ? `<option value="" ${!sel?"selected":""}>عام / الإدارة</option>` : ""}${pcActiveBranches().map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===sel?"selected":""}>${escapeHtml(b.name||"")}</option>`).join("")}`;
 }
 function accBranchLabel(id){ return id ? pcBranchName(id) : "عام / الإدارة"; }
 function accVatValid(v){ return /^3\d{13}3$/.test(String(v||"")); }
 
-async function renderAccountingGate(){
+function renderAccountingGate(){
   if(accCanOpen()) return renderAccounting();
-  const pw = await pcSheet({title:"المحاسبة", icon:"fa-lock", body:`<p class="pc85-hint">ادخل بحساب له صلاحية المحاسبة، أو بكلمة مرور الإدارة.</p>
-      <input id="accPw" class="pc93-name" type="password" placeholder="كلمة مرور الإدارة" autocomplete="current-password">`,
-    actions:[{label:"دخول", kind:"btn-main", value:h=>h.querySelector("#accPw").value.trim()},{label:"إلغاء", kind:"btn-light", value:null}]});
-  if(pw === null || pw === undefined) return;
-  if(pw !== String(systemSettings.adminPassword)){ showToast("كلمة المرور غير صحيحة","error"); return; }
-  pcAcc.unlocked = true; renderAccounting();
+  const signed = !!pcEmpCurrent();
+  pageLayout("المحاسبة", `
+    ${pc60Bar({title:"المحاسبة", sub:"بالصلاحية فقط", back:"renderGateway()"})}
+    <section class="pc60-page has-bar"><div class="pc100-intro">
+      <span class="pc100-intro-ic"><i class="fa-solid fa-lock"></i></span>
+      <b>${signed ? "ليس لديك صلاحية المحاسبة" : "المحاسبة تفتح بحساب له صلاحية"}</b>
+      <p>${signed ? "اطلب من مدير النظام منحك الصلاحية من ملفك في الموارد البشرية." : "سجّل الدخول برقمك الوظيفي ورقمك السري."}</p>
+      ${signed ? "" : `<button type="button" class="btn btn-main" onclick="pcEmpOrig.renderEmpLogin()">تسجيل الدخول</button>`}
+    </div></section>`, "renderGateway()");
 }
 
 function renderAccounting(tab){
   if(!accCanOpen()) return renderAccountingGate();
+  const tabs = PC_ACC_TABS.filter(t=>accCan(t[0]));
   if(tab){ pcAcc.tab = tab; pcAcc.sup = null; }
+  if(!tabs.some(t=>t[0]===pcAcc.tab)){ pcAcc.tab = tabs[0] ? tabs[0][0] : ""; pcAcc.sup = null; }
   if(!pcAcc.month) pcAcc.month = pcHrToday().slice(0,7);
-  const acc = pcEmpIsAcc();
-  const back = acc ? "renderAccounting('sum')" : "pcAcc.unlocked=false;renderGateway()";
-  const me = acc ? pcEmpCurrent() : null;
+  const me = pcEmpUser();
+  const solo = me && pcEmpDoors(me).length === 1;
+  const back = "renderGateway()";
   pageLayout("المحاسبة", `
-    ${pc60Bar({title:"المحاسبة", sub:me ? `${me.name} · الموردين والمبيعات` : "الموردين وحساباتهم والمبيعات", back,
-      trailing: acc ? `<button type="button" class="pc60-back" onclick="pcEmpLogout()" aria-label="تسجيل الخروج"><i class="fa-solid fa-right-from-bracket"></i></button>` : ""})}
+    ${pc60Bar({title:"المحاسبة", sub:me ? `${me.name} · ${pcPermTplName(me)}` : "الموردين وحساباتهم والمبيعات", back,
+      trailing: solo ? `<button type="button" class="pc60-back" onclick="pcEmpLogout()" aria-label="تسجيل الخروج"><i class="fa-solid fa-right-from-bracket"></i></button>` : ""})}
     <section class="pc60-page has-bar pc112-page">
-      <div class="pc112-tabs" role="tablist">${[["sum","الملخص","fa-chart-pie"],["sup","الموردين","fa-truck-field"],["sales","المبيعات","fa-cash-register"]].map(t=>
+      <div class="pc112-tabs" role="tablist" style="grid-template-columns:repeat(${Math.max(tabs.length,1)},1fr)" ${tabs.length<2?"hidden":""}>${tabs.map(t=>
         `<button type="button" role="tab" class="${pcAcc.tab===t[0]?"active":""}" onclick="renderAccounting('${t[0]}')"><i class="fa-solid ${t[2]}"></i> ${t[1]}</button>`).join("")}</div>
       <div id="pcAccBox"></div>
     </section>`, back);
@@ -8905,8 +9111,9 @@ function pcAccDraw(force){
   const a = document.activeElement;
   if(!force && a && box.contains(a) && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) return;   /* never wipe what the user is typing */
   const y = window.scrollY;
+  if(!accCanOpen()){ box.innerHTML = ""; return renderAccountingGate(); }
   box.innerHTML = pcAcc.tab === "sup" ? (pcAcc.sup ? accSupPageHtml(pcAcc.sup) : accSupListHtml())
-                : pcAcc.tab === "sales" ? accSalesHtml() : accSumHtml();
+                : pcAcc.tab === "sales" ? accSalesHtml() : pcAcc.tab === "sum" ? accSumHtml() : "";
   if(!force) window.scrollTo(0, y);
 }
 
@@ -8950,8 +9157,8 @@ function accSumHtml(){
       <span class="pc100-intro-ic"><i class="fa-solid fa-calculator"></i></span>
       <b>قسم المحاسبة جاهز ولا توجد بيانات بعد</b>
       <p>ابدأ بإضافة الموردين وأرصدتهم الافتتاحية، ثم سجّل فواتير المشتريات والسداد، ومبيعات كل يوم لكل فرع.</p>
-      <div class="pc112-acts"><button type="button" class="btn btn-main" onclick="renderAccounting('sup');accSupEdit()">إضافة مورد</button>
-        <button type="button" class="btn btn-light" onclick="renderAccounting('sales');accSaleEdit()">تسجيل مبيعات يوم</button></div>
+      <div class="pc112-acts">${accCan("supEdit") && accCan("sup") ? `<button type="button" class="btn btn-main" onclick="renderAccounting('sup');accSupEdit()">إضافة مورد</button>` : ""}
+        ${accCan("salesAdd") && accCan("sales") ? `<button type="button" class="btn btn-light" onclick="renderAccounting('sales');accSaleEdit()">تسجيل مبيعات يوم</button>` : ""}</div>
     </div>`;
   return `
     <div class="pc112-kpis">
@@ -8961,7 +9168,7 @@ function accSumHtml(){
     </div>
     <label class="pc112-month">الشهر <input type="month" value="${escapeHtml(m)}" onchange="pcAcc.month=this.value||pcAcc.month;pcAccDraw(true)"></label>
     <div class="pc112-two">
-      <div class="pc112-card"><h3>أعلى أرصدة الموردين</h3>${top.length ? top.map(x=>`<button type="button" class="pc112-line" data-id="${escapeHtml(x.s.id)}" onclick="pcAcc.tab='sup';pcAcc.sup=this.dataset.id;renderAccounting()">
+      <div class="pc112-card"><h3>أعلى أرصدة الموردين</h3>${top.length ? top.map(x=>`<button type="button" class="pc112-line" data-id="${escapeHtml(x.s.id)}" ${accCan("sup") ? `onclick="pcAcc.tab='sup';pcAcc.sup=this.dataset.id;renderAccounting()"` : "disabled"}>
         <span>${escapeHtml(x.s.name)}</span><b>${accFmt(x.balance)}</b></button>`).join("") : `<p class="pc85-hint">لا توجد أرصدة مستحقة</p>`}</div>
       <div class="pc112-card"><h3>المبيعات حسب الفرع — ${escapeHtml(m)}</h3>${Object.keys(byB).length ? Object.entries(byB).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="pc112-line"><span>${escapeHtml(k)}</span><b>${accFmt(v)}</b></div>`).join("") : `<p class="pc85-hint">لا توجد مبيعات مسجلة لهذا الشهر</p>`}</div>
     </div>`;
@@ -8971,8 +9178,8 @@ function accSumHtml(){
 function accSupListHtml(){
   return `<div class="pc112-bar">
       <label class="pc60-search"><i class="fa-solid fa-magnifying-glass"></i><input id="accQ" type="search" placeholder="ابحث بالاسم أو الرقم الضريبي أو الكود" value="${escapeHtml(pcAcc.q)}" oninput="pcAcc.q=this.value;accSupRows()" autocomplete="off"></label>
-      <button type="button" class="btn btn-main" onclick="accSupEdit()"><i class="fa-solid fa-plus"></i> مورد جديد</button>
-      <button type="button" class="btn btn-light" onclick="accExportSuppliers()"><i class="fa-solid fa-file-excel"></i> Excel</button>
+      ${accCan("supEdit") ? `<button type="button" class="btn btn-main" onclick="accSupEdit()"><i class="fa-solid fa-plus"></i> مورد جديد</button>` : ""}
+      ${accCan("export") ? `<button type="button" class="btn btn-light" onclick="accExportSuppliers()"><i class="fa-solid fa-file-excel"></i> Excel</button>` : ""}
     </div><div id="accSupRows">${accSupRowsHtml()}</div>`;
 }
 function accSupRows(){ const el = document.getElementById("accSupRows"); if(el) el.innerHTML = accSupRowsHtml(); }
@@ -9001,11 +9208,11 @@ function accSupPageHtml(id){
       <div class="pc112-bal ${st.balance<0?"adv":""}"><span>${st.balance<0?"دفعة مقدمة":"الرصيد المستحق"}</span><b>${accFmt(Math.abs(st.balance))}</b></div>
     </div>
     <div class="pc112-acts">
-      <button type="button" class="btn btn-main" onclick="accTxEdit('bill','${escapeHtml(s.id)}')"><i class="fa-solid fa-file-invoice"></i> فاتورة</button>
-      <button type="button" class="btn btn-main" onclick="accTxEdit('payment','${escapeHtml(s.id)}')"><i class="fa-solid fa-money-bill-transfer"></i> سداد</button>
-      <button type="button" class="btn btn-light" onclick="accTxEdit('credit','${escapeHtml(s.id)}')"><i class="fa-solid fa-rotate-left"></i> مرتجع</button>
-      <button type="button" class="btn btn-light" onclick="accSupEdit('${escapeHtml(s.id)}')"><i class="fa-solid fa-pen"></i> بيانات المورد</button>
-      <button type="button" class="btn btn-light" onclick="accExportStatement('${escapeHtml(s.id)}')"><i class="fa-solid fa-file-excel"></i> كشف الحساب</button>
+      ${accCan("bill") ? `<button type="button" class="btn btn-main" onclick="accTxEdit('bill','${escapeHtml(s.id)}')"><i class="fa-solid fa-file-invoice"></i> فاتورة</button>` : ""}
+      ${accCan("pay") ? `<button type="button" class="btn btn-main" onclick="accTxEdit('payment','${escapeHtml(s.id)}')"><i class="fa-solid fa-money-bill-transfer"></i> سداد</button>` : ""}
+      ${accCan("credit") ? `<button type="button" class="btn btn-light" onclick="accTxEdit('credit','${escapeHtml(s.id)}')"><i class="fa-solid fa-rotate-left"></i> مرتجع</button>` : ""}
+      ${accCan("supEdit") ? `<button type="button" class="btn btn-light" onclick="accSupEdit('${escapeHtml(s.id)}')"><i class="fa-solid fa-pen"></i> بيانات المورد</button>` : ""}
+      ${accCan("export") ? `<button type="button" class="btn btn-light" onclick="accExportStatement('${escapeHtml(s.id)}')"><i class="fa-solid fa-file-excel"></i> كشف الحساب</button>` : ""}
     </div>
     <div class="pc112-aging">${[["cur","جاري"],["d30","1–30 يوم"],["d60","31–60"],["d90","61–90"],["over","أكثر من 90"]].map(([k,l])=>`<div class="${k!=="cur"&&st.aging[k]>0?"late":""}"><span>${l}</span><b>${accFmt(st.aging[k])}</b></div>`).join("")}</div>
     <h3 class="pc103-h">كشف الحساب</h3>
@@ -9016,7 +9223,7 @@ function accSupPageHtml(id){
         <td>${escapeHtml(r.ref||"")}</td>
         <td>${r.debit ? accFmt(r.debit) : ""}</td><td>${r.credit ? accFmt(r.credit) : ""}</td>
         <td>${r.voided ? "" : accFmt(r.bal)}</td>
-        <td>${r.id && !r.voided ? `<button class="mini-danger" data-id="${escapeHtml(r.id)}" onclick="accVoid('acc_supplier_tx',this.dataset.id)">إلغاء</button>` : ""}</td>
+        <td>${r.id && !r.voided && accCan("void") ? `<button class="mini-danger" data-id="${escapeHtml(r.id)}" onclick="accVoid('acc_supplier_tx',this.dataset.id)">إلغاء</button>` : ""}</td>
       </tr>`).join("")}</tbody></table></div>` : `<p class="pc85-hint">لا توجد حركات بعد</p>`}
     ${s.notes ? `<p class="pc106-note"><b>ملاحظات:</b> ${escapeHtml(s.notes)}</p>` : ""}`;
 }
@@ -9039,6 +9246,7 @@ function accStatement(s){
 
 /* ----- add / edit supplier ----- */
 async function accSupEdit(id){
+  if(!accCan("supEdit")){ showToast("ليس لديك صلاحية تعديل الموردين","error"); return; }
   const s = id ? accList("accSuppliers", accSuppliers).find(x=>x.id===id) : {};
   if(id && !s) return;
   const hasTx = id && accSupTx(id).some(t=>!t.voided);
@@ -9095,6 +9303,7 @@ function accTxCalc(){
   if(tot) tot.textContent = isFinite(base) ? accTxt(base + (isFinite(vat) ? vat : 0)) : "—";
 }
 async function accTxEdit(type, supId){
+  if(!accCan({bill:"bill", payment:"pay", credit:"credit"}[type])){ showToast("ليس لديك صلاحية لهذا القيد","error"); return; }
   const s = accList("accSuppliers", accSuppliers).find(x=>x.id===supId);
   if(!s) return;
   const T = {bill:"فاتورة مشتريات", payment:"سداد للمورد", credit:"مرتجع / إشعار دائن"}[type];
@@ -9158,6 +9367,7 @@ async function accTxEdit(type, supId){
 
 /* ----- cancel an entry (kept, struck through) ----- */
 async function accVoid(col, id){
+  if(!accCan("void")){ showToast("ليس لديك صلاحية إلغاء القيود","error"); return; }
   const v = await pcSheet({title:"إلغاء القيد", icon:"fa-ban", body:`<p class="pc85-hint">القيد لا يُحذف؛ يبقى ظاهرًا كملغي مع السبب واسم من ألغاه.</p>
       <label class="pc94-lb">سبب الإلغاء (مطلوب)</label><input id="avWhy" class="pc93-name" maxlength="160">
       ${pcByField("avBy","اسم المسؤول")}`,
@@ -9188,8 +9398,8 @@ function accSalesHtml(){
     <div class="pc112-bar">
       <label class="pc112-month">الشهر <input type="month" value="${escapeHtml(pcAcc.month)}" onchange="pcAcc.month=this.value||pcAcc.month;pcAccDraw(true)"></label>
       <select class="pc93-name pc112-sel" onchange="pcAcc.branch=this.value;pcAccDraw(true)"><option value="">كل الفروع</option>${pcActiveBranches().map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===pcAcc.branch?"selected":""}>${escapeHtml(b.name||"")}</option>`).join("")}</select>
-      <button type="button" class="btn btn-main" onclick="accSaleEdit()"><i class="fa-solid fa-plus"></i> تسجيل مبيعات يوم</button>
-      <button type="button" class="btn btn-light" onclick="accExportSales()"><i class="fa-solid fa-file-excel"></i> Excel</button>
+      ${accCan("salesAdd") ? `<button type="button" class="btn btn-main" onclick="accSaleEdit()"><i class="fa-solid fa-plus"></i> تسجيل مبيعات يوم</button>` : ""}
+      ${accCan("export") ? `<button type="button" class="btn btn-light" onclick="accExportSales()"><i class="fa-solid fa-file-excel"></i> Excel</button>` : ""}
     </div>
     <div class="pc112-kpis">
       <div><span>الإجمالي شامل الضريبة</span><b>${accFmt(sum("total"))}</b><small>${live.length} تسجيل</small></div>
@@ -9203,7 +9413,7 @@ function accSalesHtml(){
     ${rows.length ? `<div class="premium-table-wrap"><table class="premium-table pc112-table"><thead><tr><th>التاريخ</th><th>الفرع</th><th>القناة</th><th>قبل الضريبة</th><th>الضريبة</th><th>الإجمالي</th><th>نقدي</th><th>شبكة</th><th>أخرى</th><th>المسجِّل</th><th></th></tr></thead><tbody>
       ${rows.map(x=>`<tr class="${x.voided?"void":""}"><td>${escapeHtml(x.date)}</td><td>${escapeHtml(accBranchLabel(x.branchId))}</td><td>${escapeHtml(x.channel)}${x.note?`<br><small>${escapeHtml(x.note)}</small>`:""}${x.voided?`<br><small class="pc112-vr">ملغي: ${escapeHtml(x.voidReason||"")} — ${escapeHtml(x.voidBy||"")}</small>`:""}</td>
         <td>${accFmt(x.net)}</td><td>${accFmt(x.vat)}</td><td><b>${accFmt(x.total)}</b></td><td>${accFmt(x.cash)}</td><td>${accFmt(x.card)}</td><td>${accFmt(x.other)}</td><td>${escapeHtml(x.by||"")}</td>
-        <td>${x.voided ? "" : `<button class="mini-danger" data-id="${escapeHtml(x.id)}" onclick="accVoid('acc_sales',this.dataset.id)">إلغاء</button>`}</td></tr>`).join("")}
+        <td>${x.voided || !accCan("void") ? "" : `<button class="mini-danger" data-id="${escapeHtml(x.id)}" onclick="accVoid('acc_sales',this.dataset.id)">إلغاء</button>`}</td></tr>`).join("")}
       </tbody></table></div>` : pc60Empty("fa-cash-register", "لا توجد مبيعات مسجلة لهذا الشهر")}`;
 }
 function accSaleCalc(){
@@ -9219,6 +9429,7 @@ function accSaleCalc(){
   if(rem){ rem.textContent = left === null ? "—" : accTxt(left); rem.classList.toggle("bad", left !== null && Math.abs(left) >= 0.01); }
 }
 async function accSaleEdit(){
+  if(!accCan("salesAdd")){ showToast("ليس لديك صلاحية تسجيل المبيعات","error"); return; }
   const today = pcHrToday();
   setTimeout(accSaleCalc, 0);
   const v = await pcSheet({title:"تسجيل مبيعات يوم", icon:"fa-cash-register", body:`
@@ -9268,6 +9479,7 @@ async function accSaleEdit(){
 
 /* ----- Excel exports ----- */
 function accXlsx(sheets, file){
+  if(!accCan("export")){ showToast("ليس لديك صلاحية التصدير","error"); return; }
   if(typeof XLSX === "undefined"){ showToast("مكتبة Excel غير متاحة الآن","error"); return; }
   const wb = XLSX.utils.book_new();
   sheets.forEach(([name, rows])=>{ const ws = XLSX.utils.json_to_sheet(rows); ws["!views"] = [{RTL:true}]; XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31)); });
