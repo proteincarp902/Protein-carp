@@ -4791,3 +4791,10 @@ div.pc112-line{cursor:default}
 .pc117-row .pc60-chips{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:thin;padding-bottom:4px}
 .pc117-row .pc60-chips .pc60-fchip{flex:none}
 @media (max-width:520px){.pc117-row{flex-direction:column;gap:4px}.pc117-row>span{width:auto;padding-top:0}.pc117-row .pc60-chips{width:100%}}
+
+/* ===== pc118 add whole categories to a section ===== */
+.pc118-cats label{align-items:flex-start}
+.pc118-cats label span{display:flex;flex-direction:column;min-width:0}
+.pc118-cats label small{font-size:11px;color:var(--app-muted)}
+.pc118-cats label.full{opacity:.6}
+.pc118-addcat{align-self:flex-start;font-size:13px;padding:8px 12px}

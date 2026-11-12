@@ -6736,10 +6736,12 @@ async function pc95SectionEdit(id){
     <label class="pc94-lb">الأيقونة (إيموجي)</label><input id="pc95Icon" class="pc93-name" maxlength="4" value="${escapeHtml(sec?.icon||"")}" placeholder="🍰">`;
   const read = h=>({name:h.querySelector("#pc95Name").value.trim(), icon:h.querySelector("#pc95Icon").value.trim()});
   const actions = [{label:"حفظ القسم", kind:"btn-main", value:h=>({save:read(h)})}];
+  if(sec) actions.push({label:"إضافة تصنيفات أصناف للقسم", kind:"btn-light", value:{cats:true}});
   if(sec) actions.push({label:"حذف القسم", kind:"btn-danger", value:{del:true}});
   actions.push({label:"إلغاء", kind:"btn-light", value:null});
   const v = await pcSheet({title:sec?"تعديل القسم":`قسم جديد — ${pcBranchName(settingsBranch)}`, body, actions});
   if(!v) return;
+  if(v.cats) return pcSecAddCats(sec.name);
   const {db,doc,setDoc,addDoc,collection,serverTimestamp,deleteDoc} = window.firebaseDB;
   try{
     if(v.del){
@@ -8395,7 +8397,7 @@ function renderSettingsSecItems(){
     <div class="pc116-grps" id="pcSiGrps"></div>
     <div id="pcSiBox"></div>
     <div class="pc107-foot pc108-foot"><div id="pcSiSum" class="pc107-sum"></div>
-      <div class="pc107-foot-row"><button type="button" class="btn btn-light" onclick="pcSiUsed()">إضافة ما طلبه القسم سابقًا</button>
+      <div class="pc107-foot-row"><button type="button" class="btn btn-light" onclick="pcSecAddCats(pcSi.sec)"><i class="fa-solid fa-folder-tree"></i> إضافة تصنيفات</button><button type="button" class="btn btn-light" onclick="pcSiUsed()">إضافة ما طلبه القسم سابقًا</button>
       <button type="button" class="btn btn-main" onclick="pcSiSave()"><i class="fa-solid fa-floppy-disk"></i> حفظ أصناف القسم</button></div></div>`);
   pcSiDraw();
 }
@@ -9016,6 +9018,7 @@ function pcItemBar(kind){
     <div class="pc117-row"><span>ربط سريع</span><div class="pc60-chips">
       <button type="button" class="pc60-fchip ${!s.link?"active":""}" onclick="pc117['${kind}'].link='';${redraw}()">إيقاف</button>
       ${names.map(n=>`<button type="button" class="pc60-fchip pc117-lk ${s.link===n?"active":""}" data-s="${escapeHtml(n)}" onclick="pc117['${kind}'].link=this.dataset.s;${redraw}()"><i class="fa-solid fa-link"></i> ${escapeHtml(n)}</button>`).join("")}</div></div>
+    ${s.f !== "all" && s.f !== "__none" ? `<button type="button" class="btn btn-light pc118-addcat" data-s="${escapeHtml(s.f)}" onclick="pcSecAddCats(this.dataset.s)"><i class="fa-solid fa-folder-tree"></i> إضافة تصنيفات كاملة لقسم ${escapeHtml(s.f)}</button>` : ""}
     ${s.link ? `<p class="pc117-hint"><i class="fa-solid fa-circle-info"></i> اضغط زر <b>${escapeHtml(s.link)}</b> بجوار أي صنف لإضافته للقسم أو إزالته منه — يُحفظ فورًا.</p>` : ""}
   </div>`;
 }
@@ -9024,6 +9027,47 @@ function pcItemSecCell(kind, i){
   return `<td class="pc117-secs">${secs.length ? secs.map(n=>`<em>${escapeHtml(n)}</em>`).join("") : `<small>—</small>`}</td>
     <td class="pc75-acts">${link ? `<button class="pc117-q ${on?"on":""}" data-ql="${escapeHtml(String(i.id))}" onclick="pcItemQuick('${kind}',this.dataset.ql)"><i class="fa-solid ${on?"fa-circle-check":"fa-circle-plus"}"></i> ${escapeHtml(link)}</button>` : ""}
       <button class="mini-light" data-id="${escapeHtml(String(i.id))}" onclick="pcItemSecSheet('${kind}',this.dataset.id)">الأقسام</button>`;
+}
+
+/* Link whole item categories to a section: every item currently in the chosen categories is added
+   to the section's list (one-time; later items are linked from the item settings). Nothing is removed. */
+function pcCatsOf(store){
+  const all = store === "raw" ? (pcRaw.warehouseItems || warehouseItems || []) : (pcRaw.menuItems || menuItems || []);
+  const m = new Map();
+  all.forEach(i=>{ const c = String(i.category||"").trim(); if(!c) return; (m.get(c) || m.set(c, []).get(c)).push(String(i.id)); });
+  return {total:all.length, none:all.filter(i=>!String(i.category||"").trim()).length, cats:[...m.entries()].sort((a,b)=>a[0].localeCompare(b[0],"ar"))};
+}
+async function pcSecAddCats(sec){
+  if(!sec) return;
+  const blocks = [["raw","مواد خام (المستودع)"],["prod","أصناف الإنتاج (المنيو)"]].map(([st,label])=>{
+    const c = pcCatsOf(st), have = pcSecIds(sec, st) || new Set();
+    const body = c.cats.length ? `<div class="pc116-secpick pc118-cats">${c.cats.map(([n,ids])=>{
+        const inn = ids.filter(id=>have.has(id)).length, full = inn === ids.length;
+        return `<label class="${full?"full":""}"><input type="checkbox" class="pcCatK" data-st="${st}" value="${escapeHtml(n)}" ${full?"disabled checked":""}>
+          <span><b>${escapeHtml(n)}</b><small>${ids.length} صنف${inn ? ` · ${full ? "كله مضاف" : `${inn} مضاف`}` : ""}</small></span></label>`;
+      }).join("")}</div>${c.none ? `<p class="pc85-hint">${c.none} صنف بدون تصنيف لا يظهر هنا — اربطه من إعدادات الأصناف.</p>` : ""}`
+      : `<p class="pc106-note">${c.total ? `أصناف ${label} (${c.total}) ليس لها تصنيفات بعد. عبّئ التصنيفات أولًا من الإعدادات ← الأصناف ← Excel ← «استيراد أصناف أودو» (يأخذ «فئة المنتج» من أودو).` : "لا توجد أصناف."}</p>`;
+    return `<h3 class="pc103-h">${label}</h3>${body}`;
+  }).join("");
+  const v = await pcSheet({title:`إضافة تصنيفات لقسم ${sec}`, icon:"fa-folder-tree", body:`<p class="pc85-hint">اختر تصنيفًا أو أكثر — كل الأصناف الموجودة فيها الآن تُضاف للقسم مرة واحدة. لا يُحذف شيء من القسم.</p>${blocks}`,
+    actions:[{label:"إضافة للقسم", kind:"btn-main", value:h=>[...h.querySelectorAll(".pcCatK:checked:not(:disabled)")].map(x=>({st:x.dataset.st, cat:x.value}))},{label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  if(!v.length){ showToast("لم تختر تصنيفًا","error"); return; }
+  const data = {section:sec, updatedAtMs:Date.now(), updatedBy:pcStoreByName()||""};
+  let added = 0;
+  ["raw","prod"].forEach(st=>{
+    const pick = v.filter(x=>x.st===st).map(x=>x.cat); if(!pick.length) return;
+    const ids = new Set(pcSecIds(sec, st) || []), n0 = ids.size;
+    pcCatsOf(st).cats.filter(([n])=>pick.includes(n)).forEach(([,list])=>list.forEach(id=>ids.add(id)));
+    added += ids.size - n0; data[st] = [...ids];
+  });
+  if(!(await pcConfirm(`إضافة ${added} صنف إلى قسم ${sec} من ${v.length} ${v.length===1?"تصنيف":"تصنيفات"}؟`,{title:"تأكيد الإضافة", okText:"إضافة"}))) return;
+  try{
+    const {db,doc,setDoc} = window.firebaseDB;
+    await setDoc(doc(db,"section_items",pcSecDocId(sec)), data, {merge:true});
+    showToast(`تمت إضافة ${added} صنف لقسم ${sec}`);
+    setTimeout(()=>{ if(document.getElementById("pcSiBox") && pcSi.sec === sec && !pcSi.dirty && !document.getElementById("pcSheetHost")) renderSettingsSecItems(); }, 500);
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
 }
 
 /* =========================== Branch location (geofence) =========================== *
