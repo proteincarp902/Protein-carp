@@ -298,7 +298,7 @@ function waitForFirebase(){
 function pageLayout(title, content, backFn="renderHome()"){
   currentBackFn = backFn;
   if(!isPhoneBack) history.pushState({page:title},"");
-  const hasOwnHead = /pc17-simple-head|pc17-topbar|pc18-dash-head|pc19-warehouse-head|pc21-admin-head|pc27-head|pc60-bar/.test(content);
+  const hasOwnHead = /pc17-simple-head|pc17-topbar|pc18-dash-head|pc19-warehouse-head|pc21-admin-head|pc27-head|pc60-bar|pc105-start/.test(content);
   app.innerHTML = `
     <main class="app${hasOwnHead ? " has-own-head" : ""}">
       ${hasOwnHead ? "" : `<header class="page-head">
@@ -6620,7 +6620,7 @@ function renderGateway(){
   currentBackFn = "renderGateway()";
   currentChef = null;
   const doors = [
-    ["fa-user-lock","pc94-e","دخول الموظفين","ادخل برقمك الوظيفي والرقم السري","renderEmpLogin()"],
+    ["fa-user-lock","pc94-e","دخول الموظفين","العودة لشاشة تسجيل الدخول","renderEmpLogin()"],
     ["fa-building","pc94-g","الفروع","جميع الفروع، ادخل أي فرع","renderBranches()"],
     ["fa-gear","pc94-s","الإعدادات","كل إعدادات النظام","renderSettingsGate()"],
     ["fa-shield-halved","pc94-o","الإدارة","جميع البيانات والتقارير","renderAdminGate()"],
@@ -8685,11 +8685,10 @@ function renderEmpLogin(){
   const f = pcEmpLoad(PC_EMP_FAILS) || {};
   const locked = f.until && f.until > Date.now();
   pageLayout("دخول الموظفين", `
-    ${pc60Bar({title:"دخول الموظفين", sub:"برقمك الوظيفي والرقم السري", back:"renderGateway()"})}
-    <section class="pc60-page has-bar pc100-page">
+    <section class="pc60-page pc100-page pc105-start">
+      <div class="pc105-brand">${pc50Logo()}<b>PROTEIN &amp; CARB</b><small>تسجيل دخول الموظفين</small></div>
       <form class="pc105-login" onsubmit="event.preventDefault();pcEmpLogin()">
-        <span class="pc100-intro-ic"><i class="fa-solid fa-user-lock"></i></span>
-        <label class="pc94-lb" for="empNo">الرقم الوظيفي</label>
+        <label class="pc94-lb" for="empNo">اسم المستخدم (الرقم الوظيفي)</label>
         <input id="empNo" class="pc93-name" inputmode="numeric" autocomplete="username" dir="ltr" required>
         <label class="pc94-lb" for="empPw">الرقم السري</label>
         <input id="empPw" class="pc93-name" type="password" inputmode="numeric" maxlength="8" autocomplete="current-password" dir="ltr" required>
@@ -8697,7 +8696,8 @@ function renderEmpLogin(){
         <button type="submit" class="btn btn-main" ${locked?"disabled":""}>دخول</button>
         <small class="pc85-hint">الرقم السري يحدده المسؤول من الإعدادات ← الموارد البشرية.</small>
       </form>
-    </section>`, "renderGateway()");
+      <button type="button" class="pc105-admin" onclick="pcEmpOrig.renderGateway()"><i class="fa-solid fa-user-shield"></i> دخول الإدارة والمستودع</button>
+    </section>`, "renderEmpLogin()");
   setTimeout(()=>document.getElementById("empNo")?.focus(), 50);
 }
 async function pcEmpLogin(){
@@ -8725,13 +8725,13 @@ async function pcEmpLogout(){
   if(!(await pcConfirm("تسجيل الخروج من حسابك على هذا الجهاز؟",{title:"تسجيل الخروج", okText:"خروج"}))) return;
   pcEmpStore(PC_EMP_KEY, null);
   currentChef = null; productionDraft = []; currentCart = [];
-  pcEmpOrig.renderGateway();
+  pcEmpOrig.renderEmpLogin();
 }
 /* While employee data is still loading after a reload, wait on a small screen and resume. */
 function pcEmpResume(){ if(Array.isArray(pcRaw.hrEmployees)) pcEmpHome(); }
 
 function pcEmpHome(){
-  if(!pcEmpSessionRaw()) return pcEmpOrig.renderGateway();
+  if(!pcEmpSessionRaw()) return pcEmpOrig.renderEmpLogin();
   if(!Array.isArray(pcRaw.hrEmployees)){
     app.innerHTML = `<main class="app pc94-gate"><div class="pc94-brand" id="pcEmpWait">${pc50Logo()}<b>جاري التحميل…</b></div></main>`;
     return;
@@ -8790,4 +8790,4 @@ var pcEmpOrig = {};
 
 pcHydrate();
 initCloud();
-renderGateway();
+if(pcEmpSessionRaw()) pcEmpHome(); else pcEmpOrig.renderEmpLogin();
