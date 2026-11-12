@@ -365,6 +365,9 @@ async function initCloud(){
   listen("hr_leaves", plain("hrLeaves", v=>hrLeaves=v));
   listen("hr_docs", plain("hrDocs", v=>hrDocs=v));
   listen("section_items", plain("sectionItems", v=>sectionItems=v));
+  listen("acc_suppliers", plain("accSuppliers", v=>accSuppliers=v));
+  listen("acc_supplier_tx", plain("accSupplierTx", v=>accSupplierTx=v));
+  listen("acc_sales", plain("accSales", v=>accSales=v));
 }
 
 function pcBaseRefreshViews(){
@@ -390,6 +393,7 @@ function pcBaseRefreshViews(){
   if(document.getElementById("pcHrLeaveBox")) pcHrDrawLeaves();
   if(document.getElementById("pcHrDocBox") && document.activeElement?.id !== "pcHrDocSearch") pcHrDrawDocs();
   if(document.getElementById("pcHrKioskBox")) pcHrDrawKiosk();
+  if(document.getElementById("pcAccBox") && typeof pcAccDraw === "function") pcAccDraw();
   if(document.getElementById("pcEmpWait")) pcEmpResume();
   if(document.getElementById("pcStartWait")) pcStartDecide();
   if(document.getElementById("pcOrderBox")) pcOrdDraw(false);
@@ -6624,7 +6628,8 @@ function renderGateway(){
     ["fa-building","pc94-g","الفروع","جميع الفروع، ادخل أي فرع","renderBranches()"],
     ["fa-gear","pc94-s","الإعدادات","كل إعدادات النظام","renderSettingsGate()"],
     ["fa-shield-halved","pc94-o","الإدارة","جميع البيانات والتقارير","renderAdminGate()"],
-    ["fa-boxes-stacked","pc94-w","المستودع","استقبال الطلبات والإشراف عليها","renderWarehouseGate()"]];
+    ["fa-boxes-stacked","pc94-w","المستودع","استقبال الطلبات والإشراف عليها","renderWarehouseGate()"],
+    ["fa-calculator","pc94-a","المحاسبة","الموردين وحساباتهم والمبيعات","renderAccountingGate()"]];
   app.innerHTML = `
     <main class="app pc94-gate">
       <div class="pc94-brand">${pc50Logo()}<b>PROTEIN &amp; CARB</b><span>منظومة تشغيل المطاعم</span></div>
@@ -7659,7 +7664,7 @@ function pcHrDrawEmployees(){
       <span class="pc103-emp-txt"><b>${escapeHtml(e.name||"")}</b>
         <small>${escapeHtml(e.role||"")}${e.section?` · ${escapeHtml(e.section)}`:""}${e.odooEmployeeId?` · #${escapeHtml(e.odooEmployeeId)}`:""}</small>
         <small>${e.shiftStart&&e.shiftEnd ? pcChefShiftText(e) : "بدون دوام محدد"}</small></span>
-      <span class="pc103-tags">${e.isAdmin ? `<em class="pc103-tag info">مدير النظام</em>` : ""}
+      <span class="pc103-tags">${e.isAdmin ? `<em class="pc103-tag info">مدير النظام</em>` : ""}${e.isAccountant ? `<em class="pc103-tag info">محاسب</em>` : ""}
         ${pcHrActive(e) ? "" : `<em class="pc103-tag muted">${escapeHtml(e.status)}</em>`}
         ${docs.expired ? `<em class="pc103-tag bad">${docs.expired} منتهي</em>` : ""}
         ${docs.soon ? `<em class="pc103-tag warn">${docs.soon} قارب الانتهاء</em>` : ""}
@@ -7718,13 +7723,15 @@ async function pcHrEditEmployee(id, preset){
     <input id="hrPin" class="pc93-name" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password" placeholder="••••">
     <label class="pc110-adm"><input type="checkbox" id="hrAdmin" ${e.isAdmin?"checked":""}>
       <span><b>مدير النظام</b><small>تحكم كامل: كل الفروع والإعدادات والإدارة والمستودع بدون كلمات مرور إضافية. يتطلب رقمًا وظيفيًا ورقمًا سريًا.</small></span></label>
+    <label class="pc110-adm"><input type="checkbox" id="hrAcc" ${e.isAccountant?"checked":""}>
+      <span><b>محاسب</b><small>يفتح حسابه على قسم المحاسبة فقط (الموردين والمبيعات). يتطلب رقمًا وظيفيًا ورقمًا سريًا.</small></span></label>
     ${id ? `<p class="pc85-hint">${pcHrEmpSummary(e)}</p>` : ""}`,
     actions:[
       {label:"حفظ", kind:"btn-main", value:h=>({
         name:h.querySelector("#hrName").value.trim(), role:h.querySelector("#hrRole").value, status:h.querySelector("#hrStatus").value,
         branchId:h.querySelector("#hrBranch").value, section:h.querySelector("#hrSection").value,
         hireDate:h.querySelector("#hrHire").value, annualLeaveDays:Number(h.querySelector("#hrAnnual").value||0),
-        workDays:[...h.querySelectorAll(".hrDay:checked")].map(x=>Number(x.value)), pin:h.querySelector("#hrPin").value.trim(), isAdmin:h.querySelector("#hrAdmin").checked,
+        workDays:[...h.querySelectorAll(".hrDay:checked")].map(x=>Number(x.value)), pin:h.querySelector("#hrPin").value.trim(), isAdmin:h.querySelector("#hrAdmin").checked, isAccountant:h.querySelector("#hrAcc").checked,
         extra:pcChefExtraRead("hr")})},
       ...(id ? [{label:"المستندات والإجازات", kind:"btn-light", value:"docs"}] : []),
       {label:"إلغاء", kind:"btn-light", value:null}]});
@@ -7739,13 +7746,16 @@ async function pcHrEditEmployee(id, preset){
   if(!v.workDays.length){ showToast("اختر يوم عمل واحدًا على الأقل","error"); return; }
   if(v.isAdmin && !(v.pin || e.pwHash)){ showToast("حدّد رقمًا سريًا لمدير النظام","error"); return; }
   if(v.isAdmin && !v.extra.data.odooEmployeeId){ showToast("مدير النظام يحتاج رقمًا وظيفيًا (اسم المستخدم)","error"); return; }
+  if(v.isAccountant && !(v.pin || e.pwHash)){ showToast("حدّد رقمًا سريًا للمحاسب","error"); return; }
+  if(v.isAccountant && !v.extra.data.odooEmployeeId){ showToast("المحاسب يحتاج رقمًا وظيفيًا (اسم المستخدم)","error"); return; }
+  if(!!e.isAccountant !== v.isAccountant && !(await pcConfirm(v.isAccountant ? `منح ${v.name} صلاحية المحاسبة (الموردين والمبيعات)؟` : `سحب صلاحية المحاسبة من ${v.name}؟`,{title:"صلاحية المحاسبة", okText:"تأكيد"}))) return;
   if(!!e.isAdmin !== v.isAdmin && !(await pcConfirm(v.isAdmin ? `منح ${v.name} صلاحية مدير النظام (تحكم كامل في كل شيء)؟` : `سحب صلاحية مدير النظام من ${v.name}؟`,{title:"صلاحية مدير النظام", okText:"تأكيد"}))) return;
   if(e.isAdmin && !v.isAdmin && !pcHrEmps().some(x=>x.id!==id && x.isAdmin && pcHrActive(x))){ showToast("لا يمكن سحب الصلاحية من آخر مدير نظام","error"); return; }
   if(v.extra.data.odooEmployeeId && pcHrEmps().some(x=>x.id!==id && String(x.odooEmployeeId||"")===v.extra.data.odooEmployeeId)){
     showToast("الرقم الوظيفي مستخدم لموظف آخر","error"); return;
   }
   const data = {name:v.name, role:v.role, status:v.status, branchId:v.branchId, section:isChef ? v.section : (v.section||""),
-    hireDate:v.hireDate, annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, isAdmin:v.isAdmin, ...v.extra.data, updatedAtMs:Date.now()};
+    hireDate:v.hireDate, annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, isAdmin:v.isAdmin, isAccountant:v.isAccountant, ...v.extra.data, updatedAtMs:Date.now()};
   try{
     const {db,addDoc,collection,doc,updateDoc} = window.firebaseDB;
     let empId = id;
@@ -8782,6 +8792,7 @@ function pcEmpHome(){
   const e = pcEmpCurrent();
   if(!e){ document.getElementById("pc110Bar")?.remove(); showToast("انتهت الجلسة — سجّل الدخول مرة أخرى","error"); return pcEmpOrig.renderEmpLogin(); }
   if(e.isAdmin){ pcEmpAdminBar(); return pcEmpOrig.renderGateway(); }
+  if(e.isAccountant) return renderAccounting("sum");
   currentBranch = pcBranchOf(e); pcSetScope(currentBranch);
   pcStoreSec = String(e.section||"").trim() || PC_NO_SEC;
   pcStoreView = "bal"; pcStoreQ = "";
@@ -8835,6 +8846,449 @@ var pcEmpOrig = {};
     return pcEmpHome();
   };
 });
+
+/* =========================== Accounting: suppliers, their accounts, sales =========================== *
+ * Records are kept in the site (acc_suppliers, acc_supplier_tx, acc_sales). Nothing is ever deleted:
+ * a wrong entry is cancelled with a reason and stays visible, struck through, for the audit trail.
+ * Supplier balance (payable) = opening + bills − payments − credit notes. Aging allocates payments
+ * and credit notes to the oldest open amounts first (FIFO) and ages what is left by due date.
+ * Access: system admin, employees with the accounting permission, or the admin password. */
+var accSuppliers = [], accSupplierTx = [], accSales = [];
+var pcAcc = {tab:"sum", q:"", sup:null, month:"", branch:"", unlocked:false};
+var PC_ACC_CHANNELS = ["نقاط البيع","تطبيقات التوصيل","الاشتراكات","الطلبات أونلاين","أخرى"];
+var PC_ACC_METHODS = ["نقدي","تحويل بنكي","شيك","أخرى"];
+var PC_VAT = 0.15;
+
+function accList(k, fb){ const r = pcRaw && pcRaw[k]; return Array.isArray(r) ? r : (fb || []); }
+function accR(n){ return Math.round((Number(n)||0)*100)/100; }
+function accTxt(n){ return accR(n).toLocaleString("en-US",{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function accFmt(n){ return `<span class="pc112-n">${accTxt(n)}</span>`; }
+function accNum(v){ const s = String(v ?? "").replace(/,/g,"").trim(); if(s === "") return NaN; const n = Number(s); return isFinite(n) ? n : NaN; }
+function pcEmpIsAcc(){ const e = typeof pcEmpCurrent === "function" ? pcEmpCurrent() : null; return !!(e && e.isAccountant && !e.isAdmin); }
+function accCanOpen(){ return pcEmpIsAdmin() || pcEmpIsAcc() || pcAcc.unlocked; }
+function accBranchOptions(sel, withGeneral){
+  return `${withGeneral ? `<option value="" ${!sel?"selected":""}>عام / الإدارة</option>` : ""}${pcActiveBranches().map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===sel?"selected":""}>${escapeHtml(b.name||"")}</option>`).join("")}`;
+}
+function accBranchLabel(id){ return id ? pcBranchName(id) : "عام / الإدارة"; }
+function accVatValid(v){ return /^3\d{13}3$/.test(String(v||"")); }
+
+async function renderAccountingGate(){
+  if(accCanOpen()) return renderAccounting();
+  const pw = await pcSheet({title:"المحاسبة", icon:"fa-lock", body:`<p class="pc85-hint">ادخل بحساب له صلاحية المحاسبة، أو بكلمة مرور الإدارة.</p>
+      <input id="accPw" class="pc93-name" type="password" placeholder="كلمة مرور الإدارة" autocomplete="current-password">`,
+    actions:[{label:"دخول", kind:"btn-main", value:h=>h.querySelector("#accPw").value.trim()},{label:"إلغاء", kind:"btn-light", value:null}]});
+  if(pw === null || pw === undefined) return;
+  if(pw !== String(systemSettings.adminPassword)){ showToast("كلمة المرور غير صحيحة","error"); return; }
+  pcAcc.unlocked = true; renderAccounting();
+}
+
+function renderAccounting(tab){
+  if(!accCanOpen()) return renderAccountingGate();
+  if(tab){ pcAcc.tab = tab; pcAcc.sup = null; }
+  if(!pcAcc.month) pcAcc.month = pcHrToday().slice(0,7);
+  const acc = pcEmpIsAcc();
+  const back = acc ? "renderAccounting('sum')" : "pcAcc.unlocked=false;renderGateway()";
+  const me = acc ? pcEmpCurrent() : null;
+  pageLayout("المحاسبة", `
+    ${pc60Bar({title:"المحاسبة", sub:me ? `${me.name} · الموردين والمبيعات` : "الموردين وحساباتهم والمبيعات", back,
+      trailing: acc ? `<button type="button" class="pc60-back" onclick="pcEmpLogout()" aria-label="تسجيل الخروج"><i class="fa-solid fa-right-from-bracket"></i></button>` : ""})}
+    <section class="pc60-page has-bar pc112-page">
+      <div class="pc112-tabs" role="tablist">${[["sum","الملخص","fa-chart-pie"],["sup","الموردين","fa-truck-field"],["sales","المبيعات","fa-cash-register"]].map(t=>
+        `<button type="button" role="tab" class="${pcAcc.tab===t[0]?"active":""}" onclick="renderAccounting('${t[0]}')"><i class="fa-solid ${t[2]}"></i> ${t[1]}</button>`).join("")}</div>
+      <div id="pcAccBox"></div>
+    </section>`, back);
+  pcAccDraw(true);
+}
+function pcAccDraw(force){
+  const box = document.getElementById("pcAccBox");
+  if(!box) return;
+  const a = document.activeElement;
+  if(!force && a && box.contains(a) && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) return;   /* never wipe what the user is typing */
+  const y = window.scrollY;
+  box.innerHTML = pcAcc.tab === "sup" ? (pcAcc.sup ? accSupPageHtml(pcAcc.sup) : accSupListHtml())
+                : pcAcc.tab === "sales" ? accSalesHtml() : accSumHtml();
+  if(!force) window.scrollTo(0, y);
+}
+
+/* ----- supplier state: balance, FIFO aging ----- */
+function accSupTx(id){
+  return accList("accSupplierTx", accSupplierTx).filter(t=>t.supplierId===id)
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)) || (a.createdAtMs||0)-(b.createdAtMs||0));
+}
+function accSupState(s){
+  const tx = accSupTx(s.id).filter(t=>!t.voided);
+  const open = [];
+  if(accR(s.opening)) open.push({due:s.openingDate || "", left:accR(s.opening)});
+  let paid = 0;
+  tx.forEach(t=>{ if(t.type === "bill") open.push({due:t.due || t.date, left:accR(t.amount)}); else paid = accR(paid + accR(t.amount)); });
+  for(const o of open){ if(paid <= 0) break; const k = Math.min(o.left, paid); o.left = accR(o.left - k); paid = accR(paid - k); }
+  const today = pcHrToday();
+  const ag = {cur:0, d30:0, d60:0, d90:0, over:0};
+  open.forEach(o=>{
+    if(o.left <= 0) return;
+    const late = o.due ? pcHrDaysBetween(o.due, today) - 1 : 0;
+    const k = late <= 0 ? "cur" : late <= 30 ? "d30" : late <= 60 ? "d60" : late <= 90 ? "d90" : "over";
+    ag[k] = accR(ag[k] + o.left);
+  });
+  const balance = accR(open.reduce((x,o)=>x + o.left, 0) - paid);
+  return {balance, aging:ag, overdue:accR(ag.d30 + ag.d60 + ag.d90 + ag.over), advance:paid};
+}
+
+/* ----- summary ----- */
+function accSumHtml(){
+  const sups = accList("accSuppliers", accSuppliers).filter(s=>!s.inactive);
+  const st = sups.map(s=>({s, ...accSupState(s)}));
+  const pay = accR(st.reduce((a,x)=>a + Math.max(0, x.balance), 0));
+  const over = accR(st.reduce((a,x)=>a + x.overdue, 0));
+  const m = pcAcc.month;
+  const sales = accList("accSales", accSales).filter(x=>!x.voided && String(x.date).startsWith(m));
+  const tot = accR(sales.reduce((a,x)=>a + accR(x.total), 0)), net = accR(sales.reduce((a,x)=>a + accR(x.net), 0));
+  const byB = {}; sales.forEach(x=>{ const k = accBranchLabel(x.branchId); byB[k] = accR((byB[k]||0) + accR(x.total)); });
+  const top = st.filter(x=>x.balance > 0).sort((a,b)=>b.balance - a.balance).slice(0,6);
+  if(!sups.length && !accList("accSales", accSales).length) return `
+    <div class="pc100-intro">
+      <span class="pc100-intro-ic"><i class="fa-solid fa-calculator"></i></span>
+      <b>قسم المحاسبة جاهز ولا توجد بيانات بعد</b>
+      <p>ابدأ بإضافة الموردين وأرصدتهم الافتتاحية، ثم سجّل فواتير المشتريات والسداد، ومبيعات كل يوم لكل فرع.</p>
+      <div class="pc112-acts"><button type="button" class="btn btn-main" onclick="renderAccounting('sup');accSupEdit()">إضافة مورد</button>
+        <button type="button" class="btn btn-light" onclick="renderAccounting('sales');accSaleEdit()">تسجيل مبيعات يوم</button></div>
+    </div>`;
+  return `
+    <div class="pc112-kpis">
+      <div><span>مستحق للموردين</span><b>${accFmt(pay)}</b><small>${st.filter(x=>x.balance>0).length} مورد برصيد</small></div>
+      <div class="${over>0?"bad":""}"><span>متأخر عن الاستحقاق</span><b>${accFmt(over)}</b><small>${st.filter(x=>x.overdue>0).length} مورد</small></div>
+      <div><span>مبيعات ${escapeHtml(m)} (شامل الضريبة)</span><b>${accFmt(tot)}</b><small>قبل الضريبة ${accTxt(net)}</small></div>
+    </div>
+    <label class="pc112-month">الشهر <input type="month" value="${escapeHtml(m)}" onchange="pcAcc.month=this.value||pcAcc.month;pcAccDraw(true)"></label>
+    <div class="pc112-two">
+      <div class="pc112-card"><h3>أعلى أرصدة الموردين</h3>${top.length ? top.map(x=>`<button type="button" class="pc112-line" data-id="${escapeHtml(x.s.id)}" onclick="pcAcc.tab='sup';pcAcc.sup=this.dataset.id;renderAccounting()">
+        <span>${escapeHtml(x.s.name)}</span><b>${accFmt(x.balance)}</b></button>`).join("") : `<p class="pc85-hint">لا توجد أرصدة مستحقة</p>`}</div>
+      <div class="pc112-card"><h3>المبيعات حسب الفرع — ${escapeHtml(m)}</h3>${Object.keys(byB).length ? Object.entries(byB).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="pc112-line"><span>${escapeHtml(k)}</span><b>${accFmt(v)}</b></div>`).join("") : `<p class="pc85-hint">لا توجد مبيعات مسجلة لهذا الشهر</p>`}</div>
+    </div>`;
+}
+
+/* ----- suppliers list ----- */
+function accSupListHtml(){
+  return `<div class="pc112-bar">
+      <label class="pc60-search"><i class="fa-solid fa-magnifying-glass"></i><input id="accQ" type="search" placeholder="ابحث بالاسم أو الرقم الضريبي أو الكود" value="${escapeHtml(pcAcc.q)}" oninput="pcAcc.q=this.value;accSupRows()" autocomplete="off"></label>
+      <button type="button" class="btn btn-main" onclick="accSupEdit()"><i class="fa-solid fa-plus"></i> مورد جديد</button>
+      <button type="button" class="btn btn-light" onclick="accExportSuppliers()"><i class="fa-solid fa-file-excel"></i> Excel</button>
+    </div><div id="accSupRows">${accSupRowsHtml()}</div>`;
+}
+function accSupRows(){ const el = document.getElementById("accSupRows"); if(el) el.innerHTML = accSupRowsHtml(); }
+function accSupRowsHtml(){
+  const q = pcAcc.q.trim().toLowerCase();
+  const list = accList("accSuppliers", accSuppliers).filter(s=>!q || [s.name, s.vat, s.code, s.phone].some(v=>String(v||"").toLowerCase().includes(q)))
+    .map(s=>({s, ...accSupState(s)})).sort((a,b)=>(!!a.s.inactive - !!b.s.inactive) || (b.balance - a.balance) || String(a.s.name).localeCompare(String(b.s.name),"ar"));
+  if(!list.length) return pc60Empty("fa-truck-field", q ? "لا يوجد مورد مطابق" : "لا يوجد موردون بعد — أضف أول مورد");
+  return `<div class="pc112-list">${list.map(x=>`<button type="button" class="pc112-row ${x.s.inactive?"off":""}" data-id="${escapeHtml(x.s.id)}" onclick="pcAcc.sup=this.dataset.id;pcAccDraw(true);window.scrollTo(0,0)">
+      <span><b>${escapeHtml(x.s.name)}</b><small>${x.s.code?`${escapeHtml(x.s.code)} · `:""}${x.s.vat?`ض.ق.م ${escapeHtml(x.s.vat)}`:"بدون رقم ضريبي"}${x.s.terms?` · ${Number(x.s.terms)} يوم`:""}${x.s.inactive?" · موقوف":""}</small></span>
+      <span class="pc112-amt"><b>${accFmt(x.balance)}</b>${x.overdue>0?`<em class="pc103-tag bad">متأخر ${accTxt(x.overdue)}</em>`:""}${x.balance<0?`<em class="pc103-tag info">دفعة مقدمة</em>`:""}</span>
+    </button>`).join("")}</div>`;
+}
+
+/* ----- supplier page: statement + aging ----- */
+function accSupPageHtml(id){
+  const s = accList("accSuppliers", accSuppliers).find(x=>x.id===id);
+  if(!s) return `<button type="button" class="pc112-backlink" onclick="pcAcc.sup=null;pcAccDraw(true)"><i class="fa-solid fa-arrow-right"></i> كل الموردين</button><p class="pc85-hint">جاري التحميل…</p>`;   /* a just-added supplier may not have arrived from the listener yet */
+  const st = accSupState(s);
+  const rows = accStatement(s);
+  const T = {bill:"فاتورة مشتريات", payment:"سداد", credit:"مرتجع / إشعار دائن"};
+  return `
+    <button type="button" class="pc112-backlink" onclick="pcAcc.sup=null;pcAccDraw(true)"><i class="fa-solid fa-arrow-right"></i> كل الموردين</button>
+    <div class="pc112-head">
+      <div><h2>${escapeHtml(s.name)}</h2><small>${s.code?`${escapeHtml(s.code)} · `:""}${s.vat?`ض.ق.م ${escapeHtml(s.vat)}`:"بدون رقم ضريبي"}${s.phone?` · <span dir="ltr">${escapeHtml(s.phone)}</span>`:""}${s.terms?` · مدة السداد ${Number(s.terms)} يوم`:""}</small></div>
+      <div class="pc112-bal ${st.balance<0?"adv":""}"><span>${st.balance<0?"دفعة مقدمة":"الرصيد المستحق"}</span><b>${accFmt(Math.abs(st.balance))}</b></div>
+    </div>
+    <div class="pc112-acts">
+      <button type="button" class="btn btn-main" onclick="accTxEdit('bill','${escapeHtml(s.id)}')"><i class="fa-solid fa-file-invoice"></i> فاتورة</button>
+      <button type="button" class="btn btn-main" onclick="accTxEdit('payment','${escapeHtml(s.id)}')"><i class="fa-solid fa-money-bill-transfer"></i> سداد</button>
+      <button type="button" class="btn btn-light" onclick="accTxEdit('credit','${escapeHtml(s.id)}')"><i class="fa-solid fa-rotate-left"></i> مرتجع</button>
+      <button type="button" class="btn btn-light" onclick="accSupEdit('${escapeHtml(s.id)}')"><i class="fa-solid fa-pen"></i> بيانات المورد</button>
+      <button type="button" class="btn btn-light" onclick="accExportStatement('${escapeHtml(s.id)}')"><i class="fa-solid fa-file-excel"></i> كشف الحساب</button>
+    </div>
+    <div class="pc112-aging">${[["cur","جاري"],["d30","1–30 يوم"],["d60","31–60"],["d90","61–90"],["over","أكثر من 90"]].map(([k,l])=>`<div class="${k!=="cur"&&st.aging[k]>0?"late":""}"><span>${l}</span><b>${accFmt(st.aging[k])}</b></div>`).join("")}</div>
+    <h3 class="pc103-h">كشف الحساب</h3>
+    ${rows.length ? `<div class="premium-table-wrap"><table class="premium-table pc112-table"><thead><tr><th>التاريخ</th><th>البيان</th><th>المرجع</th><th>مدين</th><th>دائن</th><th>الرصيد</th><th></th></tr></thead><tbody>
+      ${rows.map(r=>`<tr class="${r.voided?"void":""}">
+        <td>${escapeHtml(r.date||"")}</td>
+        <td>${escapeHtml(r.label)}${r.branch?`<br><small>${escapeHtml(r.branch)}</small>`:""}${r.voided?`<br><small class="pc112-vr">ملغي: ${escapeHtml(r.voidReason||"")} — ${escapeHtml(r.voidBy||"")}</small>`:""}${r.by?`<br><small>${escapeHtml(r.by)}</small>`:""}</td>
+        <td>${escapeHtml(r.ref||"")}</td>
+        <td>${r.debit ? accFmt(r.debit) : ""}</td><td>${r.credit ? accFmt(r.credit) : ""}</td>
+        <td>${r.voided ? "" : accFmt(r.bal)}</td>
+        <td>${r.id && !r.voided ? `<button class="mini-danger" data-id="${escapeHtml(r.id)}" onclick="accVoid('acc_supplier_tx',this.dataset.id)">إلغاء</button>` : ""}</td>
+      </tr>`).join("")}</tbody></table></div>` : `<p class="pc85-hint">لا توجد حركات بعد</p>`}
+    ${s.notes ? `<p class="pc106-note"><b>ملاحظات:</b> ${escapeHtml(s.notes)}</p>` : ""}`;
+}
+/* Statement from the company's side: bills credit the supplier, payments and credit notes debit it. */
+function accStatement(s){
+  const T = {bill:"فاتورة مشتريات", payment:"سداد", credit:"مرتجع / إشعار دائن"};
+  let bal = accR(s.opening || 0);
+  const out = [];
+  if(accR(s.opening)) out.push({date:s.openingDate||"", label:"رصيد افتتاحي", debit:accR(s.opening)<0 ? -accR(s.opening) : 0, credit:accR(s.opening)>0 ? accR(s.opening) : 0, bal});
+  accSupTx(s.id).forEach(t=>{
+    const amt = accR(t.amount);
+    const isCr = t.type === "bill";
+    if(!t.voided) bal = accR(bal + (isCr ? amt : -amt));
+    out.push({id:t.id, date:t.date, label:`${T[t.type]||t.type}${t.type==="payment"&&t.method?` — ${t.method}`:""}${t.type!=="payment"&&t.vat?` (ضريبة ${accTxt(t.vat)})`:""}`,
+      ref:t.ref||"", debit:isCr ? 0 : amt, credit:isCr ? amt : 0, bal, voided:!!t.voided, voidReason:t.voidReason, voidBy:t.voidBy,
+      branch:accBranchLabel(t.branchId), by:t.by||""});
+  });
+  return out;
+}
+
+/* ----- add / edit supplier ----- */
+async function accSupEdit(id){
+  const s = id ? accList("accSuppliers", accSuppliers).find(x=>x.id===id) : {};
+  if(id && !s) return;
+  const hasTx = id && accSupTx(id).some(t=>!t.voided);
+  const v = await pcSheet({title:id ? "بيانات المورد" : "مورد جديد", icon:"fa-truck-field", body:`
+    <label class="pc94-lb">اسم المورد</label><input id="asName" class="pc93-name" maxlength="80" value="${escapeHtml(s.name||"")}">
+    <div class="pc102-shift">
+      <div><label class="pc94-lb">الكود (اختياري)</label><input id="asCode" class="pc93-name" maxlength="20" dir="ltr" value="${escapeHtml(s.code||"")}"></div>
+      <div><label class="pc94-lb">مدة السداد (يوم)</label><input id="asTerms" class="pc93-name" type="number" min="0" max="365" value="${escapeHtml(String(s.terms ?? 30))}"></div>
+    </div>
+    <label class="pc94-lb">الرقم الضريبي (15 رقمًا، اختياري)</label><input id="asVat" class="pc93-name" inputmode="numeric" maxlength="15" dir="ltr" value="${escapeHtml(s.vat||"")}">
+    <label class="pc94-lb">الجوال (اختياري)</label><input id="asPhone" class="pc93-name" type="tel" dir="ltr" maxlength="15" value="${escapeHtml(s.phone||"")}">
+    <div class="pc102-shift">
+      <div><label class="pc94-lb">الرصيد الافتتاحي (مستحق له)</label><input id="asOpen" class="pc93-name" inputmode="decimal" dir="ltr" value="${escapeHtml(s.opening ? String(s.opening) : "")}" placeholder="0.00"></div>
+      <div><label class="pc94-lb">تاريخ الرصيد الافتتاحي</label><input id="asOpenDate" class="pc93-name" type="date" value="${escapeHtml(s.openingDate||"")}"></div>
+    </div>
+    ${hasTx ? `<p class="pc85-hint">تعديل الرصيد الافتتاحي لمورد له حركات يغيّر كل الأرصدة اللاحقة في كشف الحساب.</p>` : ""}
+    <label class="pc94-lb">ملاحظات</label><input id="asNotes" class="pc93-name" maxlength="200" value="${escapeHtml(s.notes||"")}">
+    ${id ? `<label class="pc110-adm"><input type="checkbox" id="asOff" ${s.inactive?"checked":""}><span><b>مورد موقوف</b><small>يبقى كشف حسابه ورصيده ظاهرين.</small></span></label>` : ""}`,
+    actions:[{label:"حفظ", kind:"btn-main", value:h=>({name:h.querySelector("#asName").value.trim(), code:h.querySelector("#asCode").value.trim(), terms:h.querySelector("#asTerms").value,
+      vat:h.querySelector("#asVat").value.trim(), phone:h.querySelector("#asPhone").value.replace(/[\s-]/g,""), opening:h.querySelector("#asOpen").value,
+      openingDate:h.querySelector("#asOpenDate").value, notes:h.querySelector("#asNotes").value.trim(), inactive:!!h.querySelector("#asOff")?.checked})},
+      {label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  if(!v.name){ showToast("اكتب اسم المورد","error"); return; }
+  const all = accList("accSuppliers", accSuppliers);
+  if(all.some(x=>x.id!==id && String(x.name).trim()===v.name)){ showToast("يوجد مورد بنفس الاسم","error"); return; }
+  if(v.vat && !accVatValid(v.vat)){ showToast("الرقم الضريبي 15 رقمًا يبدأ وينتهي بالرقم 3","error"); return; }
+  if(v.vat && all.some(x=>x.id!==id && x.vat===v.vat)){ showToast("الرقم الضريبي مسجل لمورد آخر","error"); return; }
+  if(v.code && all.some(x=>x.id!==id && String(x.code||"")===v.code)){ showToast("الكود مستخدم لمورد آخر","error"); return; }
+  if(v.phone && !/^\+?\d{7,15}$/.test(v.phone)){ showToast("رقم الجوال غير صحيح","error"); return; }
+  const terms = Number(v.terms || 0);
+  if(!isFinite(terms) || terms < 0){ showToast("مدة السداد غير صحيحة","error"); return; }
+  const opening = v.opening.trim() === "" ? 0 : accNum(v.opening);
+  if(!isFinite(opening)){ showToast("الرصيد الافتتاحي غير صحيح","error"); return; }
+  if(opening && !v.openingDate){ showToast("حدّد تاريخ الرصيد الافتتاحي","error"); return; }
+  const data = {name:v.name, code:v.code, terms, vat:v.vat, phone:v.phone, opening:accR(opening), openingDate:v.openingDate, notes:v.notes, inactive:v.inactive, updatedAtMs:Date.now(), updatedBy:pcStoreByName()};
+  try{
+    const {db,addDoc,collection,doc,updateDoc} = window.firebaseDB;
+    if(id) await updateDoc(doc(db,"acc_suppliers",id), data);
+    else { const ref = await addDoc(collection(db,"acc_suppliers"), {...data, createdAtMs:Date.now(), createdBy:pcStoreByName()}); pcAcc.sup = ref.id; }
+    showToast(id ? "تم حفظ بيانات المورد" : "تمت إضافة المورد");
+    pcAccDraw(true);
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+}
+
+/* ----- bill / payment / credit note ----- */
+function accTxCalc(){
+  const base = accNum(document.getElementById("atBase")?.value);
+  const vatOn = document.getElementById("atVatOn")?.checked;
+  const vatEl = document.getElementById("atVat");
+  if(vatEl && document.activeElement !== vatEl) vatEl.value = isFinite(base) && vatOn ? accR(base * PC_VAT).toFixed(2) : (vatOn ? "" : "0.00");
+  const vat = accNum(vatEl?.value);
+  const tot = document.getElementById("atTotal");
+  if(tot) tot.textContent = isFinite(base) ? accTxt(base + (isFinite(vat) ? vat : 0)) : "—";
+}
+async function accTxEdit(type, supId){
+  const s = accList("accSuppliers", accSuppliers).find(x=>x.id===supId);
+  if(!s) return;
+  const T = {bill:"فاتورة مشتريات", payment:"سداد للمورد", credit:"مرتجع / إشعار دائن"}[type];
+  const today = pcHrToday();
+  const priced = type !== "payment";
+  setTimeout(accTxCalc, 0);
+  const v = await pcSheet({title:`${T} — ${s.name}`, icon:type==="payment"?"fa-money-bill-transfer":"fa-file-invoice", body:`
+    <div class="pc102-shift">
+      <div><label class="pc94-lb">التاريخ</label><input id="atDate" class="pc93-name" type="date" max="${today}" value="${today}"></div>
+      ${type==="bill" ? `<div><label class="pc94-lb">تاريخ الاستحقاق</label><input id="atDue" class="pc93-name" type="date" value="${pcHrAddDays(today, Number(s.terms||0))}"></div>` : `<div></div>`}
+    </div>
+    <label class="pc94-lb">${type==="bill" ? "رقم فاتورة المورد" : type==="credit" ? "رقم الإشعار / المرتجع" : "المرجع (رقم التحويل أو الشيك)"}</label>
+    <input id="atRef" class="pc93-name" maxlength="40" dir="ltr">
+    ${priced ? `
+      <label class="pc94-lb">المبلغ قبل الضريبة</label><input id="atBase" class="pc93-name" inputmode="decimal" dir="ltr" placeholder="0.00" oninput="accTxCalc()">
+      <label class="pc110-adm pc112-vat"><input type="checkbox" id="atVatOn" ${s.vat?"checked":""} onchange="accTxCalc()"><span><b>خاضعة لضريبة القيمة المضافة 15%</b><small>${s.vat ? "المورد مسجل ضريبيًا" : "المورد بدون رقم ضريبي — لا تحتسب الضريبة إلا إن كانت ظاهرة في الفاتورة"}</small></span></label>
+      <label class="pc94-lb">مبلغ الضريبة</label><input id="atVat" class="pc93-name" inputmode="decimal" dir="ltr" oninput="accTxCalc()">
+      <p class="pc112-total">الإجمالي: <b id="atTotal">—</b></p>`
+    : `<label class="pc94-lb">المبلغ</label><input id="atAmt" class="pc93-name" inputmode="decimal" dir="ltr" placeholder="0.00">
+       <label class="pc94-lb">طريقة السداد</label><select id="atMethod" class="pc93-name">${PC_ACC_METHODS.map(m=>`<option>${m}</option>`).join("")}</select>`}
+    <label class="pc94-lb">الفرع / مركز التكلفة</label><select id="atBranch" class="pc93-name">${accBranchOptions("", true)}</select>
+    <label class="pc94-lb">ملاحظة</label><input id="atNote" class="pc93-name" maxlength="200">
+    ${pcByField("atBy","اسم المسجِّل")}`,
+    actions:[{label:"حفظ", kind:"btn-main", value:h=>({date:h.querySelector("#atDate").value, due:h.querySelector("#atDue")?.value||"", ref:h.querySelector("#atRef").value.trim(),
+      base:h.querySelector("#atBase")?.value, vat:h.querySelector("#atVat")?.value, amt:h.querySelector("#atAmt")?.value, method:h.querySelector("#atMethod")?.value||"",
+      branchId:h.querySelector("#atBranch").value, note:h.querySelector("#atNote").value.trim(), by:h.querySelector("#atBy").value.trim()})},
+      {label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  if(!v.date || v.date > today){ showToast("تاريخ غير صحيح","error"); return; }
+  if(!v.by){ showToast("اكتب اسم المسجِّل","error"); return; }
+  let base = 0, vat = 0, amount;
+  if(priced){
+    base = accNum(v.base); vat = String(v.vat||"").trim() === "" ? 0 : accNum(v.vat);
+    if(!isFinite(base) || base <= 0){ showToast("اكتب المبلغ قبل الضريبة","error"); return; }
+    if(!isFinite(vat) || vat < 0){ showToast("مبلغ الضريبة غير صحيح","error"); return; }
+    if(vat > accR(base * PC_VAT) + 0.05 && !(await pcConfirm(`الضريبة ${accTxt(vat)} أكبر من 15% من المبلغ (${accTxt(base*PC_VAT)}). متابعة؟`,{title:"تحقق من الضريبة", okText:"متابعة"}))) return;
+    amount = accR(base + vat);
+  } else {
+    amount = accNum(v.amt);
+    if(!isFinite(amount) || amount <= 0){ showToast("اكتب مبلغ السداد","error"); return; }
+  }
+  if(type === "bill"){
+    if(!v.ref){ showToast("اكتب رقم فاتورة المورد","error"); return; }
+    if(accSupTx(s.id).some(t=>t.type==="bill" && !t.voided && String(t.ref).trim()===v.ref)){ showToast("رقم الفاتورة مسجل من قبل لهذا المورد","error"); return; }
+    if(v.due && v.due < v.date){ showToast("تاريخ الاستحقاق قبل تاريخ الفاتورة","error"); return; }
+  }
+  if(type !== "bill"){
+    const bal = accSupState(s).balance;
+    if(amount > bal + 0.009 && !(await pcConfirm(`المبلغ ${accTxt(amount)} أكبر من الرصيد المستحق ${accTxt(bal)}. سيُسجّل الفرق دفعة مقدمة للمورد. متابعة؟`,{title:"أكبر من الرصيد", okText:"تسجيل"}))) return;
+  }
+  const data = {supplierId:s.id, supplierName:s.name, type, date:v.date, due:type==="bill" ? (v.due || v.date) : "", ref:v.ref, base:accR(base), vat:accR(vat), amount:accR(amount),
+    method:v.method, branchId:v.branchId, note:v.note, by:v.by, createdAtMs:Date.now()};
+  try{
+    pcStoreSaveBy(v.by);
+    const {db,addDoc,collection} = window.firebaseDB;
+    await addDoc(collection(db,"acc_supplier_tx"), data);
+    showToast(`تم تسجيل ${T} — ${accTxt(amount)}`);
+    pcAccDraw(true);
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+}
+
+/* ----- cancel an entry (kept, struck through) ----- */
+async function accVoid(col, id){
+  const v = await pcSheet({title:"إلغاء القيد", icon:"fa-ban", body:`<p class="pc85-hint">القيد لا يُحذف؛ يبقى ظاهرًا كملغي مع السبب واسم من ألغاه.</p>
+      <label class="pc94-lb">سبب الإلغاء (مطلوب)</label><input id="avWhy" class="pc93-name" maxlength="160">
+      ${pcByField("avBy","اسم المسؤول")}`,
+    actions:[{label:"إلغاء القيد", kind:"btn-main", value:h=>({why:h.querySelector("#avWhy").value.trim(), by:h.querySelector("#avBy").value.trim()})},{label:"رجوع", kind:"btn-light", value:null}]});
+  if(!v) return;
+  if(!v.why || !v.by){ showToast("السبب واسم المسؤول مطلوبان","error"); return; }
+  try{
+    const {db,doc,updateDoc} = window.firebaseDB;
+    await updateDoc(doc(db,col,id), {voided:true, voidReason:v.why, voidBy:v.by, voidAtMs:Date.now()});
+    showToast("تم إلغاء القيد");
+    pcAccDraw(true);
+  }catch(err){ console.error(err); showToast("تعذر الإلغاء","error"); }
+}
+
+/* ----- sales ----- */
+function accSalesRows(){
+  const m = pcAcc.month;
+  return accList("accSales", accSales).filter(x=>String(x.date).startsWith(m) && (!pcAcc.branch || x.branchId===pcAcc.branch))
+    .sort((a,b)=>String(b.date).localeCompare(String(a.date)) || accBranchLabel(a.branchId).localeCompare(accBranchLabel(b.branchId),"ar"));
+}
+function accSalesHtml(){
+  const rows = accSalesRows(), live = rows.filter(x=>!x.voided);
+  const sum = k=>accR(live.reduce((a,x)=>a + accR(x[k]), 0));
+  const mx = {};
+  live.forEach(x=>{ const b = accBranchLabel(x.branchId); mx[b] = mx[b] || {}; mx[b][x.channel] = accR((mx[b][x.channel]||0) + accR(x.total)); });
+  const chans = PC_ACC_CHANNELS.filter(c=>live.some(x=>x.channel===c));
+  return `
+    <div class="pc112-bar">
+      <label class="pc112-month">الشهر <input type="month" value="${escapeHtml(pcAcc.month)}" onchange="pcAcc.month=this.value||pcAcc.month;pcAccDraw(true)"></label>
+      <select class="pc93-name pc112-sel" onchange="pcAcc.branch=this.value;pcAccDraw(true)"><option value="">كل الفروع</option>${pcActiveBranches().map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===pcAcc.branch?"selected":""}>${escapeHtml(b.name||"")}</option>`).join("")}</select>
+      <button type="button" class="btn btn-main" onclick="accSaleEdit()"><i class="fa-solid fa-plus"></i> تسجيل مبيعات يوم</button>
+      <button type="button" class="btn btn-light" onclick="accExportSales()"><i class="fa-solid fa-file-excel"></i> Excel</button>
+    </div>
+    <div class="pc112-kpis">
+      <div><span>الإجمالي شامل الضريبة</span><b>${accFmt(sum("total"))}</b><small>${live.length} تسجيل</small></div>
+      <div><span>قبل الضريبة</span><b>${accFmt(sum("net"))}</b><small>الضريبة ${accTxt(sum("vat"))}</small></div>
+      <div><span>نقدي / شبكة / أخرى</span><b class="pc112-split">${accTxt(sum("cash"))} · ${accTxt(sum("card"))} · ${accTxt(sum("other"))}</b></div>
+    </div>
+    ${chans.length ? `<div class="premium-table-wrap"><table class="premium-table pc112-table"><thead><tr><th>الفرع</th>${chans.map(c=>`<th>${escapeHtml(c)}</th>`).join("")}<th>الإجمالي</th></tr></thead><tbody>
+      ${Object.entries(mx).map(([b,o])=>`<tr><td><b>${escapeHtml(b)}</b></td>${chans.map(c=>`<td>${o[c]?accFmt(o[c]):""}</td>`).join("")}<td><b>${accFmt(Object.values(o).reduce((a,v)=>a+v,0))}</b></td></tr>`).join("")}
+      </tbody></table></div>` : ""}
+    <h3 class="pc103-h">التسجيلات اليومية</h3>
+    ${rows.length ? `<div class="premium-table-wrap"><table class="premium-table pc112-table"><thead><tr><th>التاريخ</th><th>الفرع</th><th>القناة</th><th>قبل الضريبة</th><th>الضريبة</th><th>الإجمالي</th><th>نقدي</th><th>شبكة</th><th>أخرى</th><th>المسجِّل</th><th></th></tr></thead><tbody>
+      ${rows.map(x=>`<tr class="${x.voided?"void":""}"><td>${escapeHtml(x.date)}</td><td>${escapeHtml(accBranchLabel(x.branchId))}</td><td>${escapeHtml(x.channel)}${x.note?`<br><small>${escapeHtml(x.note)}</small>`:""}${x.voided?`<br><small class="pc112-vr">ملغي: ${escapeHtml(x.voidReason||"")} — ${escapeHtml(x.voidBy||"")}</small>`:""}</td>
+        <td>${accFmt(x.net)}</td><td>${accFmt(x.vat)}</td><td><b>${accFmt(x.total)}</b></td><td>${accFmt(x.cash)}</td><td>${accFmt(x.card)}</td><td>${accFmt(x.other)}</td><td>${escapeHtml(x.by||"")}</td>
+        <td>${x.voided ? "" : `<button class="mini-danger" data-id="${escapeHtml(x.id)}" onclick="accVoid('acc_sales',this.dataset.id)">إلغاء</button>`}</td></tr>`).join("")}
+      </tbody></table></div>` : pc60Empty("fa-cash-register", "لا توجد مبيعات مسجلة لهذا الشهر")}`;
+}
+function accSaleCalc(){
+  const tot = accNum(document.getElementById("slTotal")?.value);
+  const vatOn = document.getElementById("slVatOn")?.checked;
+  const vatEl = document.getElementById("slVat");
+  if(vatEl && document.activeElement !== vatEl) vatEl.value = isFinite(tot) ? (vatOn ? accR(tot * PC_VAT / (1 + PC_VAT)) : 0).toFixed(2) : "";
+  const vat = accNum(vatEl?.value);
+  const pays = ["slCash","slCard","slOther"].map(i=>accNum(document.getElementById(i)?.value)).map(n=>isFinite(n)?n:0);
+  const left = isFinite(tot) ? accR(tot - pays.reduce((a,b)=>a+b,0)) : null;
+  const net = document.getElementById("slNet"), rem = document.getElementById("slLeft");
+  if(net) net.textContent = isFinite(tot) ? accTxt(tot - (isFinite(vat)?vat:0)) : "—";
+  if(rem){ rem.textContent = left === null ? "—" : accTxt(left); rem.classList.toggle("bad", left !== null && Math.abs(left) >= 0.01); }
+}
+async function accSaleEdit(){
+  const today = pcHrToday();
+  setTimeout(accSaleCalc, 0);
+  const v = await pcSheet({title:"تسجيل مبيعات يوم", icon:"fa-cash-register", body:`
+    <div class="pc102-shift">
+      <div><label class="pc94-lb">التاريخ</label><input id="slDate" class="pc93-name" type="date" max="${today}" value="${today}"></div>
+      <div><label class="pc94-lb">الفرع</label><select id="slBranch" class="pc93-name">${accBranchOptions(pcAcc.branch || pcActiveBranches()[0]?.id, false)}</select></div>
+    </div>
+    <label class="pc94-lb">القناة</label><select id="slChan" class="pc93-name">${PC_ACC_CHANNELS.map(c=>`<option>${c}</option>`).join("")}</select>
+    <label class="pc94-lb">إجمالي المبيعات شامل الضريبة</label><input id="slTotal" class="pc93-name" inputmode="decimal" dir="ltr" placeholder="0.00" oninput="accSaleCalc()">
+    <label class="pc110-adm pc112-vat"><input type="checkbox" id="slVatOn" checked onchange="accSaleCalc()"><span><b>شامل ضريبة القيمة المضافة 15%</b><small>الضريبة = الإجمالي × 15 ÷ 115</small></span></label>
+    <div class="pc102-shift"><div><label class="pc94-lb">الضريبة</label><input id="slVat" class="pc93-name" inputmode="decimal" dir="ltr" oninput="accSaleCalc()"></div>
+      <div><label class="pc94-lb">قبل الضريبة</label><p class="pc112-total"><b id="slNet">—</b></p></div></div>
+    <label class="pc94-lb">التحصيل حسب طريقة الدفع</label>
+    <div class="pc112-pay">
+      <div><small>نقدي</small><input id="slCash" class="pc93-name" inputmode="decimal" dir="ltr" placeholder="0.00" oninput="accSaleCalc()"></div>
+      <div><small>شبكة / مدى</small><input id="slCard" class="pc93-name" inputmode="decimal" dir="ltr" placeholder="0.00" oninput="accSaleCalc()"></div>
+      <div><small>أخرى (تحويل، تطبيقات، آجل)</small><input id="slOther" class="pc93-name" inputmode="decimal" dir="ltr" placeholder="0.00" oninput="accSaleCalc()"></div>
+    </div>
+    <p class="pc112-total">غير موزّع على طرق الدفع: <b id="slLeft">—</b></p>
+    <label class="pc94-lb">ملاحظة</label><input id="slNote" class="pc93-name" maxlength="200">
+    ${pcByField("slBy","اسم المسجِّل")}`,
+    actions:[{label:"حفظ", kind:"btn-main", value:h=>({date:h.querySelector("#slDate").value, branchId:h.querySelector("#slBranch").value, channel:h.querySelector("#slChan").value,
+      total:h.querySelector("#slTotal").value, vat:h.querySelector("#slVat").value, cash:h.querySelector("#slCash").value, card:h.querySelector("#slCard").value, other:h.querySelector("#slOther").value,
+      note:h.querySelector("#slNote").value.trim(), by:h.querySelector("#slBy").value.trim()})},{label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  const total = accNum(v.total), vat = String(v.vat).trim()==="" ? 0 : accNum(v.vat);
+  const pay = ["cash","card","other"].map(k=>String(v[k]).trim()==="" ? 0 : accNum(v[k]));
+  if(!v.date || v.date > today){ showToast("تاريخ غير صحيح","error"); return; }
+  if(!v.branchId){ showToast("اختر الفرع","error"); return; }
+  if(!isFinite(total) || total <= 0){ showToast("اكتب إجمالي المبيعات","error"); return; }
+  if(!isFinite(vat) || vat < 0 || vat >= total){ showToast("مبلغ الضريبة غير صحيح","error"); return; }
+  if(pay.some(n=>!isFinite(n) || n < 0)){ showToast("مبالغ التحصيل غير صحيحة","error"); return; }
+  if(Math.abs(accR(total - pay.reduce((a,b)=>a+b,0))) >= 0.01){ showToast("مجموع طرق الدفع لا يساوي الإجمالي","error"); return; }
+  if(!v.by){ showToast("اكتب اسم المسجِّل","error"); return; }
+  const dup = accList("accSales", accSales).some(x=>!x.voided && x.date===v.date && x.branchId===v.branchId && x.channel===v.channel);
+  if(dup && !(await pcConfirm(`يوجد تسجيل لنفس اليوم والفرع والقناة (${v.channel}). تسجيل إضافي؟`,{title:"تسجيل مكرر؟", okText:"تسجيل"}))) return;
+  try{
+    pcStoreSaveBy(v.by);
+    const {db,addDoc,collection} = window.firebaseDB;
+    await addDoc(collection(db,"acc_sales"), {date:v.date, branchId:v.branchId, channel:v.channel, total:accR(total), vat:accR(vat), net:accR(total - vat),
+      cash:accR(pay[0]), card:accR(pay[1]), other:accR(pay[2]), note:v.note, by:v.by, createdAtMs:Date.now()});
+    pcAcc.month = v.date.slice(0,7);
+    showToast(`تم تسجيل مبيعات ${accTxt(total)}`);
+    pcAccDraw(true);
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+}
+
+/* ----- Excel exports ----- */
+function accXlsx(sheets, file){
+  if(typeof XLSX === "undefined"){ showToast("مكتبة Excel غير متاحة الآن","error"); return; }
+  const wb = XLSX.utils.book_new();
+  sheets.forEach(([name, rows])=>{ const ws = XLSX.utils.json_to_sheet(rows); ws["!views"] = [{RTL:true}]; XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31)); });
+  XLSX.writeFile(wb, file);
+}
+function accExportSuppliers(){
+  const rows = accList("accSuppliers", accSuppliers).map(s=>{ const st = accSupState(s); return {"المورد":s.name, "الكود":s.code||"", "الرقم الضريبي":s.vat||"", "مدة السداد":Number(s.terms||0),
+    "الرصيد":st.balance, "جاري":st.aging.cur, "1-30":st.aging.d30, "31-60":st.aging.d60, "61-90":st.aging.d90, "أكثر من 90":st.aging.over, "الحالة":s.inactive?"موقوف":"نشط"}; });
+  accXlsx([["أرصدة الموردين", rows]], `suppliers-${pcHrToday()}.xlsx`);
+}
+function accExportStatement(id){
+  const s = accList("accSuppliers", accSuppliers).find(x=>x.id===id); if(!s) return;
+  const rows = accStatement(s).map(r=>({"التاريخ":r.date, "البيان":r.label, "المرجع":r.ref||"", "الفرع":r.branch||"", "مدين":r.debit||0, "دائن":r.credit||0, "الرصيد":r.voided ? "" : r.bal,
+    "الحالة":r.voided ? `ملغي: ${r.voidReason||""}` : "", "المسجِّل":r.by||""}));
+  accXlsx([["كشف حساب", rows]], `statement-${s.name}-${pcHrToday()}.xlsx`);
+}
+function accExportSales(){
+  const rows = accSalesRows().filter(x=>!x.voided).map(x=>({"التاريخ":x.date, "الفرع":accBranchLabel(x.branchId), "القناة":x.channel, "قبل الضريبة":x.net, "الضريبة":x.vat, "الإجمالي":x.total,
+    "نقدي":x.cash, "شبكة":x.card, "أخرى":x.other, "المسجِّل":x.by||"", "ملاحظة":x.note||""}));
+  accXlsx([["المبيعات", rows]], `sales-${pcAcc.month}.xlsx`);
+}
 
 pcHydrate();
 initCloud();
