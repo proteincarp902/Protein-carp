@@ -4801,3 +4801,9 @@ div.pc112-line{cursor:default}
 
 /* ===== pc119 fixed order unit ===== */
 .pc70-unit.pc119-fixed{cursor:default;justify-content:center;pointer-events:none}
+
+/* ===== pc120 language picker ===== */
+.pc120-langs{display:grid;gap:8px}
+.pc120-l{border:1px solid var(--app-line);background:var(--app-surface);border-radius:14px;padding:14px;font:inherit;font-size:16px;font-weight:800;cursor:pointer;color:var(--app-ink)}
+.pc120-l.on{border-color:var(--app-brand);background:#F3FAEE;color:var(--app-brand)}
+.pc-ur{line-height:1.75}
