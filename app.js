@@ -8794,7 +8794,7 @@ async function pcEmpLogin(){
   }
   pcEmpStore(PC_EMP_FAILS, null);
   pcEmpStore(PC_EMP_KEY, {empId:e.id, at:Date.now(), pwSetAtMs:e.pwSetAtMs||0});
-  if(e.isAdmin){ pcEmpAdminBar(); showToast(`مرحبًا ${e.name} — صلاحية مدير النظام`); return pcEmpOrig.renderGateway(); }
+  if(e.isAdmin){ pcEmpAdminBar(); showToast(`مرحبًا ${e.name} — صلاحية مدير النظام`); return pcEmpHome(); }
   pcEmpHome();
 }
 async function pcEmpLogout(){
@@ -8815,7 +8815,7 @@ function pcEmpHome(){
   }
   const e = pcEmpCurrent();
   if(!e){ document.getElementById("pc110Bar")?.remove(); showToast("انتهت الجلسة — سجّل الدخول مرة أخرى","error"); return pcEmpOrig.renderEmpLogin(); }
-  if(e.isAdmin){ pcEmpAdminBar(); return pcEmpOrig.renderGateway(); }
+  if(e.isAdmin){ pcEmpAdminBar(); return pcEmpGateway(e); }   /* admin: personal page with attendance + every door */
   if(pcPermsOf(e).length && !pcEmpOwnView){
     const doors = pcEmpDoors(e);
     if(doors.length === 1) return new Function(doors[0][4])();
@@ -8871,7 +8871,7 @@ var pcEmpOrig = {};
   pcEmpOrig[n] = f;
   window[n] = function(...a){
     if(!pcEmpSessionRaw()) return f.apply(this, a);
-    if(Array.isArray(pcRaw.hrEmployees) && pcEmpIsAdmin()) return n === "renderEmpLogin" ? pcEmpOrig.renderGateway() : f.apply(this, a);
+    if(Array.isArray(pcRaw.hrEmployees) && pcEmpIsAdmin()) return (n === "renderEmpLogin" || n === "renderGateway") ? pcEmpHome() : f.apply(this, a);
     const e = pcEmpUser();
     if(!e || pcEmpOwnView || n === "renderEmpLogin") return pcEmpHome();
     if(n === "renderGateway") return pcEmpHome();
@@ -9120,17 +9120,20 @@ function pcEmpDoors(e){
   if(pcCan("br.open")) d.push(["fa-building","pc94-g","الفروع", pcCan("br.all") ? "جميع الفروع" : pcBranchName(pcBranchOf(e)), "pcEmpBranches()"]);
   if(pcCan("wh.open")) d.push(["fa-boxes-stacked","pc94-w","المستودع","استقبال الطلبات وتسليمها","pc22OpenWarehousePremium()"]);
   if(pcCan("adm.open")) d.push(["fa-shield-halved","pc94-o","الإدارة","لوحة الإدارة والتقارير","pc21OpenAdmin()"]);
-  if(pcCanAny("set.")) d.push(["fa-gear","pc94-s","الإعدادات","حسب صلاحياتك","renderSettingsOverview()"]);
-  if(pcCanAny("acc.")) d.push(["fa-calculator","pc94-a","المحاسبة","حسب صلاحياتك","renderAccounting()"]);
+  const all = !!e.isAdmin;
+  if(pcCanAny("set.")) d.push(["fa-gear","pc94-s","الإعدادات", all ? "كل إعدادات النظام والموارد البشرية والصلاحيات" : "حسب صلاحياتك","renderSettingsOverview()"]);
+  if(pcCanAny("acc.")) d.push(["fa-calculator","pc94-a","المحاسبة", all ? "الموردين وحساباتهم والمبيعات" : "حسب صلاحياتك","renderAccounting()"]);
   return d;
 }
 function pcEmpGateway(e){
   pcEmpOwnView = false;
   pcSetScope("all"); currentBackFn = "pcEmpHome()"; currentChef = null;
+  currentBranch = pcBranchOf(e);
   const doors = pcEmpDoors(e);
   app.innerHTML = `
     <main class="app pc94-gate">
-      <div class="pc94-brand">${pc50Logo()}<b>${escapeHtml(e.name)}</b><span>${escapeHtml(e.role||"")} · ${escapeHtml(pcBranchName(pcBranchOf(e)))}</span></div>
+      <div class="pc94-brand">${pc50Logo()}<b>${escapeHtml(e.name)}</b><span>${e.isAdmin ? "مدير النظام" : escapeHtml(e.role||"")} · ${escapeHtml(pcBranchName(pcBranchOf(e)))}</span></div>
+      <section class="pc115-me">${pcEmpTopHtml(e)}</section>
       <section class="pc94-doors">
         ${doors.map(d=>`
           <button type="button" class="pc94-door" onclick="${d[4]}">

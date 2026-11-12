@@ -4741,3 +4741,6 @@ div.pc112-line{cursor:default}
 .pc114-tag{display:inline-block;margin-inline-start:6px;text-decoration:none;vertical-align:middle}
 .pc114-geo{border:1px solid var(--app-line);border-radius:14px;padding:6px 12px 12px;min-width:0}
 .pc114-geo legend{font-weight:800;font-size:14px;padding:0 6px;color:#14321F}
+
+/* ===== pc115 personal gateway (attendance on top) ===== */
+.pc115-me{width:100%;max-width:520px;margin:0 auto 14px}
