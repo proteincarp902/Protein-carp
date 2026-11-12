@@ -4648,3 +4648,11 @@ button.pc70-unit{border:0;font:inherit;cursor:pointer}
 .pc105-start .pc105-login{margin:0 auto;width:100%}
 .pc105-admin{align-self:center;border:0;background:transparent;color:var(--app-muted);font:inherit;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;gap:6px;align-items:center;padding:10px}
 .pc105-admin:hover{color:var(--app-ink)}
+.pc110-adm{display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding:12px;border:1px solid #C7D2FE;background:#EEF2FF;border-radius:12px;cursor:pointer}
+.pc110-adm input{width:20px;height:20px;margin:2px 0 0;flex:none;accent-color:#4338CA}
+.pc110-adm span{display:flex;flex-direction:column;gap:2px}
+.pc110-adm b{color:#312E81;font-size:14px}.pc110-adm small{color:#4B5563;font-size:12px;line-height:1.6}
+.pc110-bar{position:fixed;z-index:9000;right:calc(12px + env(safe-area-inset-right, 0px));bottom:calc(84px + env(safe-area-inset-bottom, 0px));display:flex;align-items:center;gap:10px;
+  background:#312E81;color:#fff;border-radius:999px;padding:6px 6px 6px 14px;font-size:12px;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,.18);max-width:calc(100% - 32px)}
+.pc110-bar span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;gap:6px;align-items:center}
+.pc110-bar button{border:0;background:#fff;color:#312E81;border-radius:999px;padding:6px 12px;font:inherit;font-weight:800;cursor:pointer}

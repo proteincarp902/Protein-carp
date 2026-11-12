@@ -1825,7 +1825,7 @@ function pc21CheckAdminPassword(){
   const input = document.getElementById("pc21AdminPassword");
   const pass = input ? input.value.trim() : "";
   const correct = String(pc21SafeSettings().adminPassword || "");
-  if(pass !== correct){
+  if(!pcEmpIsAdmin() && pass !== correct){
     if(typeof showToast === "function") showToast("كلمة المرور غير صحيحة","error");
     else alert("كلمة المرور غير صحيحة");
     return;
@@ -1990,7 +1990,7 @@ function pc22CheckWarehousePassword(){
   const input = document.getElementById("pc22WarehousePassword");
   const pass = input ? input.value.trim() : "";
   const correct = String(pc21SafeSettings().warehousePassword || "");
-  if(pass !== correct){
+  if(!pcEmpIsAdmin() && pass !== correct){
     if(typeof showToast === "function") showToast("كلمة المرور غير صحيحة","error");
     else alert("كلمة المرور غير صحيحة");
     return;
@@ -3966,7 +3966,7 @@ function renderSettingsGate(){
 
 function checkSettingsPassword(){
   const pass = (document.getElementById("settingsPasswordInput")?.value || "").trim();
-  if(pass !== String(systemSettings.adminPassword)){
+  if(!pcEmpIsAdmin() && pass !== String(systemSettings.adminPassword)){
     showToast("كلمة المرور غير صحيحة","error");
     return;
   }
@@ -7237,7 +7237,7 @@ function renderBranchStore(sec, store){
 function pcDrawStore(){
   const box = document.getElementById("pcStoreBox");
   if(!box) return;
-  const me = pcEmpCurrent();
+  const me = pcEmpLocked();
   const top = me ? pcEmpTopHtml(me) : pcStoreChefsHtml() + `
     <button type="button" class="btn btn-main pc100-new" onclick="pcStoreNewOrder()"><i class="fa-solid fa-cart-plus"></i> طلب جديد من المستودع</button>`;
   if(!pcStoreStart()){ box.innerHTML = top + pcStoreIntroHtml(true); return; }
@@ -7509,7 +7509,7 @@ function pcStoreChefsHtml(){
       : `<p class="pc100-none">لا يوجد شيف في هذا القسم — أضفه من الإعدادات ← الموارد البشرية</p>`}</div>`;
 }
 async function pcStoreNewOrder(){
-  const me = pcEmpCurrent();
+  const me = pcEmpLocked();
   const list = me ? pcStoreSecChefs().filter(c=>c.id===me.chefId || c.employeeId===me.id) : pcStoreSecChefs();
   if(!list.length){ showToast("لا يوجد شيف في هذا القسم — أضفه من الإعدادات ← الموارد البشرية","error"); return; }
   let chef = list[0];
@@ -7651,7 +7651,7 @@ function pcHrDrawEmployees(){
       <span class="pc103-emp-txt"><b>${escapeHtml(e.name||"")}</b>
         <small>${escapeHtml(e.role||"")}${e.section?` · ${escapeHtml(e.section)}`:""}${e.odooEmployeeId?` · #${escapeHtml(e.odooEmployeeId)}`:""}</small>
         <small>${e.shiftStart&&e.shiftEnd ? pcChefShiftText(e) : "بدون دوام محدد"}</small></span>
-      <span class="pc103-tags">
+      <span class="pc103-tags">${e.isAdmin ? `<em class="pc103-tag info">مدير النظام</em>` : ""}
         ${pcHrActive(e) ? "" : `<em class="pc103-tag muted">${escapeHtml(e.status)}</em>`}
         ${docs.expired ? `<em class="pc103-tag bad">${docs.expired} منتهي</em>` : ""}
         ${docs.soon ? `<em class="pc103-tag warn">${docs.soon} قارب الانتهاء</em>` : ""}
@@ -7708,13 +7708,15 @@ async function pcHrEditEmployee(id, preset){
     </div>
     <label class="pc94-lb">الرقم السري لحساب الموظف <small>${e.pwHash||e.pinHash ? "— محفوظ، اتركه فارغًا لعدم التغيير" : "(4 إلى 8 أرقام — يدخل به برقمه الوظيفي)"}</small></label>
     <input id="hrPin" class="pc93-name" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password" placeholder="••••">
+    <label class="pc110-adm"><input type="checkbox" id="hrAdmin" ${e.isAdmin?"checked":""}>
+      <span><b>مدير النظام</b><small>تحكم كامل: كل الفروع والإعدادات والإدارة والمستودع بدون كلمات مرور إضافية. يتطلب رقمًا وظيفيًا ورقمًا سريًا.</small></span></label>
     ${id ? `<p class="pc85-hint">${pcHrEmpSummary(e)}</p>` : ""}`,
     actions:[
       {label:"حفظ", kind:"btn-main", value:h=>({
         name:h.querySelector("#hrName").value.trim(), role:h.querySelector("#hrRole").value, status:h.querySelector("#hrStatus").value,
         branchId:h.querySelector("#hrBranch").value, section:h.querySelector("#hrSection").value,
         hireDate:h.querySelector("#hrHire").value, annualLeaveDays:Number(h.querySelector("#hrAnnual").value||0),
-        workDays:[...h.querySelectorAll(".hrDay:checked")].map(x=>Number(x.value)), pin:h.querySelector("#hrPin").value.trim(),
+        workDays:[...h.querySelectorAll(".hrDay:checked")].map(x=>Number(x.value)), pin:h.querySelector("#hrPin").value.trim(), isAdmin:h.querySelector("#hrAdmin").checked,
         extra:pcChefExtraRead("hr")})},
       ...(id ? [{label:"المستندات والإجازات", kind:"btn-light", value:"docs"}] : []),
       {label:"إلغاء", kind:"btn-light", value:null}]});
@@ -7727,11 +7729,15 @@ async function pcHrEditEmployee(id, preset){
   if(v.pin && !/^\d{4,8}$/.test(v.pin)){ showToast("الرقم السري من 4 إلى 8 أرقام","error"); return; }
   if(v.pin && !v.extra.data.odooEmployeeId){ showToast("سجّل الرقم الوظيفي أولًا — الموظف يدخل به مع الرقم السري","error"); return; }
   if(!v.workDays.length){ showToast("اختر يوم عمل واحدًا على الأقل","error"); return; }
+  if(v.isAdmin && !(v.pin || e.pwHash)){ showToast("حدّد رقمًا سريًا لمدير النظام","error"); return; }
+  if(v.isAdmin && !v.extra.data.odooEmployeeId){ showToast("مدير النظام يحتاج رقمًا وظيفيًا (اسم المستخدم)","error"); return; }
+  if(!!e.isAdmin !== v.isAdmin && !(await pcConfirm(v.isAdmin ? `منح ${v.name} صلاحية مدير النظام (تحكم كامل في كل شيء)؟` : `سحب صلاحية مدير النظام من ${v.name}؟`,{title:"صلاحية مدير النظام", okText:"تأكيد"}))) return;
+  if(e.isAdmin && !v.isAdmin && !pcHrEmps().some(x=>x.id!==id && x.isAdmin && pcHrActive(x))){ showToast("لا يمكن سحب الصلاحية من آخر مدير نظام","error"); return; }
   if(v.extra.data.odooEmployeeId && pcHrEmps().some(x=>x.id!==id && String(x.odooEmployeeId||"")===v.extra.data.odooEmployeeId)){
     showToast("الرقم الوظيفي مستخدم لموظف آخر","error"); return;
   }
   const data = {name:v.name, role:v.role, status:v.status, branchId:v.branchId, section:isChef ? v.section : (v.section||""),
-    hireDate:v.hireDate, annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, ...v.extra.data, updatedAtMs:Date.now()};
+    hireDate:v.hireDate, annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, isAdmin:v.isAdmin, ...v.extra.data, updatedAtMs:Date.now()};
   try{
     const {db,addDoc,collection,doc,updateDoc} = window.firebaseDB;
     let empId = id;
@@ -8162,7 +8168,7 @@ async function pcHrPunch(empId){
   if(!e || pc60Busy) return;
   const open = pcHrOpenRecord(empId);
   const self = pcEmpCurrent();
-  if((e.pwHash || e.pinHash) && !(self && self.id === e.id)){
+  if((e.pwHash || e.pinHash) && !(self && (self.id === e.id || self.isAdmin))){
     const pin = await pcSheet({title:`الرقم السري · ${e.name}`, icon:"fa-lock", body:`<input id="hrPunchPin" class="pc93-name" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="••••">`,
       actions:[{label:"متابعة", kind:"btn-main", value:h=>h.querySelector("#hrPunchPin").value.trim()},{label:"إلغاء", kind:"btn-light", value:null}]});
     if(pin === null || pin === undefined) return;
@@ -8189,7 +8195,7 @@ function pcCntLoad(){ try{ return JSON.parse(localStorage.getItem(pcCntKey()) ||
 function renderStoreCount(){
   if(!pcStoreStart()){ showToast("فعّل المستودعات أولًا","error"); return; }
   const S = PC_STORES[pcStoreCur];
-  pcCnt = {all:false, q:"", vals:pcCntLoad(), back:(pcEmpSessionRaw && pcEmpSessionRaw()) ? "pcEmpHome()" : `renderBranchStore(${JSON.stringify(pcStoreSec)},"${pcStoreCur}")`};
+  pcCnt = {all:false, q:"", vals:pcCntLoad(), back:pcEmpLocked() ? "pcEmpHome()" : `renderBranchStore(${JSON.stringify(pcStoreSec)},"${pcStoreCur}")`};
   pageLayout(`جرد ${S.name}`, `
     ${pc60Bar({title:`جرد ${S.name}`, sub:`${pcStoreSec} · ${pcBranchName(currentBranch)}`, back:pcCnt.back.replace(/"/g,"&quot;")})}
     <section class="pc60-page has-bar pc107-page">
@@ -8532,14 +8538,14 @@ function pcOrdStep(o){
 }
 function pcOrdWhen(ms, txt){ return ms ? new Date(ms).toLocaleString("ar-SA",{day:"numeric", month:"short", hour:"numeric", minute:"2-digit"}) : (txt||""); }
 function pcOrdIsMine(o){
-  const me = pcEmpCurrent && pcEmpCurrent();
+  const me = pcEmpLocked();
   if(me) return o.chefId ? (o.chefId === (pcEmpChef(me)||{}).id) : o.chefName === me.name;
   return currentChef ? pcMine(o) : false;
 }
 function renderOrder(id, as){
   const o = pcOrdFind(id);
   if(!o){ showToast("الطلب غير موجود","error"); return; }
-  if(pcEmpSessionRaw && pcEmpSessionRaw()) as = "chef";
+  if(pcEmpLocked()) as = "chef";
   pcOrd = {id, as:as==="warehouse" ? "warehouse" : "chef", marks:{}, qty:{}, shown:""};
   const back = pcOrd.as === "warehouse" ? "renderWarehouse()" : "renderMyOrders()";
   pageLayout(`طلب #${o.orderId||""}`, `
@@ -8680,6 +8686,17 @@ function pcEmpCurrent(){
   return e;
 }
 
+function pcEmpIsAdmin(){ const e = pcEmpCurrent(); return !!(e && e.isAdmin); }
+/* Signed-in employee whose screens are locked to their section (admins are never locked). */
+function pcEmpLocked(){ const e = pcEmpCurrent(); return e && !e.isAdmin ? e : null; }
+function pcEmpAdminBar(){
+  const e = pcEmpCurrent();
+  if(!e || !e.isAdmin || document.getElementById("pc110Bar")) return;
+  const bar = document.createElement("div");
+  bar.id = "pc110Bar"; bar.className = "pc110-bar";
+  bar.innerHTML = `<span><i class="fa-solid fa-user-shield"></i> مدير النظام · ${escapeHtml(e.name)}</span><button type="button" onclick="pcEmpLogout()">خروج</button>`;
+  document.body.appendChild(bar);
+}
 function renderEmpLogin(){
   if(pcEmpSessionRaw()) return pcEmpHome();
   const f = pcEmpLoad(PC_EMP_FAILS) || {};
@@ -8719,11 +8736,13 @@ async function pcEmpLogin(){
   }
   pcEmpStore(PC_EMP_FAILS, null);
   pcEmpStore(PC_EMP_KEY, {empId:e.id, at:Date.now(), pwSetAtMs:e.pwSetAtMs||0});
+  if(e.isAdmin){ pcEmpAdminBar(); showToast(`مرحبًا ${e.name} — صلاحية مدير النظام`); return pcEmpOrig.renderGateway(); }
   pcEmpHome();
 }
 async function pcEmpLogout(){
   if(!(await pcConfirm("تسجيل الخروج من حسابك على هذا الجهاز؟",{title:"تسجيل الخروج", okText:"خروج"}))) return;
   pcEmpStore(PC_EMP_KEY, null);
+  document.getElementById("pc110Bar")?.remove();
   currentChef = null; productionDraft = []; currentCart = [];
   pcEmpOrig.renderEmpLogin();
 }
@@ -8737,7 +8756,8 @@ function pcEmpHome(){
     return;
   }
   const e = pcEmpCurrent();
-  if(!e){ showToast("انتهت الجلسة — سجّل الدخول مرة أخرى","error"); return renderEmpLogin(); }
+  if(!e){ document.getElementById("pc110Bar")?.remove(); showToast("انتهت الجلسة — سجّل الدخول مرة أخرى","error"); return pcEmpOrig.renderEmpLogin(); }
+  if(e.isAdmin){ pcEmpAdminBar(); return pcEmpOrig.renderGateway(); }
   currentBranch = pcBranchOf(e); pcSetScope(currentBranch);
   pcStoreSec = String(e.section||"").trim() || PC_NO_SEC;
   pcStoreView = "bal"; pcStoreQ = "";
@@ -8785,7 +8805,11 @@ var pcEmpOrig = {};
   const f = window[n];
   if(typeof f !== "function") return;
   pcEmpOrig[n] = f;
-  window[n] = function(...a){ return pcEmpSessionRaw() ? pcEmpHome() : f.apply(this, a); };
+  window[n] = function(...a){
+    if(!pcEmpSessionRaw()) return f.apply(this, a);
+    if(Array.isArray(pcRaw.hrEmployees) && pcEmpIsAdmin()) return n === "renderEmpLogin" ? pcEmpOrig.renderGateway() : f.apply(this, a);
+    return pcEmpHome();
+  };
 });
 
 pcHydrate();
