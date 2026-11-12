@@ -6621,7 +6621,6 @@ function renderGateway(){
   currentBackFn = "renderGateway()";
   currentChef = null;
   const doors = [
-    ["fa-user-lock","pc94-e","دخول الموظفين","العودة لشاشة تسجيل الدخول","renderEmpLogin()"],
     ["fa-building","pc94-g","الفروع","جميع الفروع، ادخل أي فرع","renderBranches()"],
     ["fa-gear","pc94-s","الإعدادات","كل إعدادات النظام","renderSettingsGate()"],
     ["fa-shield-halved","pc94-o","الإدارة","جميع البيانات والتقارير","renderAdminGate()"],
