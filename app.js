@@ -455,9 +455,9 @@ async function addChef(){
 
 function drawChefs(){const box=document.getElementById("chefsContainer"); if(!box)return; const q=(document.getElementById("chefSettingsSearch")?.value||"").trim().toLowerCase(); const list=chefs.filter(c=>String(c.name||"").toLowerCase().includes(q)||String(c.section||"").toLowerCase().includes(q)); box.innerHTML=list.length?`<table class="premium-table"><thead><tr><th>الشيف</th><th>الفرع</th><th>القسم</th><th>الرقم الوظيفي</th><th>الدوام</th><th>الجوال</th><th>إجراء</th></tr></thead><tbody>${list.map(c=>{const e=(typeof pcHrEmp==="function"&&c.employeeId)?pcHrEmp(c.employeeId):null; const x=e||{}; return `<tr><td><b>${escapeHtml(c.name||"")}</b>${c.inactive?` <small>(غير نشط)</small>`:""}${x.email?`<br><small dir="ltr">${escapeHtml(x.email)}</small>`:""}</td><td>${escapeHtml(pcBranchName(pcBranchOf(c)))}</td><td>${escapeHtml(c.section||"")}</td><td>${escapeHtml(x.odooEmployeeId||"—")}</td><td>${e?pcChefShiftText(x):"—"}</td><td dir="ltr">${escapeHtml(x.phone||"—")}</td><td><button class="mini-btn" data-id="${escapeHtml(c.id)}" data-emp="${escapeHtml(c.employeeId||"")}" onclick="this.dataset.emp?pcHrEditEmployee(this.dataset.emp):pcEditChef(this.dataset.id)">تعديل</button> <button class="mini-danger" onclick="deleteDocByPath('chefs','${c.id}')">حذف</button></td></tr>`;}).join("")}</tbody></table>`:`<div class="placeholder">لا يوجد شيفات</div>`;}
 
-function renderSettingsWarehouseItems(){settingsShell("warehouse","أصناف المستودع",`<div class="premium-toolbar"><input id="warehouseSearch" placeholder="بحث بالكود أو العربي أو English" oninput="drawWarehouseItems()"><button class="btn btn-main" onclick="document.getElementById('warehouseItemForm').classList.toggle('hide')">إضافة صنف</button><button class="btn btn-light" onclick="openSettingsTab('excel')">استيراد Excel</button><button class="btn btn-light" onclick="exportWarehouseCSV()">تصدير Excel</button></div><div id="warehouseItemForm" class="premium-form hide"><label>الكود اختياري</label><input id="warehouseItemCode" placeholder="مثال: 4016"><label>اسم الصنف عربي / English</label><input id="warehouseItemName" placeholder="مثال: بصل برياني / Onion Biryani"><label>الوحدة</label><select id="warehouseItemUnit"><option>كجم</option><option>جرام</option><option>لتر</option><option>مل</option><option>حبة</option><option>علبة</option><option>كيس</option><option>كرتون</option><option>صندوق</option><option>ربطة</option></select><label>التصنيف (اختياري، يُخمَّن تلقائياً إن تُرك فارغاً)</label><input id="warehouseItemCategory" list="warehouseCatList" placeholder="مثال: لحوم ودواجن"><label>الكمية المتاحة (اختياري، يظهر للمستودع ويُخصم عند الصرف)</label><input id="warehouseItemStock" type="number" min="0" step="any" inputmode="decimal" placeholder="اتركها فارغة إن لم تريد التتبع"><datalist id="warehouseCatList">${PC70_CATS.map(c=>`<option value="${c[0]}">`).join("")}</datalist><button class="btn btn-main" onclick="addWarehouseItem()">حفظ الصنف</button></div><div id="warehouseItemsContainer" class="premium-table-wrap"></div>`);drawWarehouseItems();}
+function renderSettingsWarehouseItems(){settingsShell("warehouse","أصناف المستودع",`<div class="premium-toolbar"><input id="warehouseSearch" placeholder="بحث بالكود أو العربي أو English" oninput="drawWarehouseItems()"><button class="btn btn-main" onclick="document.getElementById('warehouseItemForm').classList.toggle('hide')">إضافة صنف</button><button class="btn btn-light" onclick="openSettingsTab('excel')">استيراد Excel</button><button class="btn btn-light" onclick="exportWarehouseCSV()">تصدير Excel</button></div><div id="pc117BarWh"></div><div id="warehouseItemForm" class="premium-form hide"><label>الكود اختياري</label><input id="warehouseItemCode" placeholder="مثال: 4016"><label>اسم الصنف عربي / English</label><input id="warehouseItemName" placeholder="مثال: بصل برياني / Onion Biryani"><label>الوحدة</label><select id="warehouseItemUnit"><option>كجم</option><option>جرام</option><option>لتر</option><option>مل</option><option>حبة</option><option>علبة</option><option>كيس</option><option>كرتون</option><option>صندوق</option><option>ربطة</option></select><label>التصنيف (اختياري، يُخمَّن تلقائياً إن تُرك فارغاً)</label><input id="warehouseItemCategory" list="warehouseCatList" placeholder="مثال: لحوم ودواجن"><label>الكمية المتاحة (اختياري، يظهر للمستودع ويُخصم عند الصرف)</label><input id="warehouseItemStock" type="number" min="0" step="any" inputmode="decimal" placeholder="اتركها فارغة إن لم تريد التتبع"><datalist id="warehouseCatList">${PC70_CATS.map(c=>`<option value="${c[0]}">`).join("")}</datalist><label>الأقسام التي يظهر فيها</label>${pcItemSecChecks("pcNewWhSec", pc117.wh.link ? [pc117.wh.link] : [])}<button class="btn btn-main" onclick="addWarehouseItem()">حفظ الصنف</button></div><div id="warehouseItemsContainer" class="premium-table-wrap"></div>`);drawWarehouseItems();}
 
-async function addWarehouseItem(){const rawName=document.getElementById("warehouseItemName").value.trim(); const code=document.getElementById("warehouseItemCode").value.trim(); const unit=document.getElementById("warehouseItemUnit").value; const category=(document.getElementById("warehouseItemCategory")?.value||"").trim(); const stockRaw=(document.getElementById("warehouseItemStock")?.value||"").trim(); const stockQty=stockRaw!==""&&isFinite(Number(stockRaw))?Number(stockRaw):null; const names=splitArEn(rawName); const nameAr=names.ar,nameEn=names.en; if(!nameAr&&!nameEn)return; if(code&&warehouseItems.some(i=>String(i.code||"")===code)){showToast("كود الصنف مستخدم","error");return;} const {db,addDoc,collection,serverTimestamp}=window.firebaseDB; await addDoc(collection(db,"warehouse_items"),{name:nameAr||nameEn,nameAr:nameAr||nameEn,nameEn,code,unit,category,...(stockQty!==null?{stockQty}:{}),createdAt:serverTimestamp()}); document.getElementById("warehouseItemName").value=""; document.getElementById("warehouseItemCode").value=""; showToast("تم إضافة الصنف");}
+async function addWarehouseItem(){const rawName=document.getElementById("warehouseItemName").value.trim(); const code=document.getElementById("warehouseItemCode").value.trim(); const unit=document.getElementById("warehouseItemUnit").value; const category=(document.getElementById("warehouseItemCategory")?.value||"").trim(); const stockRaw=(document.getElementById("warehouseItemStock")?.value||"").trim(); const stockQty=stockRaw!==""&&isFinite(Number(stockRaw))?Number(stockRaw):null; const names=splitArEn(rawName); const nameAr=names.ar,nameEn=names.en; if(!nameAr&&!nameEn)return; if(code&&warehouseItems.some(i=>String(i.code||"")===code)){showToast("كود الصنف مستخدم","error");return;} const {db,addDoc,collection,serverTimestamp}=window.firebaseDB; const ref=await addDoc(collection(db,"warehouse_items"),{name:nameAr||nameEn,nameAr:nameAr||nameEn,nameEn,code,unit,category,...(stockQty!==null?{stockQty}:{}),createdAt:serverTimestamp()}); const secs=pcItemSecRead("pcNewWhSec"); if(secs.size){ try{ await pcItemSecWrite("wh", ref.id, secs); }catch(e){ console.error(e); showToast("أضيف الصنف لكن تعذر ربطه بالأقسام","error"); } } document.getElementById("warehouseItemName").value=""; document.getElementById("warehouseItemCode").value=""; showToast("تم إضافة الصنف");}
 
 function renderSettingsCleaning(){pcSettingsEnter();settingsShell("cleaning","عناصر النظافة",`${pcSettingsBar("renderSettingsCleaning")}<div class="premium-toolbar"><input id="cleaningTaskSearch" placeholder="بحث عن مهمة" oninput="drawCleaningTasks()"><button class="btn btn-main" onclick="document.getElementById('cleaningTaskForm').classList.toggle('hide')">إضافة مهمة</button></div><div id="cleaningTaskForm" class="premium-form hide"><label>اسم المهمة بالعربي</label><input id="cleaningTaskName" placeholder="مثال: دورات المياه"><label>ترجمة المهمة بالبنغالي</label><input id="cleaningTaskBn" placeholder="مثال: টয়লেট পরিষ্কার"><label>الورديات</label><label><input id="cleanMorning" type="checkbox" checked> صباح</label><label><input id="cleanAfternoon" type="checkbox" checked> ظهر</label><label><input id="cleanNight" type="checkbox" checked> ليل</label><button class="btn btn-main" onclick="addCleaningTask()">حفظ المهمة</button></div><div id="cleaningTasksContainer" class="premium-table-wrap"></div>`);drawCleaningTasks();}
 
@@ -1193,8 +1193,8 @@ function parseExcelRows(file){return new Promise((resolve,reject)=>{if(!window.X
 function detectExcelColumns(header){const n=header.map(x=>String(x||"").trim().toLowerCase()); const find=keys=>n.findIndex(h=>keys.some(k=>h.includes(k))); return{code:find(["code","كود","الكود","رمز"]),ar:find(["arabic","عربي","العربي","اسم عربي","الاسم العربي"]),en:find(["english","انجليزي","الإنجليزي","الانجليزي","اسم انجليزي","الاسم الإنجليزي"]),unit:find(["unit","وحدة","الوحدة"]),section:find(["section","قسم","القسم"]),category:find(["category","تصنيف","التصنيف","الفئة","فئة"]),stock:find(["quantity","stock","الكمية","كمية","المتوفر","المتاح","الرصيد"])};}
 function getExcelCell(row,idx){return idx>=0?normalizeText(row[idx]):"";}
 
-function renderSettingsMenuItems(){settingsShell("menu","أصناف المنيو والإنتاج",`<div class="premium-toolbar"><input id="menuSearch" placeholder="بحث بالكود أو العربي أو English أو القسم" oninput="drawMenuItems()"><button class="btn btn-main" onclick="document.getElementById('menuItemForm').classList.toggle('hide')">إضافة صنف</button><button class="btn btn-light" onclick="openSettingsTab('excel')">استيراد Excel</button><button class="btn btn-light" onclick="exportMenuCSV()">تصدير Excel</button></div><div id="menuItemForm" class="premium-form hide"><label>الكود اختياري</label><input id="menuItemCode" placeholder="مثال: CK001"><label>اسم الصنف عربي / English</label><input id="menuItemName" placeholder="مثال: تشيز كيك فراولة / Strawberry Cheesecake"><label>القسم</label><select id="menuItemSection">${chefSections.length?chefSections.map(s=>`<option value="${s.name}">${s.name}</option>`).join(""):`<option value="">بدون قسم</option>`}</select><button class="btn btn-main" onclick="addMenuItem()">حفظ الصنف</button></div><div id="menuItemsContainer" class="premium-table-wrap"></div>`);drawMenuItems();}
-async function addMenuItem(){const rawName=document.getElementById("menuItemName").value.trim(); const code=document.getElementById("menuItemCode").value.trim(); const section=document.getElementById("menuItemSection").value; const names=splitArEn(rawName); const nameAr=names.ar,nameEn=names.en; if(!nameAr&&!nameEn)return; if(code&&menuItems.some(i=>String(i.code||"")===code)){showToast("كود الصنف مستخدم","error");return;} const {db,addDoc,collection,serverTimestamp}=window.firebaseDB; await addDoc(collection(db,"menu_items"),{code,nameAr:nameAr||nameEn,nameEn,section,createdAt:serverTimestamp()}); document.getElementById("menuItemName").value=""; document.getElementById("menuItemCode").value=""; showToast("تم إضافة صنف الإنتاج");}
+function renderSettingsMenuItems(){settingsShell("menu","أصناف المنيو والإنتاج",`<div class="premium-toolbar"><input id="menuSearch" placeholder="بحث بالكود أو العربي أو English أو القسم" oninput="drawMenuItems()"><button class="btn btn-main" onclick="document.getElementById('menuItemForm').classList.toggle('hide')">إضافة صنف</button><button class="btn btn-light" onclick="openSettingsTab('excel')">استيراد Excel</button><button class="btn btn-light" onclick="exportMenuCSV()">تصدير Excel</button></div><div id="pc117BarMenu"></div><div id="menuItemForm" class="premium-form hide"><label>الكود اختياري</label><input id="menuItemCode" placeholder="مثال: CK001"><label>اسم الصنف عربي / English</label><input id="menuItemName" placeholder="مثال: تشيز كيك فراولة / Strawberry Cheesecake"><label>الأقسام التي يظهر فيها</label>${pcItemSecChecks("pcNewMenuSec", pc117.menu.link ? [pc117.menu.link] : [])}<button class="btn btn-main" onclick="addMenuItem()">حفظ الصنف</button></div><div id="menuItemsContainer" class="premium-table-wrap"></div>`);drawMenuItems();}
+async function addMenuItem(){const rawName=document.getElementById("menuItemName").value.trim(); const code=document.getElementById("menuItemCode").value.trim(); const secs=pcItemSecRead("pcNewMenuSec"); const section=[...secs][0]||""; const names=splitArEn(rawName); const nameAr=names.ar,nameEn=names.en; if(!nameAr&&!nameEn)return; if(code&&menuItems.some(i=>String(i.code||"")===code)){showToast("كود الصنف مستخدم","error");return;} const {db,addDoc,collection,serverTimestamp}=window.firebaseDB; const ref=await addDoc(collection(db,"menu_items"),{code,nameAr:nameAr||nameEn,nameEn,section,createdAt:serverTimestamp()}); if(secs.size){ try{ await pcItemSecWrite("menu", ref.id, secs); }catch(e){ console.error(e); showToast("أضيف الصنف لكن تعذر ربطه بالأقسام","error"); } } document.getElementById("menuItemName").value=""; document.getElementById("menuItemCode").value=""; showToast("تم إضافة صنف الإنتاج");}
 
 function renderSettingsAbout(){settingsShell("about","حول البرنامج",`<div class="about-card"><img src="assets/logo.png" onerror="this.style.display='none'"><h2>Protein & Carb Operations</h2><p>نظام إدارة التشغيل والإنتاج</p><div class="about-info"><div><span>اسم المنشأة</span><b>Protein & Carb</b></div><div><span>الإصدار</span><b>Premium V1.0</b></div><div><span>حالة النظام</span><b>متصل</b></div><div><span>المطور</span><b>Mimoon Mohammad</b></div><div><span>Email</span><b>mimoon7113@gmail.com</b></div></div></div>${settingsStatsCards()}`);}
 
@@ -5658,17 +5658,19 @@ function pc75Kind(kind){
 function drawWarehouseItems(){
   const box = document.getElementById("warehouseItemsContainer"); if(!box) return;
   const q = (document.getElementById("warehouseSearch")?.value||"").trim().toLowerCase();
-  const list = sortNewest(warehouseItems).filter(i=>!q || [itemDisplayName(i),itemDisplayEn(i),itemCode(i),i.unit,i.category].some(v=>String(v||"").toLowerCase().includes(q)));
+  const list = pcItemFilter("wh", sortNewest(warehouseItems)).filter(i=>!q || [itemDisplayName(i),itemDisplayEn(i),itemCode(i),i.unit,i.category].some(v=>String(v||"").toLowerCase().includes(q)));
+  const bar = document.getElementById("pc117BarWh"); if(bar) bar.innerHTML = pcItemBar("wh");
   if(!list.length){ box.innerHTML = `<div class="placeholder">${q?"لا توجد نتائج":"لا توجد أصناف"}</div>`; return; }
-  box.innerHTML = `<div class="pc75-count">${list.length} صنف</div><table class="premium-table"><thead><tr><th>الكود</th><th>العربي</th><th>English</th><th>الوحدة</th><th>التصنيف</th><th>المتوفر</th><th>إجراء</th></tr></thead><tbody>${list.slice(0,pc75Lim.wh).map(i=>`<tr><td>${escapeHtml(itemCode(i)||"-")}</td><td><b>${escapeHtml(itemDisplayName(i))}</b>${pc90Unavailable(i)?`<span class="pc90-tag">غير متوفر</span>`:""}</td><td>${escapeHtml(itemDisplayEn(i)||"-")}</td><td>${escapeHtml(i.unit||"")}</td><td>${escapeHtml(i.category||"-")}</td><td>${pc86Stock(i)===null?"-":`<b>${pc60Num(pc86Stock(i))}</b>`}</td><td class="pc75-acts"><button class="mini-light" onclick="pc75Edit('wh','${i.id}')">تعديل</button><button class="mini-danger" onclick="pc75Delete('wh','${i.id}')">حذف</button></td></tr>`).join("")}</tbody></table>${list.length>pc75Lim.wh?`<button type="button" class="pc60-more-btn" onclick="pc75Lim.wh+=100;drawWarehouseItems()">عرض المزيد (${list.length-pc75Lim.wh})</button>`:""}`;
+  box.innerHTML = `<div class="pc75-count">${list.length} صنف</div><table class="premium-table"><thead><tr><th>الكود</th><th>العربي</th><th>English</th><th>الوحدة</th><th>التصنيف</th><th>المتوفر</th><th>الأقسام</th><th>إجراء</th></tr></thead><tbody>${list.slice(0,pc75Lim.wh).map(i=>`<tr><td>${escapeHtml(itemCode(i)||"-")}</td><td><b>${escapeHtml(itemDisplayName(i))}</b>${pc90Unavailable(i)?`<span class="pc90-tag">غير متوفر</span>`:""}</td><td>${escapeHtml(itemDisplayEn(i)||"-")}</td><td>${escapeHtml(i.unit||"")}</td><td>${escapeHtml(i.category||"-")}</td><td>${pc86Stock(i)===null?"-":`<b>${pc60Num(pc86Stock(i))}</b>`}</td>${pcItemSecCell("wh", i)}<button class="mini-light" onclick="pc75Edit('wh','${i.id}')">تعديل</button><button class="mini-danger" onclick="pc75Delete('wh','${i.id}')">حذف</button></td></tr>`).join("")}</tbody></table>${list.length>pc75Lim.wh?`<button type="button" class="pc60-more-btn" onclick="pc75Lim.wh+=100;drawWarehouseItems()">عرض المزيد (${list.length-pc75Lim.wh})</button>`:""}`;
 }
 
 function drawMenuItems(){
   const box = document.getElementById("menuItemsContainer"); if(!box) return;
   const q = (document.getElementById("menuSearch")?.value||"").trim().toLowerCase();
-  const list = sortNewest(menuItems).filter(i=>!q || [i.nameAr,i.nameEn,i.code,i.section].some(v=>String(v||"").toLowerCase().includes(q)));
+  const list = pcItemFilter("menu", sortNewest(menuItems)).filter(i=>!q || [i.nameAr,i.nameEn,i.code,i.section].some(v=>String(v||"").toLowerCase().includes(q)));
+  const bar = document.getElementById("pc117BarMenu"); if(bar) bar.innerHTML = pcItemBar("menu");
   if(!list.length){ box.innerHTML = `<div class="placeholder">${q?"لا توجد نتائج":"لا توجد أصناف إنتاج"}</div>`; return; }
-  box.innerHTML = `<div class="pc75-count">${list.length} صنف</div><table class="premium-table"><thead><tr><th>الكود</th><th>العربي</th><th>English</th><th>القسم</th><th>إجراء</th></tr></thead><tbody>${list.slice(0,pc75Lim.menu).map(i=>`<tr><td>${escapeHtml(i.code||"-")}</td><td><b>${escapeHtml(i.nameAr||"")}</b></td><td>${escapeHtml(i.nameEn||"-")}</td><td>${escapeHtml(i.section||"-")}</td><td class="pc75-acts"><button class="mini-light" onclick="pc75Edit('menu','${i.id}')">تعديل</button><button class="mini-danger" onclick="pc75Delete('menu','${i.id}')">حذف</button></td></tr>`).join("")}</tbody></table>${list.length>pc75Lim.menu?`<button type="button" class="pc60-more-btn" onclick="pc75Lim.menu+=100;drawMenuItems()">عرض المزيد (${list.length-pc75Lim.menu})</button>`:""}`;
+  box.innerHTML = `<div class="pc75-count">${list.length} صنف</div><table class="premium-table"><thead><tr><th>الكود</th><th>العربي</th><th>English</th><th>الأقسام</th><th>إجراء</th></tr></thead><tbody>${list.slice(0,pc75Lim.menu).map(i=>`<tr><td>${escapeHtml(i.code||"-")}</td><td><b>${escapeHtml(i.nameAr||"")}</b></td><td>${escapeHtml(i.nameEn||"-")}</td>${pcItemSecCell("menu", i)}<button class="mini-light" onclick="pc75Edit('menu','${i.id}')">تعديل</button><button class="mini-danger" onclick="pc75Delete('menu','${i.id}')">حذف</button></td></tr>`).join("")}</tbody></table>${list.length>pc75Lim.menu?`<button type="button" class="pc60-more-btn" onclick="pc75Lim.menu+=100;drawMenuItems()">عرض المزيد (${list.length-pc75Lim.menu})</button>`:""}`;
 }
 
 async function pc75Delete(kind,id,fromEdit){
@@ -5714,11 +5716,11 @@ function pc75Edit(kind,id){
         <input id="pc75Stock" type="number" min="0" step="any" inputmode="decimal" value="${stock===null?"":stock}">
         <label class="pc90-switch"><input id="pc75Unavail" type="checkbox" ${it.unavailable===true?"checked":""}>
           <span><b>غير متوفر حالياً</b><small>يظهر لمسؤول المستودع في قائمة الطلبات</small></span></label>
-      </div>` : `
+      </div>` : ""}
       <div class="pc60-card">
-        <label>القسم</label>
-        <select id="pc75Sec"><option value="">بدون قسم</option>${chefSections.map(s=>`<option ${s.name===it.section?"selected":""}>${escapeHtml(s.name)}</option>`).join("")}</select>
-      </div>`}
+        <label>الأقسام التي يظهر فيها الصنف <small>(الطلب والإنتاج والجرد والصرف)</small></label>
+        ${pcItemSecChecks("pc75SecK", pcItemSecs(kind, id))}
+      </div>
       <button type="button" class="pc90-del" onclick="pc75Delete('${kind}','${id}',true)"><i class="fa-solid fa-trash"></i> حذف الصنف</button>
     </section>
     <div class="pc60-actionbar">
@@ -5742,12 +5744,14 @@ async function pc75Save(kind,id){
             category:g("pc75Cat").value.trim(), stockQty:(st!=="" && isFinite(Number(st))) ? Number(st) : null,
             unavailable:g("pc75Unavail").checked};
   }else{
-    data = {nameAr:v.ar||v.en, nameEn:v.en, code:v.code, section:g("pc75Sec").value||""};
+    data = {nameAr:v.ar||v.en, nameEn:v.en, code:v.code, section:[...pcItemSecRead("pc75SecK")][0] || ""};
   }
   try{
     const {db,doc,updateDoc} = window.firebaseDB;
+    const secs = pcItemSecRead("pc75SecK");
     await updateDoc(doc(db,k.col,id),data);
-    showToast("تم حفظ التعديل");
+    await pcItemSecWrite(kind, id, secs);
+    showToast(`تم حفظ التعديل — ${secs.size ? `${secs.size} ${secs.size===1?"قسم":"أقسام"}` : "غير مربوط بقسم"}`);
     openSettingsTab(isWh?"warehouse":"menu");
   }catch(e){ console.error(e); showToast("تعذر الحفظ","error"); }
 }
@@ -8950,6 +8954,77 @@ var pcEmpOrig = {};
     return pcEmpHome();
   };
 });
+
+/* =========================== Item ↔ section links (from the item settings) =========================== *
+ * The links live in section_items/{section}.raw (warehouse items) or .prod (menu items). An item may be in
+ * any number of sections. Linking is done from the item lists (quick-link mode, per-item «الأقسام»),
+ * from the item edit page and when adding a new item. */
+var pc117 = {wh:{f:"all", link:""}, menu:{f:"all", link:""}};
+function pcItemStore(kind){ return kind === "wh" ? "raw" : "prod"; }
+function pcItemSecs(kind, id){ const st = pcItemStore(kind); return pcAllSectionNames().filter(n=>pcSecIds(n, st)?.has(String(id))); }
+async function pcItemSecWrite(kind, id, want){
+  const st = pcItemStore(kind), sid = String(id);
+  const changes = pcAllSectionNames().filter(n=>!!pcSecIds(n, st)?.has(sid) !== want.has(n));
+  if(!changes.length) return 0;
+  const {db,doc,setDoc,writeBatch} = window.firebaseDB;
+  const recs = changes.map(n=>{
+    const ids = new Set(pcSecIds(n, st) || []);
+    want.has(n) ? ids.add(sid) : ids.delete(sid);
+    return [n, {section:n, [st]:[...ids], updatedAtMs:Date.now(), updatedBy:pcStoreByName()||""}];
+  });
+  if(writeBatch){ const b = writeBatch(db); recs.forEach(([n,d])=>b.set(doc(db,"section_items",pcSecDocId(n)), d, {merge:true})); await b.commit(); }
+  else for(const [n,d] of recs) await setDoc(doc(db,"section_items",pcSecDocId(n)), d, {merge:true});
+  return changes.length;
+}
+function pcItemSecChecks(cls, on){
+  const names = pcAllSectionNames();
+  return names.length ? `<div class="pc116-secpick">${names.map(n=>`<label><input type="checkbox" class="${cls}" value="${escapeHtml(n)}" ${on.includes(n)?"checked":""}><span>${escapeHtml(n)}</span></label>`).join("")}</div>`
+    : `<p class="pc85-hint">لا توجد أقسام بعد — أضفها من الإعدادات ← الأقسام.</p>`;
+}
+function pcItemSecRead(cls){ return new Set([...document.querySelectorAll("."+cls+":checked")].map(x=>x.value)); }
+async function pcItemSecSheet(kind, id){
+  const k = pc75Kind(kind), it = k.list().find(x=>x.id===id); if(!it) return;
+  const v = await pcSheet({title:it.nameAr||it.name||"", icon:"fa-layer-group", body:`<p class="pc85-hint">الأقسام التي يظهر فيها هذا الصنف في الطلب والإنتاج والجرد والصرف.</p>${pcItemSecChecks("pcIsK", pcItemSecs(kind, id))}`,
+    actions:[{label:"حفظ", kind:"btn-main", value:h=>new Set([...h.querySelectorAll(".pcIsK:checked")].map(x=>x.value))},{label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  try{ const n = await pcItemSecWrite(kind, id, v); showToast(n ? `تم ربط الصنف — ${v.size} ${v.size===1?"قسم":"أقسام"}` : "لا توجد تغييرات"); }
+  catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+}
+async function pcItemQuick(kind, id){
+  const sec = pc117[kind].link; if(!sec) return;
+  const want = new Set(pcItemSecs(kind, id));
+  want.has(sec) ? want.delete(sec) : want.add(sec);
+  const btn = document.querySelector(`[data-ql="${CSS.escape(String(id))}"]`); if(btn) btn.disabled = true;
+  try{ await pcItemSecWrite(kind, id, want); }
+  catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); if(btn) btn.disabled = false; }
+}
+function pcItemFilter(kind, list){
+  const f = pc117[kind].f;
+  if(f === "all") return list;
+  if(f === "__none") return list.filter(i=>!pcItemSecs(kind, i.id).length);
+  return list.filter(i=>pcSecIds(f, pcItemStore(kind))?.has(String(i.id)));
+}
+function pcItemBar(kind){
+  const names = pcAllSectionNames(), st = pcItemStore(kind), s = pc117[kind];
+  const redraw = kind === "wh" ? "drawWarehouseItems" : "drawMenuItems";
+  const cnt = n=>pcSecIds(n, st)?.size || 0;
+  return `<div class="pc117-bar">
+    <div class="pc117-row"><span>عرض</span><div class="pc60-chips">
+      <button type="button" class="pc60-fchip ${s.f==="all"?"active":""}" onclick="pc117['${kind}'].f='all';${redraw}()">كل الأصناف</button>
+      <button type="button" class="pc60-fchip ${s.f==="__none"?"active":""}" onclick="pc117['${kind}'].f='__none';${redraw}()">غير مربوطة بقسم</button>
+      ${names.map(n=>`<button type="button" class="pc60-fchip ${s.f===n?"active":""}" data-s="${escapeHtml(n)}" onclick="pc117['${kind}'].f=this.dataset.s;${redraw}()">${escapeHtml(n)} <em>${cnt(n)}</em></button>`).join("")}</div></div>
+    <div class="pc117-row"><span>ربط سريع</span><div class="pc60-chips">
+      <button type="button" class="pc60-fchip ${!s.link?"active":""}" onclick="pc117['${kind}'].link='';${redraw}()">إيقاف</button>
+      ${names.map(n=>`<button type="button" class="pc60-fchip pc117-lk ${s.link===n?"active":""}" data-s="${escapeHtml(n)}" onclick="pc117['${kind}'].link=this.dataset.s;${redraw}()"><i class="fa-solid fa-link"></i> ${escapeHtml(n)}</button>`).join("")}</div></div>
+    ${s.link ? `<p class="pc117-hint"><i class="fa-solid fa-circle-info"></i> اضغط زر <b>${escapeHtml(s.link)}</b> بجوار أي صنف لإضافته للقسم أو إزالته منه — يُحفظ فورًا.</p>` : ""}
+  </div>`;
+}
+function pcItemSecCell(kind, i){
+  const secs = pcItemSecs(kind, i.id), link = pc117[kind].link, on = link && secs.includes(link);
+  return `<td class="pc117-secs">${secs.length ? secs.map(n=>`<em>${escapeHtml(n)}</em>`).join("") : `<small>—</small>`}</td>
+    <td class="pc75-acts">${link ? `<button class="pc117-q ${on?"on":""}" data-ql="${escapeHtml(String(i.id))}" onclick="pcItemQuick('${kind}',this.dataset.ql)"><i class="fa-solid ${on?"fa-circle-check":"fa-circle-plus"}"></i> ${escapeHtml(link)}</button>` : ""}
+      <button class="mini-light" data-id="${escapeHtml(String(i.id))}" onclick="pcItemSecSheet('${kind}',this.dataset.id)">الأقسام</button>`;
+}
 
 /* =========================== Branch location (geofence) =========================== *
  * Each branch may hold a point (geoLat/geoLng) and a radius in metres (geoRadius). When set:
