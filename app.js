@@ -391,6 +391,7 @@ function pcBaseRefreshViews(){
   if(document.getElementById("pcHrDocBox") && document.activeElement?.id !== "pcHrDocSearch") pcHrDrawDocs();
   if(document.getElementById("pcHrKioskBox")) pcHrDrawKiosk();
   if(document.getElementById("pcEmpWait")) pcEmpResume();
+  if(document.getElementById("pcStartWait")) pcStartDecide();
   if(document.getElementById("pcOrderBox")) pcOrdDraw(false);
   if(document.getElementById("pcSiBox") && !pcSi.dirty) pcSiDraw();
   if(document.getElementById("pcStoreBox")){
@@ -8686,6 +8687,21 @@ function pcEmpCurrent(){
   return e;
 }
 
+/* Start screen: the sign-in screen once at least one active system admin with a password exists;
+   until then the main screen, so nobody is locked out while accounts are being set up. */
+var pcStartTimer = null;
+function pcStart(){
+  if(pcEmpSessionRaw()) return pcEmpHome();
+  app.innerHTML = `<main class="app pc94-gate"><div class="pc94-brand" id="pcStartWait">${pc50Logo()}<b>جاري التحميل…</b></div></main>`;
+  pcStartTimer = setTimeout(()=>{ if(document.getElementById("pcStartWait")) pcEmpOrig.renderGateway(); }, 6000);
+  if(Array.isArray(pcRaw.hrEmployees)) pcStartDecide();
+}
+function pcStartDecide(){
+  if(!Array.isArray(pcRaw.hrEmployees)) return;
+  clearTimeout(pcStartTimer);
+  const ready = pcRaw.hrEmployees.some(e=>e.isAdmin && e.pwHash && pcHrActive(e));
+  ready ? pcEmpOrig.renderEmpLogin() : pcEmpOrig.renderGateway();
+}
 function pcEmpIsAdmin(){ const e = pcEmpCurrent(); return !!(e && e.isAdmin); }
 /* Signed-in employee whose screens are locked to their section (admins are never locked). */
 function pcEmpLocked(){ const e = pcEmpCurrent(); return e && !e.isAdmin ? e : null; }
@@ -8814,4 +8830,4 @@ var pcEmpOrig = {};
 
 pcHydrate();
 initCloud();
-if(pcEmpSessionRaw()) pcEmpHome(); else pcEmpOrig.renderEmpLogin();
+pcStart();
