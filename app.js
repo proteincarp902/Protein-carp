@@ -8948,12 +8948,11 @@ async function pcGeoCheck(branchId, what, mode){
   }
   const radius = Number(b.geoRadius) || PC_GEO_DEF_RADIUS;
   const dist = pcGeoDist(pos, {lat:b.geoLat, lng:b.geoLng});
-  const slack = Math.min(pos.acc || 0, 100);              /* forgive the phone's reported error, up to 100 m */
-  const inside = dist - slack <= radius;
+  const inside = dist <= radius;                           /* hard limit: no allowance for the phone's reported error */
   const geo = {lat:Math.round(pos.lat*1e6)/1e6, lng:Math.round(pos.lng*1e6)/1e6, acc:pos.acc, dist, inside, radius};
   if(!inside && enforce){
     await pcSheet({title:"خارج نطاق الفرع", icon:"fa-location-dot", body:`<p class="pc85-hint">موقعك يبعد <b>${dist.toLocaleString("en-US")} م</b> عن ${escapeHtml(b.name||"")} (المسموح ${radius} م، دقة الجوال ±${pos.acc} م).</p>
-      <p class="pc85-hint">${escapeHtml(what)} متاح من داخل الفرع فقط. إن كنت داخل الفرع، اقترب من نافذة أو انتظر قليلًا وحاول مرة أخرى.</p>`,
+      <p class="pc85-hint">${escapeHtml(what)} متاح من داخل الفرع فقط.${pos.acc > radius ? ` دقة تحديد موقعك الآن ضعيفة (±${pos.acc} م).` : ""} إن كنت داخل الفرع، شغّل الموقع بدقة عالية، اقترب من الباب أو نافذة، انتظر نصف دقيقة وحاول مرة أخرى.</p>`,
       actions:[{label:"حسنًا", kind:"btn-main", value:null}]});
     return null;
   }
