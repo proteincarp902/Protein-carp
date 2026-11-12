@@ -4670,7 +4670,10 @@ function pc70Base(qty,unit,base){
   return null;
 }
 function pc70PrefKey(kind,id){ return "pcUnit_"+kind+"_"+id; }
+/* Orders use the unit set on the item only — no unit choice. */
+function pc70FixedUnit(kind){ return kind === "req"; }
 function pc70DefUnit(kind,item){
+  if(pc70FixedUnit(kind)) return pc70Unit(item.unit) || String(item.unit||"").trim() || "حبة";
   try{ const s = localStorage.getItem(pc70PrefKey(kind,item.id)); if(s) return s; }catch(e){}
   return pc70Unit(item.unit) || "حبة";
 }
@@ -4771,6 +4774,7 @@ function pc60Step(kind,id,dir){
 }
 
 function pc70SetUnit(kind,id,unit){
+  if(pc70FixedUnit(kind)) return;
   try{ localStorage.setItem(pc70PrefKey(kind,id), unit); }catch(e){}
   const e = pc60Entry(kind,id);
   if(e){
@@ -4821,7 +4825,7 @@ function pc70TileHtml(kind,i){
             <button type="button" class="plus" onclick="pc60Step('${kind}','${id}',1)" aria-label="زيادة">+</button>
           </div>` : `
           <button type="button" class="pc70-add" onclick="pc60Step('${kind}','${id}',1)"><i class="fa-solid fa-plus"></i> إضافة</button>`}
-        <button type="button" class="pc70-unit" onclick="pc70PickUnit('${kind}','${id}')"><span>${escapeHtml(unit)}</span><i class="fa-solid fa-chevron-down"></i></button>
+        ${pc70FixedUnit(kind) ? `<span class="pc70-unit pc119-fixed">${escapeHtml(unit)}</span>` : `<button type="button" class="pc70-unit" onclick="pc70PickUnit('${kind}','${id}')"><span>${escapeHtml(unit)}</span><i class="fa-solid fa-chevron-down"></i></button>`}
       </div>
     </div>`;
 }
@@ -4994,7 +4998,7 @@ function pc70CartHtml(kind){
               <input type="text" inputmode="decimal" value="${pc60Num(e.qty)}" onfocus="this.select()" onchange="pc60SetQty('${kind}','${id}',this.value)">
               <button type="button" class="plus" onclick="pc60Step('${kind}','${id}',1)">+</button>
             </div>
-            ${pc70UnitPicker(`pc70SetUnit('${kind}','${id}',this.value)`, e.unit)}
+            ${pc70FixedUnit(kind) ? `<span class="pc70-unit pc119-fixed">${escapeHtml(e.unit||"")}</span>` : pc70UnitPicker(`pc70SetUnit('${kind}','${id}',this.value)`, e.unit)}
             <button type="button" class="pc70-cart-x" onclick="pc60SetQty('${kind}','${id}',0)" aria-label="حذف"><i class="fa-solid fa-xmark"></i></button>
           </div>`;
       }).join("")}

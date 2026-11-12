@@ -4798,3 +4798,6 @@ div.pc112-line{cursor:default}
 .pc118-cats label small{font-size:11px;color:var(--app-muted)}
 .pc118-cats label.full{opacity:.6}
 .pc118-addcat{align-self:flex-start;font-size:13px;padding:8px 12px}
+
+/* ===== pc119 fixed order unit ===== */
+.pc70-unit.pc119-fixed{cursor:default;justify-content:center;pointer-events:none}
