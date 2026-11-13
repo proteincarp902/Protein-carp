@@ -4095,6 +4095,7 @@ function pcSheet({title="", body="", actions=[], icon="", tone=""}){
       const b = e.target.closest("[data-act]");
       if(!b) return;
       const a = actions[Number(b.dataset.act)];
+      if(typeof a.check === "function"){ const err = a.check(host); if(err){ showToast(err,"error"); return; } }   /* keep the sheet open on a validation error */
       pcSheetClose(typeof a.value === "function" ? a.value(host) : a.value);
     });
     requestAnimationFrame(()=>host.classList.add("show"));
@@ -7435,12 +7436,17 @@ function pcStoreMoves(store, sec){
     const fromHere = t.fromBranch === currentBranch && (!sec || (t.fromSec||PC_NO_SEC) === sec);
     const toHere = t.toBranch === currentBranch && (!sec || (t.toSec||PC_NO_SEC) === sec);
     const lines = (t.lines||[]).map(x=>({...x, qty:Number(x.qty||0)}));
-    if(fromHere && (t.status === "مرسل" || t.status === "مستلم") && start && Number(t.sentAtMs||0) >= start)
+    const got = t.status === "مستلم" || t.status === "مستلم بفروق";
+    const diffs = pc127Diffs(t);
+    const dNote = diffs.length ? `فروق استلام: ${diffs.map(d=>`${d.name} أُرسل ${pc60Num(d.sent)} واستُلم ${pc60Num(d.got)}`).join("، ")}${t.diffReason?` — ${t.diffReason}`:""}` : "";
+    if(fromHere && (t.status === "مرسل" || got) && start && Number(t.sentAtMs||0) >= start)
       out.push({ms:Number(t.sentAtMs||0), sign:-1, type:"transferOut", icon:"fa-truck-arrow-right", tone:"warn", section:t.fromSec||PC_NO_SEC,
-        title:`تحويل صادر #${t.no||""} إلى ${pcBranchName(t.toBranch)} · ${t.toSec||""}${t.status==="مرسل"?" (بانتظار الاستلام)":""}`, by:t.sentBy||"", note:t.note||"", lines});
-    if(toHere && t.status === "مستلم" && start && Number(t.recvAtMs||0) >= start)
-      out.push({ms:Number(t.recvAtMs||0), sign:1, type:"transferIn", icon:"fa-truck-ramp-box", tone:"ok", section:t.toSec||PC_NO_SEC,
-        title:`تحويل وارد #${t.no||""} من ${pcBranchName(t.fromBranch)} · ${t.fromSec||""}`, by:t.recvBy||"", note:t.note||"", lines});
+        title:`تحويل صادر #${t.no||""} إلى ${pcBranchName(t.toBranch)} · ${t.toSec||""}${t.status==="مرسل"?" (بانتظار الاستلام)":""}`, by:t.sentBy||"", note:[t.note, dNote].filter(Boolean).join(" · "), lines});
+    if(toHere && got && start && Number(t.recvAtMs||0) >= start){
+      const rl = Array.isArray(t.recvLines) ? t.recvLines.map(x=>({...x, qty:Number(x.qty||0)})).filter(x=>x.qty) : lines;
+      if(rl.length) out.push({ms:Number(t.recvAtMs||0), sign:1, type:"transferIn", icon:"fa-truck-ramp-box", tone:diffs.length?"warn":"ok", section:t.toSec||PC_NO_SEC,
+        title:`تحويل وارد #${t.no||""} من ${pcBranchName(t.fromBranch)} · ${t.fromSec||""}`, by:t.recvBy||"", note:[t.note, dNote].filter(Boolean).join(" · "), lines:rl});
+    }
   });
   pcStoreMine(pcStoreRawList("wasteLogs", wasteLogs)).forEach(w=>{
     if(pcStoreWasteStore(w) !== store) return;
@@ -7826,9 +7832,14 @@ function pc127All(){ return pcStoreRawList("stockTransfers", stockTransfers); }
 function pc127Incoming(sec){ return pc127All().filter(t=>t.status==="مرسل" && t.toBranch===currentBranch && (t.toSec||PC_NO_SEC)===sec); }
 function pc127Outgoing(sec){ return pc127All().filter(t=>t.status==="مرسل" && t.fromBranch===currentBranch && (t.fromSec||PC_NO_SEC)===sec); }
 function pc127Lines(t){ return (t.lines||[]).map(l=>`${escapeHtml(l.name)} <b>${pc60Num(l.qty)} ${escapeHtml(l.unit||"")}</b>`).join("، "); }
+function pc127DiffList(sec){
+  const lim = Date.now() - 30*86400000;
+  return pc127All().filter(t=>t.status==="مستلم بفروق" && Number(t.recvAtMs||0) >= lim &&
+    ((t.fromBranch===currentBranch && (t.fromSec||PC_NO_SEC)===sec) || (t.toBranch===currentBranch && (t.toSec||PC_NO_SEC)===sec)));
+}
 function pc127PendingHtml(sec){
-  const inc = pc127Incoming(sec), outg = pc127Outgoing(sec);
-  if(!inc.length && !outg.length) return "";
+  const inc = pc127Incoming(sec), outg = pc127Outgoing(sec), dif = pc127DiffList(sec);
+  if(!inc.length && !outg.length && !dif.length) return "";
   const card = (t, dir)=>`<div class="pc127-t ${dir}">
       <div><b>${dir==="in" ? `وارد من ${escapeHtml(pcBranchName(t.fromBranch))} · ${escapeHtml(t.fromSec||"")}` : `صادر إلى ${escapeHtml(pcBranchName(t.toBranch))} · ${escapeHtml(t.toSec||"")}`}</b>
         <small>#${escapeHtml(String(t.no||""))} · ${PC_STORES[t.store]?.short||""} · ${escapeHtml(t.sentBy||"")} · ${escapeHtml(new Date(Number(t.sentAtMs||0)).toLocaleString("ar-SA",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))}</small>
@@ -7840,6 +7851,10 @@ function pc127PendingHtml(sec){
   return `<div class="pc127-box">
     ${inc.length ? `<h4><i class="fa-solid fa-truck-ramp-box"></i> تحويلات واردة بانتظار استلامك (${inc.length})</h4>${inc.map(t=>card(t,"in")).join("")}` : ""}
     ${outg.length ? `<h4><i class="fa-solid fa-truck-arrow-right"></i> تحويلات صادرة لم تُستلم بعد (${outg.length})</h4>${outg.map(t=>card(t,"out")).join("")}` : ""}
+    ${dif.length ? `<h4 class="pc127-dh"><i class="fa-solid fa-scale-unbalanced"></i> تحويلات استُلمت بفروق — آخر 30 يومًا (${dif.length})</h4>${dif.map(t=>`<div class="pc127-t dif"><div>
+        <b>#${escapeHtml(String(t.no||""))} · ${escapeHtml(pcBranchName(t.fromBranch))} · ${escapeHtml(t.fromSec||"")} ← ${escapeHtml(pcBranchName(t.toBranch))} · ${escapeHtml(t.toSec||"")}</b>
+        <small>${pc127Diffs(t).map(d=>`${escapeHtml(d.name)}: أُرسل ${pc60Num(d.sent)} · استُلم ${pc60Num(d.got)} · فرق ${pc60Num(pc70R(d.got-d.sent))} ${escapeHtml(d.unit||"")}`).join("<br>")}</small>
+        <small>المستلم: ${escapeHtml(t.recvBy||"")}${t.diffReason?` — ${pcNoteHtml(t.diffReason)}`:""}</small></div></div>`).join("")}` : ""}
   </div>`;
 }
 function pc127SecOpts(branchId, exclude){
@@ -7868,6 +7883,7 @@ async function pc127Transfer(){
     </div>
     <label class="pc94-lb">الأصناف (بوحدة الصنف)</label>
     <datalist id="pc127TList">${opts}</datalist>
+    <div class="pc127-row pc127-hd"><span>الصنف</span><span>الكمية المطلوبة</span><span>الوحدة / الرصيد</span><span></span></div>
     <div id="pc127TRows">${pc127LineRow(store)}</div>
     <button type="button" class="btn btn-light" onclick="document.getElementById('pc127TRows').insertAdjacentHTML('beforeend', pc127LineRow())"><i class="fa-solid fa-plus"></i> صنف آخر</button>
     ${pcByField("pc127By","اسم المرسل")}
@@ -7906,28 +7922,80 @@ async function pc127Transfer(){
     showToast(`تم إرسال التحويل إلى ${pcBranchName(v.br)} · ${v.sec} — بانتظار الاستلام`);
   }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
 }
+function pc127Diffs(t){
+  if(!Array.isArray(t.recvLines)) return [];
+  return (t.lines||[]).map(l=>{ const r = t.recvLines.find(x=>x.key===l.key); const got = r ? Number(r.qty||0) : 0; return {name:l.name, unit:l.unit, sent:Number(l.qty||0), got}; })
+    .filter(d=>pc70R(d.got - d.sent) !== 0);
+}
+function pc127RecvRow(inp){
+  const tr = inp.closest("tr"), sent = Number(tr.dataset.sent), v = Number(String(inp.value).replace(",", "."));
+  const changed = String(inp.value).trim() === "" || !isFinite(v) || pc70R(v) !== pc70R(sent);
+  tr.classList.toggle("chg", changed);
+  tr.querySelector(".pc127-ok").classList.toggle("on", !changed);
+  const any = [...tr.closest("table").querySelectorAll("tr.chg")].length;
+  const w = document.getElementById("pc127DiffWrap"); if(w) w.hidden = !any;
+}
+function pc127RecvAccept(btn){ const tr = btn.closest("tr"); const inp = tr.querySelector("input"); inp.value = pc60Num(Number(tr.dataset.sent)); pc127RecvRow(inp); }
+function pc127RecvZero(btn){ const tr = btn.closest("tr"); const inp = tr.querySelector("input"); inp.value = "0"; pc127RecvRow(inp); inp.focus(); inp.select(); }
 async function pc127Receive(id, ok){
   const t = pc127All().find(x=>x.id===id);
   if(!t || t.status !== "مرسل"){ showToast("تم التعامل مع هذا التحويل","warn"); return; }
   if(t.toBranch !== currentBranch){ showToast("هذا التحويل ليس لهذا الفرع","error"); return; }
-  const v = await pcSheet({title:ok ? "استلام التحويل" : "رفض التحويل", icon:ok ? "fa-truck-ramp-box" : "fa-xmark", tone:ok ? "" : "warn", body:`
-    <p class="pc85-hint">من ${escapeHtml(pcBranchName(t.fromBranch))} · ${escapeHtml(t.fromSec||"")} — #${escapeHtml(String(t.no||""))}</p>
-    <div class="pc122-confirm">${(t.lines||[]).map(l=>`<div><b>${escapeHtml(l.name)}</b><span>${pc60Num(l.qty)} ${escapeHtml(l.unit||"")}</span></div>`).join("")}</div>
-    ${ok ? `<p class="pc85-hint">بالاستلام تدخل الكميات رصيد ${PC_STORES[t.store]?.name||""} في قسمك. لو الكمية الفعلية مختلفة ارفض التحويل واطلب إعادة إرساله بالكمية الصحيحة.</p>` : ""}
-    ${pcByField("pc127RBy", ok ? "اسم المستلم" : "اسم الرافض")}
-    ${ok ? "" : `<label class="pc94-lb">سبب الرفض</label><input id="pc127RNote" class="pc93-name" maxlength="140">`}`,
-    actions:[{label:ok ? "تأكيد الاستلام" : "رفض", kind:ok ? "btn-main" : "btn-danger", value:h=>({by:h.querySelector("#pc127RBy").value.trim(), note:(h.querySelector("#pc127RNote")?.value||"").trim()})},{label:"إلغاء", kind:"btn-light", value:null}]});
+  const rows = (t.lines||[]).map((l, i)=>{
+    const bal = pcStoreBookOf(t.store, l.key);
+    return `<tr data-i="${i}" data-sent="${Number(l.qty||0)}">
+      <td class="pc122-name"><b>${escapeHtml(l.name)}</b><small>${escapeHtml(l.unit||"")}</small></td>
+      <td class="pc122-bal">${pc60Num(bal)}</td>
+      <td class="pc126-tot">${pc60Num(l.qty)}</td>
+      <td class="pc122-qty"><input type="text" inputmode="decimal" value="${pc60Num(l.qty)}" onfocus="this.select()" oninput="pc127RecvRow(this)" aria-label="الكمية المستلمة"></td>
+      <td class="pc127-rx"><button type="button" class="pc127-ok on" onclick="pc127RecvAccept(this)" title="موافقة على الكمية"><i class="fa-solid fa-check"></i></button><button type="button" class="pc127-no" onclick="pc127RecvZero(this)" title="رفض الكمية وتعديلها"><i class="fa-solid fa-pen"></i></button></td>
+    </tr>`; }).join("");
+  const v = await pcSheet({title:ok ? "استلام التحويل" : "رفض التحويل بالكامل", icon:ok ? "fa-truck-ramp-box" : "fa-xmark", tone:ok ? "" : "warn", body:`
+    <p class="pc85-hint">من ${escapeHtml(pcBranchName(t.fromBranch))} · ${escapeHtml(t.fromSec||"")} — #${escapeHtml(String(t.no||""))}${t.note?` · ${pcNoteHtml(t.note)}`:""}</p>
+    ${ok ? `<div class="pc122-wrap"><table class="pc122-t pc127-rt">
+      <thead><tr><th>الصنف</th><th>رصيدي</th><th>المطلوب</th><th>المستلم</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="pc85-hint">✓ موافقة على الكمية كما أُرسلت. ✎ رفض الكمية لهذا الصنف واكتب الكمية التي استلمتها فعلًا (صفر إذا لم يصل).</p>
+      <div id="pc127DiffWrap" hidden><label class="pc94-lb">سبب الفرق</label><input id="pc127DiffWhy" class="pc93-name" maxlength="140" placeholder="مثال: وصل 8 كجم فقط / عبوة تالفة"></div>`
+    : `<div class="pc122-confirm">${(t.lines||[]).map(l=>`<div><b>${escapeHtml(l.name)}</b><span>${pc60Num(l.qty)} ${escapeHtml(l.unit||"")}</span></div>`).join("")}</div>
+      <label class="pc94-lb">سبب الرفض</label><input id="pc127RNote" class="pc93-name" maxlength="140">`}
+    ${pcByField("pc127RBy", ok ? "اسم المستلم" : "اسم الرافض")}`,
+    actions:[{label:ok ? "تأكيد الاستلام" : "رفض التحويل", kind:ok ? "btn-main" : "btn-danger", value:h=>({by:h.querySelector("#pc127RBy").value.trim(),
+        note:(h.querySelector("#pc127RNote")?.value||"").trim(), why:(h.querySelector("#pc127DiffWhy")?.value||"").trim(),
+        qty:[...h.querySelectorAll(".pc127-rt tbody tr")].map(tr=>String(tr.querySelector("input").value).trim())}),
+      check:h=>{
+        if(!(h.querySelector("#pc127RBy")?.value||"").trim()) return "اكتب الاسم";
+        if(!ok) return (h.querySelector("#pc127RNote")?.value||"").trim() ? "" : "اكتب سبب الرفض";
+        const trs = [...h.querySelectorAll(".pc127-rt tbody tr")];
+        for(const tr of trs){ const r = String(tr.querySelector("input").value).trim(), q = Number(r.replace(",", ".")); if(r === "" || !isFinite(q) || q < 0) return `اكتب الكمية المستلمة لـ ${tr.querySelector("b").textContent} (صفر أو أكثر)`; }
+        if(trs.some(tr=>tr.classList.contains("chg")) && !(h.querySelector("#pc127DiffWhy")?.value||"").trim()) return "اكتب سبب الفرق في الكميات";
+        return "";
+      }},
+      {label:"إلغاء", kind:"btn-light", value:null}]});
   if(!v) return;
   if(!v.by){ showToast("اكتب الاسم","error"); return; }
   if(!ok && !v.note){ showToast("اكتب سبب الرفض","error"); return; }
+  let recvLines = null, diffs = 0;
+  if(ok){
+    recvLines = [];
+    for(let i = 0; i < (t.lines||[]).length; i++){
+      const l = t.lines[i], raw = v.qty[i] ?? "";
+      const q = Number(String(raw).replace(",", "."));
+      if(raw === "" || !isFinite(q) || q < 0){ showToast(`اكتب الكمية المستلمة لـ ${l.name} (صفر أو أكثر)`,"error"); return; }
+      if(pc70R(q) !== pc70R(Number(l.qty||0))) diffs++;
+      recvLines.push({key:l.key, itemId:l.itemId||"", code:l.code||"", name:l.name||"", unit:l.unit||"", sentQty:pc70R(Number(l.qty||0)), qty:pc70R(q)});
+    }
+    if(diffs && !v.why){ showToast("اكتب سبب الفرق في الكميات","error"); return; }
+    if(recvLines.every(x=>!x.qty)){ showToast("كل الكميات صفر — استخدم «رفض» للتحويل بالكامل","error"); return; }
+  }
   const g = ok ? await pcGeoCheck(currentBranch, "الاستلام") : {geo:null};
   if(!g) return;
   try{
     pcStoreSaveBy(v.by);
     const {db,doc,updateDoc} = window.firebaseDB;
-    await updateDoc(doc(db,"stock_transfers",id), ok ? {status:"مستلم", recvBy:v.by, recvAtMs:Date.now(), ...(g.geo ? {recvGeo:g.geo} : {})}
-                                                    : {status:"مرفوض", recvBy:v.by, recvAtMs:Date.now(), rejectReason:v.note});
-    showToast(ok ? "تم الاستلام وأضيفت الكميات لرصيد القسم" : "تم رفض التحويل وعادت الكميات للمرسل");
+    await updateDoc(doc(db,"stock_transfers",id), ok
+      ? {status:diffs ? "مستلم بفروق" : "مستلم", recvLines, diffCount:diffs, diffReason:v.why, recvBy:v.by, recvAtMs:Date.now(), ...(g.geo ? {recvGeo:g.geo} : {})}
+      : {status:"مرفوض", recvBy:v.by, recvAtMs:Date.now(), rejectReason:v.note});
+    showToast(!ok ? "تم رفض التحويل وعادت الكميات للمرسل" : diffs ? `تم الاستلام مع ${diffs} فرق — سُجّل للمراجعة` : "تم الاستلام وأضيفت الكميات لرصيد القسم");
   }catch(err){ console.error(err); showToast("تعذر الحفظ","error"); }
 }
 async function pc127Cancel(id){
