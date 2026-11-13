@@ -8657,7 +8657,8 @@ function pcHrDayHtml(){
       </tr>`).join("")}</tbody></table></div>` : `<div class="placeholder">لا يوجد موظفون ضمن الاختيار</div>`}`;
 }
 function pcHrSumRange(e, from, to){
-  const s = {e, present:0, late:0, lateMin:0, earlyMin:0, overMin:0, overDays:0, shortMin:0, shortDays:0, absent:0, leave:0, missingOut:0, workedMin:0, days:[]};
+  const pen = pcPenSum(e.id, from, to);
+  const s = {e, penDays:pen.days, penAmount:pen.amount, penWarns:pen.warns, present:0, late:0, lateMin:0, earlyMin:0, overMin:0, overDays:0, shortMin:0, shortDays:0, absent:0, leave:0, missingOut:0, workedMin:0, days:[]};
   for(let d = from; d <= to; d = pcHrAddDays(d,1)){
     const r = pcHrDayResult(e, d);
     s.days.push({d, r});
@@ -8674,14 +8675,15 @@ function pcHrMonthRows(){
   return pcHrScopeEmps().map(e=>pcHrSumRange(e, first, end));
 }
 function pcHrSumTable(rows){
-  return `<div class="premium-table-wrap"><table class="premium-table pc103-table"><thead><tr><th>الموظف</th><th>أيام الحضور</th><th>مرات التأخير</th><th>دقائق التأخير</th><th>دقائق الخروج المبكر</th><th>ساعات العمل</th><th>ساعات إضافية</th><th>ساعات نقص</th><th>غياب</th><th>إجازة</th><th>بدون انصراف</th></tr></thead><tbody>
+  return `<div class="premium-table-wrap"><table class="premium-table pc103-table"><thead><tr><th>الموظف</th><th>أيام الحضور</th><th>مرات التأخير</th><th>دقائق التأخير</th><th>دقائق الخروج المبكر</th><th>ساعات العمل</th><th>ساعات إضافية</th><th>ساعات نقص</th><th>غياب</th><th>إجازة</th><th>بدون انصراف</th><th>جزاءات معتمدة</th></tr></thead><tbody>
     ${rows.map(s=>`<tr><td><b>${escapeHtml(s.e.name)}</b><br><small>${escapeHtml([s.e.odooEmployeeId?"#"+s.e.odooEmployeeId:"", s.e.role, s.e.section, pcHrF.allBr ? pcBranchName(pcBranchOf(s.e)) : ""].filter(Boolean).join(" · "))}</small></td>
       <td>${s.present}</td><td>${s.late}</td><td>${Math.round(s.lateMin)}</td><td>${Math.round(s.earlyMin)}</td>
       <td><b>${(s.workedMin/60).toFixed(2)}</b></td>
       <td>${s.overMin>=1 ? `<b class="pc124-ot">${(s.overMin/60).toFixed(2)}</b><br><small>${s.overDays} يوم</small>` : "0"}</td>
       <td>${s.shortMin>=1 ? `<b class="pc124-sh">${(s.shortMin/60).toFixed(2)}</b><br><small>${s.shortDays} يوم</small>` : "0"}</td>
-      <td>${s.absent ? `<em class="pc103-tag bad">${s.absent}</em>` : 0}</td><td>${s.leave}</td><td>${s.missingOut ? `<em class="pc103-tag warn">${s.missingOut}</em>` : 0}</td></tr>`).join("")}
-    ${rows.length > 1 ? (()=>{ const t = k=>rows.reduce((a,s)=>a+s[k],0); return `<tr class="pc123-total"><td><b>الإجمالي (${rows.length})</b></td><td>${t("present")}</td><td>${t("late")}</td><td>${Math.round(t("lateMin"))}</td><td>${Math.round(t("earlyMin"))}</td><td>${(t("workedMin")/60).toFixed(2)}</td><td>${(t("overMin")/60).toFixed(2)}</td><td>${(t("shortMin")/60).toFixed(2)}</td><td>${t("absent")}</td><td>${t("leave")}</td><td>${t("missingOut")}</td></tr>`; })() : ""}
+      <td>${s.absent ? `<em class="pc103-tag bad">${s.absent}</em>` : 0}</td><td>${s.leave}</td><td>${s.missingOut ? `<em class="pc103-tag warn">${s.missingOut}</em>` : 0}</td>
+      <td>${s.penDays||s.penAmount||s.penWarns ? `<em class="pc103-tag bad">${[s.penDays?`${pc60Num(s.penDays)} يوم`:"", s.penAmount?`${pc60Num(s.penAmount)} ر.س`:"", s.penWarns?`${s.penWarns} إنذار`:""].filter(Boolean).join(" + ")}</em>` : "—"}</td></tr>`).join("")}
+    ${rows.length > 1 ? (()=>{ const t = k=>rows.reduce((a,s)=>a+s[k],0); return `<tr class="pc123-total"><td><b>الإجمالي (${rows.length})</b></td><td>${t("present")}</td><td>${t("late")}</td><td>${Math.round(t("lateMin"))}</td><td>${Math.round(t("earlyMin"))}</td><td>${(t("workedMin")/60).toFixed(2)}</td><td>${(t("overMin")/60).toFixed(2)}</td><td>${(t("shortMin")/60).toFixed(2)}</td><td>${t("absent")}</td><td>${t("leave")}</td><td>${t("missingOut")}</td><td>${pc60Num(t("penDays"))} يوم · ${pc60Num(t("penAmount"))} ر.س</td></tr>`; })() : ""}
     </tbody></table></div>`;
 }
 function pcHrMonthHtml(){
@@ -8726,7 +8728,8 @@ function pcHrSumRow(s){
     "أيام الحضور":s.present, "مرات التأخير":s.late, "دقائق التأخير":Math.round(s.lateMin), "دقائق الخروج المبكر":Math.round(s.earlyMin),
     "ساعات العمل":Number((s.workedMin/60).toFixed(2)), "ساعات إضافية":Number((s.overMin/60).toFixed(2)), "أيام بها إضافي":s.overDays,
     "ساعات نقص":Number((s.shortMin/60).toFixed(2)), "أيام بها نقص":s.shortDays,
-    "أيام الغياب":s.absent, "أيام الإجازة":s.leave, "أيام بدون انصراف":s.missingOut};
+    "أيام الغياب":s.absent, "أيام الإجازة":s.leave, "أيام بدون انصراف":s.missingOut,
+    "جزاء بالأيام (معتمد)":s.penDays||0, "جزاء بالمبلغ ر.س (معتمد)":s.penAmount||0, "إنذارات":s.penWarns||0};
 }
 function pcHrExportMonth(){
   if(typeof XLSX === "undefined"){ showToast("مكتبة Excel غير متاحة الآن","error"); return; }
@@ -8896,7 +8899,7 @@ async function pcHrDecideLeave(id, status){
  * No direct manager → straight to HR. Stored in hr_leaves with kind: leave | perm | late.
  * Old records with status "معلقة" are read as waiting for HR. */
 var PC_RQ = {mgr:"بانتظار المدير", hr:"بانتظار الموارد البشرية", ok:"معتمدة", no:"مرفوضة"};
-var PC_RQ_KINDS = {leave:["إجازة","fa-plane-departure"], perm:["استئذان","fa-door-open"], late:["تبرير تأخير","fa-clock"]};
+var PC_RQ_KINDS = {leave:["إجازة","fa-plane-departure"], perm:["استئذان","fa-door-open"], late:["تبرير تأخير","fa-clock"], pen:["جزاء","fa-gavel"]};
 var pcRqView = null;
 function pcRqKind(l){ return l && l.kind && PC_RQ_KINDS[l.kind] ? l.kind : "leave"; }
 function pcRqStatus(l){ return !l ? "" : (l.status === "معلقة" ? PC_RQ.hr : (l.status || PC_RQ.hr)); }
@@ -8917,14 +8920,17 @@ function pcRqWhen(l){
   const k = pcRqKind(l);
   if(k === "leave") return `${escapeHtml(l.type||"")} · ${l.days||pcHrDaysBetween(l.from,l.to)} يوم · ${pcHrDateText(l.from)} ← ${pcHrDateText(l.to)}`;
   if(k === "perm") return `${pcHrDateText(l.day)} · من ${escapeHtml(l.fromTime||"")} إلى ${escapeHtml(l.toTime||"")} · ${pcHrDur(l.minutes||0)}`;
+  if(k === "pen") return `${pcHrDateText(l.day)} · ${pcPenText(l)}${l.violation?` · ${escapeHtml(l.violation)}`:""}`;
   return `${pcHrDateText(l.day)} · تأخير ${pcHrDur(l.minutes||0)}`;
 }
+function pcPenText(l){ return l.penType === "amount" ? `خصم ${pc60Num(l.value)} ريال` : (l.penType === "warn" ? "إنذار كتابي" : `خصم ${pc60Num(l.value)} يوم`); }
 function pcRqTone(st){ return st===PC_RQ.ok ? "ok" : st===PC_RQ.no ? "bad" : "warn"; }
 function pcRqCard(l, actions, showName){
   const k = pcRqKind(l), st = pcRqStatus(l);
   const mgr = l.managerName || (l.managerId ? pcHrEmp(l.managerId)?.name : "");
   const steps = [];
-  if(l.managerId) steps.push(l.mgrBy ? `المدير: ${l.mgrDecision==="رفض"?"رفض":"موافقة"} — ${escapeHtml(l.mgrBy)}${l.mgrNote?` (${pcNoteHtml(l.mgrNote)})`:""}` : `المدير: ${escapeHtml(mgr||"")} — لم يرد بعد`);
+  if(k === "pen") steps.push(`صادر من المدير: ${escapeHtml(l.managerName||l.createdBy||"")}`);
+  else if(l.managerId) steps.push(l.mgrBy ? `المدير: ${l.mgrDecision==="رفض"?"رفض":"موافقة"} — ${escapeHtml(l.mgrBy)}${l.mgrNote?` (${pcNoteHtml(l.mgrNote)})`:""}` : `المدير: ${escapeHtml(mgr||"")} — لم يرد بعد`);
   if(st===PC_RQ.ok || (st===PC_RQ.no && l.decidedBy)) steps.push(`الموارد البشرية: ${st===PC_RQ.ok?"اعتماد":"رفض"} — ${escapeHtml(l.decidedBy||"")}${l.hrNote?` (${pcNoteHtml(l.hrNote)})`:""}`);
   else if(st===PC_RQ.hr) steps.push("الموارد البشرية: لم ترد بعد");
   return `<div class="pc125-card">
@@ -9009,6 +9015,51 @@ async function pcRqNew(empId, opt){
     if(opt.byHr) pcHrLeaveFilter = data.status;
   }catch(err){ console.error(err); showToast("تعذر الإرسال، تحقق من الاتصال","error"); }
 }
+/* Penalty (جزاء): issued by the employee's direct manager (or a system admin), then approved by HR.
+   By days (deduction of N days' pay), by amount (SAR) or a written warning. */
+var PC_PEN_VIOL = ["تأخير متكرر","غياب بدون عذر","مغادرة العمل بدون إذن","مخالفة تعليمات سلامة الغذاء","مخالفة النظافة الشخصية","سوء معاملة / سلوك","إهمال أدى لتلف","أخرى"];
+async function pcPenNew(empId){
+  const me = pcEmpCurrent(), e = pcHrEmp(empId);
+  if(!me || !e) return;
+  if(e.managerId !== me.id && !me.isAdmin){ showToast("توقيع الجزاء للمدير المباشر فقط","error"); return; }
+  const prev = pcHrList("hrLeaves", hrLeaves).filter(l=>pcRqKind(l)==="pen" && l.employeeId===e.id && pcRqStatus(l)!==PC_RQ.no).length;
+  const v = await pcSheet({title:`جزاء — ${e.name}`, icon:"fa-gavel", tone:"warn", body:`
+    <div class="pc60-seg2 pc125-kinds">${[["days","بالأيام"],["amount","بالمبلغ"],["warn","إنذار كتابي"]].map((t,i)=>`<label><input type="radio" name="penT" value="${t[0]}" ${i===0?"checked":""} onchange="const w=document.getElementById('penValW'); w.hidden=this.value==='warn'; document.getElementById('penValL').textContent=this.value==='amount'?'المبلغ (ريال)':'عدد الأيام'"><span>${t[1]}</span></label>`).join("")}</div>
+    <div id="penValW"><label class="pc94-lb" id="penValL">عدد الأيام</label><input id="penVal" class="pc93-name" type="text" inputmode="decimal" placeholder="مثال: 1 أو 0.5"></div>
+    <label class="pc94-lb">تاريخ المخالفة</label><input id="penDay" class="pc93-name" type="date" value="${pcHrToday()}">
+    <label class="pc94-lb">المخالفة</label><select id="penViol" class="pc93-name">${PC_PEN_VIOL.map(x=>`<option>${x}</option>`).join("")}</select>
+    <label class="pc94-lb">التفاصيل</label><input id="penNote" class="pc93-name" maxlength="200" placeholder="ماذا حدث بالتحديد">
+    ${prev ? `<p class="pc85-hint">للموظف ${prev} جزاء سابق مسجل.</p>` : ""}
+    <p class="pc125-route"><i class="fa-solid fa-route"></i> يذهب للموارد البشرية للاعتماد، ولا يُخصم شيء قبل الاعتماد. يظهر للموظف في صفحته.</p>`,
+    actions:[{label:"إرسال للموارد البشرية", kind:"btn-danger", value:h=>({t:(h.querySelector("input[name=penT]:checked")||{}).value||"days", val:h.querySelector("#penVal").value, day:h.querySelector("#penDay").value, viol:h.querySelector("#penViol").value, note:h.querySelector("#penNote").value.trim()}),
+      check:h=>{ const t = (h.querySelector("input[name=penT]:checked")||{}).value; const q = Number(String(h.querySelector("#penVal").value).replace(",", "."));
+        if(t !== "warn" && !(q > 0)) return t === "amount" ? "اكتب المبلغ" : "اكتب عدد الأيام";
+        if(t === "days" && q > 5) return "الخصم بالأيام أكبر من 5 أيام — راجع لائحة الجزاءات";
+        if(!h.querySelector("#penDay").value) return "اختر تاريخ المخالفة";
+        if(h.querySelector("#penDay").value > pcHrToday()) return "تاريخ المخالفة في المستقبل";
+        if(!h.querySelector("#penNote").value.trim()) return "اكتب تفاصيل المخالفة";
+        return ""; }},
+      {label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  const val = v.t === "warn" ? 0 : pc70R(Number(String(v.val).replace(",", ".")));
+  const {db,addDoc,collection} = window.firebaseDB;
+  try{
+    await addDoc(collection(db,"hr_leaves"), {kind:"pen", employeeId:e.id, name:e.name, branchId:pcBranchOf(e), managerId:me.id, managerName:me.name,
+      penType:v.t, value:val, day:v.day, violation:v.viol, note:v.note, status:PC_RQ.hr, createdAtMs:Date.now(), createdBy:me.name});
+    showToast("تم إرسال الجزاء للموارد البشرية للاعتماد");
+  }catch(err){ console.error(err); showToast("تعذر الحفظ","error"); }
+}
+/* Approved penalties in a period (for payroll). */
+function pcPenSum(empId, from, to){
+  const o = {days:0, amount:0, warns:0, n:0};
+  pcHrList("hrLeaves", hrLeaves).forEach(l=>{
+    if(pcRqKind(l)!=="pen" || l.employeeId!==empId || l.status!=="معتمدة" || !(l.day >= from && l.day <= to)) return;
+    o.n++; if(l.penType==="amount") o.amount += Number(l.value||0); else if(l.penType==="warn") o.warns++; else o.days += Number(l.value||0);
+  });
+  o.days = pc70R(o.days); o.amount = pc70R(o.amount);
+  return o;
+}
+
 function pcRqKindUi(root){
   const k = (root.querySelector("input[name=rqK]:checked")||{}).value || "leave";
   root.querySelectorAll("[data-k]").forEach(d=>{ d.hidden = d.dataset.k !== k; });
@@ -9043,7 +9094,7 @@ function pcRqBarHtml(e){
   const team = pcHrReports(e.id).length, teamPend = pcRqTeamList(e).filter(l=>pcRqStatus(l)===PC_RQ.mgr).length;
   return `<div class="pc125-bar">
     <button type="button" onclick="pcRqOpen('mine')"><i class="fa-solid fa-paper-plane"></i><span>إجازة / استئذان</span>${minePend?`<em class="pc60-badge">${minePend}</em>`:""}</button>
-    ${team || teamPend ? `<button type="button" onclick="pcRqOpen('team')"><i class="fa-solid fa-people-group"></i><span>طلبات فريقي</span>${teamPend?`<em class="pc60-badge hot">${teamPend}</em>`:""}</button>` : ""}
+    ${team || teamPend ? `<button type="button" onclick="pcRqOpen('team')"><i class="fa-solid fa-people-group"></i><span>فريقي: الطلبات والجزاءات</span>${teamPend?`<em class="pc60-badge hot">${teamPend}</em>`:""}</button>` : ""}
   </div>`;
 }
 function pcRqOpen(view){
@@ -9061,7 +9112,8 @@ function pcRqDraw(){
     const list = pcRqTeamList(e), pend = list.filter(l=>pcRqStatus(l)===PC_RQ.mgr), done = list.filter(l=>pcRqStatus(l)!==PC_RQ.mgr).slice(0, 40);
     const reps = pcHrReports(e.id);
     box.innerHTML = `
-      <p class="pc85-hint">فريقك: ${reps.length ? reps.map(x=>escapeHtml(x.name)).join("، ") : "لا يوجد موظفون مرتبطون بك"}</p>
+      ${reps.length ? `<div class="pc130-team">${reps.filter(pcHrActive).map(x=>`<div><span><b>${escapeHtml(x.name)}</b><small>${escapeHtml([x.role, x.section].filter(Boolean).join(" · "))}</small></span>
+        <button type="button" class="btn btn-light pc130-pen" data-id="${escapeHtml(x.id)}" onclick="pcPenNew(this.dataset.id)"><i class="fa-solid fa-gavel"></i> توقيع جزاء</button></div>`).join("")}</div>` : `<p class="pc85-hint">لا يوجد موظفون مرتبطون بك</p>`}
       <div class="pc50-section-title"><h2>بانتظار موافقتك (${pend.length})</h2></div>
       ${pend.length ? `<div class="pc125-list">${pend.map(l=>pcRqCard(l, `<button class="btn btn-main" data-id="${escapeHtml(l.id)}" onclick="pcRqMgrDecide(this.dataset.id,true)">موافقة</button><button class="btn btn-light pc125-no" data-id="${escapeHtml(l.id)}" onclick="pcRqMgrDecide(this.dataset.id,false)">رفض</button>`, true)).join("")}</div>` : pc60Empty("fa-circle-check","لا توجد طلبات بانتظارك")}
       ${done.length ? `<div class="pc50-section-title"><h2>السابقة</h2></div><div class="pc125-list">${done.map(l=>pcRqCard(l, "", true)).join("")}</div>` : ""}`;
