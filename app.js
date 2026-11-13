@@ -409,7 +409,7 @@ function pcBaseRefreshViews(){
   if(document.getElementById("internalDestinationsBox")) drawInternalDestinations();
 }
 
-function renderSettingsSections(){pcSettingsEnter();settingsShell("sections","إدارة الأقسام",`${pcSettingsBar("renderSettingsSections")}<div class="premium-toolbar pc95-bar"><input id="sectionSearch" placeholder="بحث عن قسم" oninput="drawSections()"><button class="btn btn-main" onclick="pc95SectionEdit()">إضافة قسم</button></div><div id="sectionsContainer"></div>`);drawSections();}
+function renderSettingsSections(){pcSettingsEnter();settingsShell("sections","إدارة الأقسام",`${pcSettingsBar("renderSettingsSections")}<div class="premium-toolbar pc95-bar"><input id="sectionSearch" placeholder="بحث عن قسم" oninput="drawSections()"><button class="btn btn-main" onclick="pc95SectionEdit()">إضافة قسم</button></div><div id="sectionsContainer"></div><div id="pc129Depts"></div>`);drawSections();pc129Draw();}
 
 
 function drawSections(){
@@ -6981,6 +6981,40 @@ async function pc94Edit(id){
   }catch(err){ console.error(err); showToast("تعذر حفظ الفرع","error"); }
 }
 
+/* Administrative departments (e.g. المستودع، الحسابات): an employee can belong to one, for HR and reports.
+   They are company-wide, not per branch, and have no section stores, chefs or item lists. */
+var PC_DEPTS_DEF = ["المستودع","الحسابات"];
+function pcDepts(){ const d = systemSettings && Array.isArray(systemSettings.depts) ? systemSettings.depts : PC_DEPTS_DEF; return d.map(x=>String(x||"").trim()).filter(Boolean); }
+function pc129Draw(){
+  const box = document.getElementById("pc129Depts"); if(!box) return;
+  const d = pcDepts();
+  const n = name=>pcHrEmps().filter(e=>String(e.section||"").trim()===name && pcHrActive(e)).length;
+  box.innerHTML = `<div class="pc129-card">
+    <div class="pc129-head"><div><b>الأقسام الإدارية</b><small>لكل الفروع · للموظفين وتقارير الحضور فقط (بدون مستودع خام/إنتاج أو شيفات)</small></div>
+      <button class="btn btn-light" onclick="pc129Add()"><i class="fa-solid fa-plus"></i> قسم إداري</button></div>
+    <div class="pc129-list">${d.map(x=>`<span><b>${escapeHtml(x)}</b><small>${n(x)} موظف</small><button type="button" data-n="${escapeHtml(x)}" onclick="pc129Del(this.dataset.n)" aria-label="حذف"><i class="fa-solid fa-xmark"></i></button></span>`).join("") || `<em>لا توجد أقسام إدارية</em>`}</div>
+  </div>`;
+}
+async function pc129Save(list){
+  const {db,doc,setDoc} = window.firebaseDB;
+  try{ await setDoc(doc(db,"settings","system"), {depts:list}, {merge:true}); systemSettings.depts = list; pc129Draw(); return true; }
+  catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); return false; }
+}
+async function pc129Add(){
+  const v = await pcSheet({title:"قسم إداري جديد", icon:"fa-sitemap", body:`<label class="pc94-lb">اسم القسم</label><input id="pc129N" class="pc93-name" maxlength="30" placeholder="مثال: المشتريات">`,
+    actions:[{label:"إضافة", kind:"btn-main", value:h=>h.querySelector("#pc129N").value.trim()},{label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  const d = pcDepts();
+  if(d.includes(v)){ showToast("القسم موجود","error"); return; }
+  if((pcRaw.chefSections||chefSections||[]).some(x=>String(x.name||"").trim()===v)){ showToast("يوجد قسم مطبخ بنفس الاسم","error"); return; }
+  if(await pc129Save([...d, v])) showToast(`تمت إضافة قسم ${v}`);
+}
+async function pc129Del(name){
+  const n = pcHrEmps().filter(e=>String(e.section||"").trim()===name && pcHrActive(e)).length;
+  if(!(await pcConfirm(`حذف القسم الإداري «${name}»؟${n ? ` عليه ${n} موظف — يبقى اسم القسم في ملفاتهم حتى تغيّره.` : ""}`,{title:"حذف قسم إداري", okText:"حذف", danger:true}))) return;
+  if(await pc129Save(pcDepts().filter(x=>x!==name))) showToast("تم الحذف");
+}
+
 function pcSectionInBranch(s,branchId){ return pcBranchOf(s) === branchId; }
 function pc95SectionBranches(s){
   const n = (chefs||[]).filter(c=>c.section===s.name && pcBranchOf(c)===pcBranchOf(s)).length;
@@ -8422,6 +8456,7 @@ async function pcHrEditEmployee(id, preset){
   if(v.extra.error){ showToast(v.extra.error,"error"); return; }
   const isChef = v.role === "شيف";
   if(isChef && !v.section){ showToast("اختر قسم الشيف","error"); return; }
+  if(isChef && pcDepts().includes(v.section) && !pcChefSecNames(v.branchId).includes(v.section)){ showToast("الشيف يحتاج قسم مطبخ وليس قسمًا إداريًا","error"); return; }
   if(v.pin && !/^\d{4,8}$/.test(v.pin)){ showToast("الرقم السري من 4 إلى 8 أرقام","error"); return; }
   if(v.pin && id && (e.isAdmin || pcPermsOf(e).length) && !pcPermEditor()){ showToast("تغيير الرقم السري لموظف له صلاحيات من مدير النظام فقط","error"); return; }
   if(v.pin && !v.extra.data.odooEmployeeId){ showToast("سجّل الرقم الوظيفي أولًا — الموظف يدخل به مع الرقم السري","error"); return; }
@@ -8457,7 +8492,8 @@ function pcHrRoleChanged(){
   if(!sel) return;
   const names = pcChefSecNames(b);
   const keep = sel.value || sel.dataset.cur || "";
-  sel.innerHTML = `${role==="شيف" ? "" : `<option value="">بدون قسم</option>`}${names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("")}`;
+  const depts = role === "شيف" ? [] : pcDepts().filter(d=>!names.includes(d));
+  sel.innerHTML = `${role==="شيف" ? "" : `<option value="">بدون قسم</option>`}<optgroup label="أقسام المطبخ — ${escapeHtml(pcBranchName(b))}">${names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("")}</optgroup>${depts.length ? `<optgroup label="أقسام إدارية">${depts.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("")}</optgroup>` : ""}`;
   if([...sel.options].some(o=>o.value===keep)) sel.value = keep;
   if(wrap) wrap.querySelector("label").textContent = role === "شيف" ? "القسم (مطلوب للشيف)" : "القسم (اختياري)";
 }
@@ -9905,8 +9941,9 @@ function pcEmpHome(){
     ${pc60Bar({title:e.section || e.role || "حسابي", sub:`${e.name} · ${pcBranchName(currentBranch)}`, back:multi ? "pcEmpOwnView=false;pcEmpHome()" : "pcEmpHome()",
       trailing:`<button type="button" class="pc60-back" onclick="pcEmpLogout()" aria-label="تسجيل الخروج"><i class="fa-solid fa-right-from-bracket"></i></button>`})}
     <section class="pc60-page has-bar pc100-page"><div id="pcStoreBox"></div></section>`, "pcEmpHome()");
-  if(e.section) pcDrawStore();
-  else document.getElementById("pcStoreBox").innerHTML = pcEmpTopHtml(e) + `<p class="pc85-hint">لا يوجد قسم مرتبط بحسابك. راجع المسؤول لربطك بقسم.</p>`;
+  const isDept = e.section && pcDepts().includes(String(e.section).trim()) && !pcChefSecNames(currentBranch).includes(String(e.section).trim());
+  if(e.section && !isDept) pcDrawStore();
+  else document.getElementById("pcStoreBox").innerHTML = pcEmpTopHtml(e) + (isDept ? "" : `<p class="pc85-hint">لا يوجد قسم مرتبط بحسابك. راجع المسؤول لربطك بقسم.</p>`);
 }
 function pcEmpChef(e){ return pcHrList("chefs", chefs).find(c=>!c.inactive && (c.id===e.chefId || c.employeeId===e.id)) || null; }
 function pcEmpTopHtml(e){

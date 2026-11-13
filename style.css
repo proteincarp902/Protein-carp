@@ -4995,3 +4995,13 @@ div.pc112-line{cursor:default}
 .pc128-bal{color:var(--app-ink)}
 .pc128-bal.neg{color:var(--app-danger)}
 .pc127-row>.pc70-cart-x{grid-row:auto;grid-column:auto}
+
+/* pc129 — administrative departments */
+.pc129-card{margin-top:16px;border:1px solid var(--app-line);border-radius:16px;background:var(--app-surface);padding:14px;display:grid;gap:12px}
+.pc129-head{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}
+.pc129-head b{display:block;font-size:15px}
+.pc129-head small{color:var(--app-muted);font-size:12px}
+.pc129-list{display:flex;flex-wrap:wrap;gap:8px}
+.pc129-list span{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--app-line);border-radius:12px;padding:8px 10px;background:var(--app-bg)}
+.pc129-list small{color:var(--app-muted);font-size:11.5px}
+.pc129-list button{border:0;background:transparent;color:var(--app-danger);cursor:pointer;padding:2px 4px}
