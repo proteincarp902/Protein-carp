@@ -8838,7 +8838,7 @@ function renderSettingsHrLeaves(){
   if(pcHrLeaveFilter === "معلقة") pcHrLeaveFilter = PC_RQ.hr;
   pcHrShell("hrLeave", `
     <div class="pc103-attbar">
-      <div class="pc60-chips">${[PC_RQ.hr, PC_RQ.mgr, PC_RQ.ok, PC_RQ.no, "الكل"].map(f=>{ const n = f===PC_RQ.hr||f===PC_RQ.mgr ? pcRqHrList(f).length : 0; return `<button type="button" class="pc60-fchip ${pcHrLeaveFilter===f?"active":""}" onclick="pcHrLeaveFilter='${f}';renderSettingsHrLeaves()">${f}${n?` (${n})`:""}</button>`; }).join("")}</div>
+      <div class="pc60-chips">${[PC_RQ.hr, PC_RQ.mgr, PC_RQ.emp, PC_RQ.ok, PC_RQ.no, "الكل"].map(f=>{ const n = f===PC_RQ.hr||f===PC_RQ.mgr||f===PC_RQ.emp ? pcRqHrList(f).length : 0; return `<button type="button" class="pc60-fchip ${pcHrLeaveFilter===f?"active":""}" onclick="pcHrLeaveFilter='${f}';renderSettingsHrLeaves()">${f}${n?` (${n})`:""}</button>`; }).join("")}</div>
       <button class="btn btn-main" onclick="pcHrAddLeave()">طلب جديد لموظف</button>
     </div>
     <p class="pc85-hint">الإجازة والاستئذان وتبرير التأخير: يوافق المدير المباشر أولًا ثم تعتمدها الموارد البشرية. الموظف بدون مدير مباشر يذهب طلبه للموارد البشرية مباشرة.</p>
@@ -8855,6 +8855,7 @@ function pcRqHrList(f){
 function pcHrDrawLeaves(){
   const box = document.getElementById("pcHrLeaveBox"), bal = document.getElementById("pcHrBalBox");
   if(!box) return;
+  pcPenFinalizeDue();
   const list = pcRqHrList(pcHrLeaveFilter);
   box.innerHTML = list.length ? `<div class="pc125-list">${list.map(l=>pcRqCard(l, pcRqStatus(l)===PC_RQ.hr
       ? `<button class="mini-btn" data-id="${escapeHtml(l.id)}" onclick="pcHrDecideLeave(this.dataset.id,'معتمدة')">اعتماد</button><button class="mini-danger" data-id="${escapeHtml(l.id)}" onclick="pcHrDecideLeave(this.dataset.id,'مرفوضة')">رفض</button>` : "", true)).join("")}</div>`
@@ -8877,7 +8878,7 @@ async function pcHrAddLeave(){
 async function pcHrDecideLeave(id, status){
   const l = pcHrList("hrLeaves", hrLeaves).find(x=>x.id===id);
   if(!l) return;
-  if(pcRqStatus(l) !== PC_RQ.hr){ showToast("الطلب ليس في مرحلة الموارد البشرية","error"); return; }
+  if(pcRqStatus(l) !== PC_RQ.hr){ showToast(l.status === PC_RQ.emp ? "الجزاء بانتظار رد الموظف — لا يُعتمد قبل الرد أو انتهاء المهلة" : "الطلب ليس في مرحلة الموارد البشرية","error"); return; }
   const ok = status === "معتمدة";
   const me = pcEmpCurrent();
   const v = await pcSheet({title:ok?"اعتماد الطلب":"رفض الطلب", icon:"fa-signature", body:`
@@ -8898,11 +8899,25 @@ async function pcHrDecideLeave(id, status){
  * Flow: employee (or HR on their behalf) submits → direct manager approves → HR approves.
  * No direct manager → straight to HR. Stored in hr_leaves with kind: leave | perm | late.
  * Old records with status "معلقة" are read as waiting for HR. */
-var PC_RQ = {mgr:"بانتظار المدير", hr:"بانتظار الموارد البشرية", ok:"معتمدة", no:"مرفوضة"};
+var PC_RQ = {mgr:"بانتظار المدير", emp:"بانتظار رد الموظف", hr:"بانتظار الموارد البشرية", ok:"معتمدة", no:"مرفوضة"};
 var PC_RQ_KINDS = {leave:["إجازة","fa-plane-departure"], perm:["استئذان","fa-door-open"], late:["تبرير تأخير","fa-clock"], pen:["جزاء","fa-gavel"]};
 var pcRqView = null;
 function pcRqKind(l){ return l && l.kind && PC_RQ_KINDS[l.kind] ? l.kind : "leave"; }
-function pcRqStatus(l){ return !l ? "" : (l.status === "معلقة" ? PC_RQ.hr : (l.status || PC_RQ.hr)); }
+function pcRqStatus(l){
+  if(!l) return "";
+  if(l.status === PC_RQ.emp && pcPenExpired(l)) return PC_RQ.ok;   /* no reply within one working day: the penalty stands */
+  return l.status === "معلقة" ? PC_RQ.hr : (l.status || PC_RQ.hr);
+}
+function pcPenExpired(l){ return pcRqKind(l) === "pen" && Number(l.replyDueMs||0) > 0 && Date.now() > Number(l.replyDueMs); }
+/* Reply deadline: the same clock time on the employee's next working day (one working day). */
+function pcPenDue(e, ms){
+  let d = pcHrDayKey(ms);
+  for(let i = 0; i < 14; i++){ d = pcHrAddDays(d, 1); if(pcHrWorkday(e, d) && !pcHrLeaveOn(e.id, d)) break; }
+  const t = new Date(ms), base = new Date(pcHrDayStart(d));
+  base.setHours(t.getHours(), t.getMinutes(), 0, 0);
+  return base.getTime();
+}
+function pcDueText(ms){ return new Date(ms).toLocaleString("ar-SA",{weekday:"short", day:"numeric", month:"short", hour:"numeric", minute:"2-digit"}); }
 function pcHrManagerOf(e){ const m = e && e.managerId ? pcHrEmp(e.managerId) : null; return m && m.id !== e.id && pcHrActive(m) ? m : null; }
 function pcHrReports(mgrId){ return pcHrEmps().filter(x=>x.managerId===mgrId && x.id!==mgrId); }
 function pcRqApprovedOn(empId, day){
@@ -8929,9 +8944,15 @@ function pcRqCard(l, actions, showName){
   const k = pcRqKind(l), st = pcRqStatus(l);
   const mgr = l.managerName || (l.managerId ? pcHrEmp(l.managerId)?.name : "");
   const steps = [];
-  if(k === "pen") steps.push(`صادر من المدير: ${escapeHtml(l.managerName||l.createdBy||"")}`);
+  if(k === "pen"){
+    steps.push(`صادر من المدير: ${escapeHtml(l.managerName||l.createdBy||"")}`);
+    if(l.empReply) steps.push(`رد الموظف: ${pcNoteHtml(l.empReply)}`);
+    else if(l.status === PC_RQ.emp && !pcPenExpired(l)) steps.push(`مهلة رد الموظف حتى ${escapeHtml(pcDueText(l.replyDueMs))}`);
+    else if(l.autoFinal || pcPenExpired(l)) steps.push("لم يرد الموظف خلال يوم عمل — الجزاء نافذ");
+  }
   else if(l.managerId) steps.push(l.mgrBy ? `المدير: ${l.mgrDecision==="رفض"?"رفض":"موافقة"} — ${escapeHtml(l.mgrBy)}${l.mgrNote?` (${pcNoteHtml(l.mgrNote)})`:""}` : `المدير: ${escapeHtml(mgr||"")} — لم يرد بعد`);
-  if(st===PC_RQ.ok || (st===PC_RQ.no && l.decidedBy)) steps.push(`الموارد البشرية: ${st===PC_RQ.ok?"اعتماد":"رفض"} — ${escapeHtml(l.decidedBy||"")}${l.hrNote?` (${pcNoteHtml(l.hrNote)})`:""}`);
+  if(k === "pen" && (l.autoFinal || (l.status === PC_RQ.emp && pcPenExpired(l)))){ /* final without HR */ }
+  else if(st===PC_RQ.ok || (st===PC_RQ.no && l.decidedBy)) steps.push(`الموارد البشرية: ${st===PC_RQ.ok?"اعتماد":"رفض"} — ${escapeHtml(l.decidedBy||"")}${l.hrNote?` (${pcNoteHtml(l.hrNote)})`:""}`);
   else if(st===PC_RQ.hr) steps.push("الموارد البشرية: لم ترد بعد");
   return `<div class="pc125-card">
     <span class="pc125-ic"><i class="fa-solid ${PC_RQ_KINDS[k][1]}"></i></span>
@@ -9030,8 +9051,8 @@ async function pcPenNew(empId){
     <label class="pc94-lb">المخالفة</label><select id="penViol" class="pc93-name">${PC_PEN_VIOL.map(x=>`<option>${x}</option>`).join("")}</select>
     <label class="pc94-lb">التفاصيل</label><input id="penNote" class="pc93-name" maxlength="200" placeholder="ماذا حدث بالتحديد">
     ${prev ? `<p class="pc85-hint">للموظف ${prev} جزاء سابق مسجل.</p>` : ""}
-    <p class="pc125-route"><i class="fa-solid fa-route"></i> يذهب للموارد البشرية للاعتماد، ولا يُخصم شيء قبل الاعتماد. يظهر للموظف في صفحته.</p>`,
-    actions:[{label:"إرسال للموارد البشرية", kind:"btn-danger", value:h=>({t:(h.querySelector("input[name=penT]:checked")||{}).value||"days", val:h.querySelector("#penVal").value, day:h.querySelector("#penDay").value, viol:h.querySelector("#penViol").value, note:h.querySelector("#penNote").value.trim()}),
+    <p class="pc125-route"><i class="fa-solid fa-route"></i> يظهر للموظف للرد خلال يوم عمل واحد (حتى ${escapeHtml(pcDueText(pcPenDue(e, Date.now())))}). إن ردّ يذهب الجزاء مع الرد للموارد البشرية لتقرر، وإن لم يرد خلال المهلة يصبح الجزاء نافذًا ولا يُقبل الرد بعدها.</p>`,
+    actions:[{label:"توقيع الجزاء", kind:"btn-danger", value:h=>({t:(h.querySelector("input[name=penT]:checked")||{}).value||"days", val:h.querySelector("#penVal").value, day:h.querySelector("#penDay").value, viol:h.querySelector("#penViol").value, note:h.querySelector("#penNote").value.trim()}),
       check:h=>{ const t = (h.querySelector("input[name=penT]:checked")||{}).value; const q = Number(String(h.querySelector("#penVal").value).replace(",", "."));
         if(t !== "warn" && !(q > 0)) return t === "amount" ? "اكتب المبلغ" : "اكتب عدد الأيام";
         if(t === "days" && q > 5) return "الخصم بالأيام أكبر من 5 أيام — راجع لائحة الجزاءات";
@@ -9045,15 +9066,46 @@ async function pcPenNew(empId){
   const {db,addDoc,collection} = window.firebaseDB;
   try{
     await addDoc(collection(db,"hr_leaves"), {kind:"pen", employeeId:e.id, name:e.name, branchId:pcBranchOf(e), managerId:me.id, managerName:me.name,
-      penType:v.t, value:val, day:v.day, violation:v.viol, note:v.note, status:PC_RQ.hr, createdAtMs:Date.now(), createdBy:me.name});
-    showToast("تم إرسال الجزاء للموارد البشرية للاعتماد");
+      penType:v.t, value:val, day:v.day, violation:v.viol, note:v.note, status:PC_RQ.emp, replyDueMs:pcPenDue(e, Date.now()), createdAtMs:Date.now(), createdBy:me.name});
+    showToast("تم توقيع الجزاء — بانتظار رد الموظف خلال يوم عمل");
   }catch(err){ console.error(err); showToast("تعذر الحفظ","error"); }
 }
+/* Penalties whose reply window ended without a reply are written as final (once, by whoever opens HR). */
+var pcPenFinBusy = false;
+async function pcPenFinalizeDue(){
+  if(pcPenFinBusy) return;
+  const due = pcHrList("hrLeaves", hrLeaves).filter(l=>l.status === PC_RQ.emp && pcPenExpired(l));
+  if(!due.length) return;
+  pcPenFinBusy = true;
+  try{
+    const {db,doc,updateDoc} = window.firebaseDB;
+    for(const l of due) await updateDoc(doc(db,"hr_leaves",l.id), {status:PC_RQ.ok, autoFinal:true, decidedBy:"تلقائي — انتهت مهلة رد الموظف", decidedAtMs:Number(l.replyDueMs)});
+  }catch(err){ console.warn("penalty finalize", err); }
+  pcPenFinBusy = false;
+}
+/* Employee replies to a penalty within the window; it then goes to HR with the reply. */
+async function pcPenReply(id){
+  const l = pcHrList("hrLeaves", hrLeaves).find(x=>x.id===id), me = pcEmpCurrent();
+  if(!l || !me || l.employeeId !== me.id) return;
+  if(l.status !== PC_RQ.emp || pcPenExpired(l)){ showToast("انتهت مهلة الرد — الجزاء نافذ ولا يُقبل الرد","error"); pcRqDraw(); return; }
+  const v = await pcSheet({title:"الرد على الجزاء", icon:"fa-reply", body:`
+    ${pcRqCard(l, "", false)}
+    <label class="pc94-lb">ردك وأقوالك</label><textarea id="penReply" class="pc93-name" rows="4" maxlength="600" placeholder="اكتب ما حدث من وجهة نظرك"></textarea>
+    <p class="pc85-hint">آخر موعد للرد: ${escapeHtml(pcDueText(l.replyDueMs))}. يُرسل ردك مع الجزاء للموارد البشرية لتقرر.</p>`,
+    actions:[{label:"إرسال الرد", kind:"btn-main", value:h=>h.querySelector("#penReply").value.trim(), check:h=>h.querySelector("#penReply").value.trim() ? "" : "اكتب ردك"},{label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  const cur = pcHrList("hrLeaves", hrLeaves).find(x=>x.id===id);
+  if(!cur || cur.status !== PC_RQ.emp || pcPenExpired(cur)){ showToast("انتهت مهلة الرد — الجزاء نافذ ولا يُقبل الرد","error"); return; }
+  const {db,doc,updateDoc} = window.firebaseDB;
+  try{ await updateDoc(doc(db,"hr_leaves",id), {status:PC_RQ.hr, empReply:v, empReplyAtMs:Date.now()}); showToast("تم إرسال ردك للموارد البشرية"); }
+  catch(err){ console.error(err); showToast("تعذر الإرسال","error"); }
+}
+
 /* Approved penalties in a period (for payroll). */
 function pcPenSum(empId, from, to){
   const o = {days:0, amount:0, warns:0, n:0};
   pcHrList("hrLeaves", hrLeaves).forEach(l=>{
-    if(pcRqKind(l)!=="pen" || l.employeeId!==empId || l.status!=="معتمدة" || !(l.day >= from && l.day <= to)) return;
+    if(pcRqKind(l)!=="pen" || l.employeeId!==empId || pcRqStatus(l)!==PC_RQ.ok || !(l.day >= from && l.day <= to)) return;
     o.n++; if(l.penType==="amount") o.amount += Number(l.value||0); else if(l.penType==="warn") o.warns++; else o.days += Number(l.value||0);
   });
   o.days = pc70R(o.days); o.amount = pc70R(o.amount);
@@ -9090,9 +9142,10 @@ async function pcRqMgrDecide(id, ok){
 function pcRqMineList(e){ return pcHrList("hrLeaves", hrLeaves).filter(l=>l.employeeId===e.id).sort((a,b)=>(b.createdAtMs||0)-(a.createdAtMs||0)); }
 function pcRqTeamList(e){ return pcHrList("hrLeaves", hrLeaves).filter(l=>l.managerId===e.id).sort((a,b)=>(b.createdAtMs||0)-(a.createdAtMs||0)); }
 function pcRqBarHtml(e){
-  const minePend = pcRqMineList(e).filter(l=>{ const s = pcRqStatus(l); return s===PC_RQ.mgr || s===PC_RQ.hr; }).length;
+  const minePend = pcRqMineList(e).filter(l=>{ const s = pcRqStatus(l); return s===PC_RQ.mgr || s===PC_RQ.hr || s===PC_RQ.emp; }).length;
+  const penWait = pcRqMineList(e).filter(l=>pcRqKind(l)==="pen" && l.status===PC_RQ.emp && !pcPenExpired(l));
   const team = pcHrReports(e.id).length, teamPend = pcRqTeamList(e).filter(l=>pcRqStatus(l)===PC_RQ.mgr).length;
-  return `<div class="pc125-bar">
+  return `${penWait.length ? `<button type="button" class="pc130-alert" onclick="pcRqOpen('mine')"><i class="fa-solid fa-gavel"></i><span><b>عليك ${penWait.length===1?"جزاء":penWait.length+" جزاءات"} بانتظار ردك</b><small>آخر موعد ${escapeHtml(pcDueText(penWait[0].replyDueMs))} — بعده يصبح نافذًا</small></span></button>` : ""}<div class="pc125-bar">
     <button type="button" onclick="pcRqOpen('mine')"><i class="fa-solid fa-paper-plane"></i><span>إجازة / استئذان</span>${minePend?`<em class="pc60-badge">${minePend}</em>`:""}</button>
     ${team || teamPend ? `<button type="button" onclick="pcRqOpen('team')"><i class="fa-solid fa-people-group"></i><span>فريقي: الطلبات والجزاءات</span>${teamPend?`<em class="pc60-badge hot">${teamPend}</em>`:""}</button>` : ""}
   </div>`;
@@ -9122,7 +9175,7 @@ function pcRqDraw(){
   const list = pcRqMineList(e);
   box.innerHTML = `
     <button type="button" class="btn btn-main pc125-new" data-id="${escapeHtml(e.id)}" onclick="pcRqNew(this.dataset.id)"><i class="fa-solid fa-plus"></i> طلب إجازة / استئذان / تبرير تأخير</button>
-    ${list.length ? `<div class="pc125-list">${list.map(l=>pcRqCard(l, "", false)).join("")}</div>` : pc60Empty("fa-inbox","لم ترسل أي طلب بعد")}`;
+    ${list.length ? `<div class="pc125-list">${list.map(l=>pcRqCard(l, (pcRqKind(l)==="pen" && l.status===PC_RQ.emp && !pcPenExpired(l)) ? `<button class="btn btn-main" data-id="${escapeHtml(l.id)}" onclick="pcPenReply(this.dataset.id)"><i class="fa-solid fa-reply"></i> الرد على الجزاء</button>` : "", false)).join("")}</div>` : pc60Empty("fa-inbox","لم ترسل أي طلب بعد")}`;
 }
 
 /* ----- Documents & expiry alerts ----- */

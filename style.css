@@ -5012,3 +5012,7 @@ div.pc112-line{cursor:default}
 .pc130-team span{display:grid;min-width:0}
 .pc130-team small{color:var(--app-muted);font-size:12px}
 .pc130-pen{color:var(--app-danger)!important;white-space:nowrap}
+.pc130-alert{display:flex;align-items:center;gap:12px;width:100%;margin-top:10px;border:1px solid #E9B4AE;background:var(--app-danger-tint);color:var(--app-danger);border-radius:14px;padding:12px;font:inherit;text-align:start;cursor:pointer}
+.pc130-alert i{font-size:20px}
+.pc130-alert span{display:grid}
+.pc130-alert small{color:#8a2f28;font-size:12px}
