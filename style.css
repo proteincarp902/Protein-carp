@@ -4899,3 +4899,29 @@ div.pc112-line{cursor:default}
 .pc123-emp .premium-table-wrap{margin:0;border-radius:0}
 .pc124-ot{color:#1D4ED8;font-weight:800}
 .pc124-sh{color:#B42318;font-weight:800}
+
+/* pc125 — requests: leave / permission / late justification with manager → HR approval */
+.pc125-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+.pc125-bar button{position:relative;display:flex;align-items:center;gap:8px;border:1px solid var(--app-line);background:var(--app-surface);border-radius:14px;padding:11px 12px;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;color:var(--app-ink);text-align:start}
+.pc125-bar button i{color:var(--app-brand);font-size:17px;width:22px;text-align:center}
+.pc125-bar .pc60-badge{position:static;margin-inline-start:auto}
+.pc125-list{display:grid;gap:10px}
+.pc125-card{display:flex;gap:12px;align-items:flex-start;background:var(--app-surface);border:1px solid var(--app-line);border-radius:16px;padding:12px}
+.pc125-ic{flex:none;width:38px;height:38px;border-radius:12px;background:var(--app-tint);color:var(--app-brand-dark);display:flex;align-items:center;justify-content:center;font-size:16px}
+.pc125-body{flex:1;min-width:0;display:grid;gap:4px}
+.pc125-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.pc125-top b{font-size:14.5px}
+.pc125-body>small{color:var(--app-muted);font-size:12.5px}
+.pc125-body>p{margin:2px 0;font-size:13.5px}
+.pc125-steps{margin:4px 0 0;padding:0 16px 0 0;font-size:12px;color:var(--app-muted);display:grid;gap:2px}
+.pc125-body .pc103-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.pc125-body .pc103-acts .btn{flex:1;min-width:110px;padding:9px 12px}
+.pc125-no{color:var(--app-danger)!important}
+.pc125-new{width:100%;margin-bottom:12px}
+.pc125-kinds{display:grid!important;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
+.pc125-kinds label{display:block;cursor:pointer}
+.pc125-kinds input{position:absolute;opacity:0;pointer-events:none}
+.pc125-kinds span{display:block;text-align:center;padding:9px 6px;border-radius:10px;border:1px solid var(--app-line);font-weight:800;font-size:13px;background:var(--app-surface)}
+.pc125-kinds input:checked+span{background:var(--app-brand-dark);color:#fff;border-color:var(--app-brand-dark)}
+.pc125-route{margin:10px 0 0;padding:9px 12px;border-radius:12px;background:var(--app-tint);color:var(--app-brand-dark);font-size:12.5px}
+.pc125-ex{color:#1D4ED8;font-weight:700}

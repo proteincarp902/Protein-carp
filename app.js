@@ -391,6 +391,7 @@ function pcBaseRefreshViews(){
   if(document.getElementById("pcHrEmpBox") && document.activeElement?.id !== "pcHrSearch") pcHrDrawEmployees();
   { const hb = document.getElementById("pcHrAttBox"); if(hb){ if(document.getElementById("pcHrScopeBox")) hb.innerHTML = pcHrBodyHtml(); else pcHrDrawAttendance(); } }
   if(document.getElementById("pcHrLeaveBox")) pcHrDrawLeaves();
+  if(document.getElementById("pcRqBox") && !document.getElementById("pcSheetHost")?.children.length) pcRqDraw();
   if(document.getElementById("pcHrDocBox") && document.activeElement?.id !== "pcHrDocSearch") pcHrDrawDocs();
   if(document.getElementById("pcHrKioskBox")) pcHrDrawKiosk();
   if(document.getElementById("pcAccBox") && typeof pcAccDraw === "function") pcAccDraw();
@@ -6552,7 +6553,7 @@ var PC84_GROUPS = [
     {key:"sys",   ico:"fa-shield-halved", color:"#8E8E93", name:"النظام",        sub:"كلمات المرور، حول البرنامج",     tabs:["passwords","about"]}]}
 ];
 var PC84_TAB_NAMES = {branches:"الفروع", sections:"الأقسام", chefs:"الشيفات", internal:"الصرف الداخلي", cleaning:"النظافة", operations:"التشغيل",
-  secItems:"أصناف الأقسام", hrEmp:"الموظفون", hrAtt:"الحضور", hrLeave:"الإجازات", hrDocs:"المستندات",
+  secItems:"أصناف الأقسام", hrEmp:"الموظفون", hrAtt:"الحضور", hrLeave:"الطلبات والإجازات", hrDocs:"المستندات",
   warehouse:"المستودع", menu:"المنيو والإنتاج", excel:"Excel", home:"الرسالة والسلايدر", passwords:"كلمات المرور", about:"حول البرنامج"};
 
 function pc84GroupOf(tab){
@@ -7739,7 +7740,7 @@ var PC_HR_LEAVE_TYPES = ["سنوية","مرضية","اضطرارية","بدون 
 var PC_HR_DOC_TYPES = ["الشهادة الصحية","عقد العمل","رخصة القيادة","شهادة تدريب","أخرى"];
 var PC_HR_DAYS = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
 var pcHrRole = "الكل";
-var pcHrQ = "", pcHrDay = "", pcHrAttMode = "day", pcHrLeaveFilter = "معلقة";
+var pcHrQ = "", pcHrDay = "", pcHrAttMode = "day", pcHrLeaveFilter = "بانتظار الموارد البشرية";
 
 function pcHrList(key, fallback){ const r = pcRaw && pcRaw[key]; return Array.isArray(r) ? r : (fallback || []); }
 function pcHrEmps(){ return pcHrList("hrEmployees", hrEmployees); }
@@ -7770,7 +7771,7 @@ function pcHrWorkday(e, dayKey){
   return days.includes(new Date(pcHrDayStart(dayKey)).getDay());
 }
 function pcHrLeaveOn(empId, dayKey){
-  return pcHrList("hrLeaves", hrLeaves).find(l=>l.employeeId===empId && l.status==="معتمدة" && l.from <= dayKey && l.to >= dayKey) || null;
+  return pcHrList("hrLeaves", hrLeaves).find(l=>pcRqKind(l)==="leave" && l.employeeId===empId && l.status==="معتمدة" && l.from <= dayKey && l.to >= dayKey) || null;
 }
 function pcHrRecords(empId, dayKey){
   return pcHrList("hrAttendance", hrAttendance).filter(a=>a.employeeId===empId && a.day===dayKey && !a.voided).sort((a,b)=>a.inMs-b.inMs);
@@ -7786,7 +7787,8 @@ function pcHrDayResult(e, dayKey){
   const sh = pcHrShift(e, dayKey);
   const leave = pcHrLeaveOn(e.id, dayKey);
   const now = Date.now();
-  const r = {recs, sh, leave, inMs:recs[0]?.inMs || 0, outMs:0, late:0, early:0, over:0, short:0, plan:0, worked:0, status:"", tone:""};
+  const ex = pcRqApprovedOn(e.id, dayKey);
+  const r = {recs, sh, leave, inMs:recs[0]?.inMs || 0, outMs:0, late:0, early:0, over:0, short:0, plan:0, worked:0, excused:0, lateOk:ex.lateOk, status:"", tone:""};
   const last = recs[recs.length-1];
   r.outMs = last && last.outMs ? last.outMs : 0;
   recs.forEach(a=>{ r.worked += ((a.outMs || (a.day===pcHrToday() ? now : a.inMs)) - a.inMs)/60000; });
@@ -7800,12 +7802,14 @@ function pcHrDayResult(e, dayKey){
       r.plan = pcHrWorkday(e, dayKey) ? (sh.end - sh.start)/60000 : 0;
       const diff = Math.round(r.worked) - Math.round(r.plan);
       r.over = Math.max(0, diff); r.short = Math.max(0, -diff);
+      /* approved permission / late justification for that day cover a shortfall (never add overtime) */
+      r.excused = Math.min(r.short, ex.min); r.short -= r.excused;
     }
     const open = last && !last.outMs;
     r.status = open ? (dayKey===pcHrToday() ? "حاضر الآن" : "لم يسجل انصراف") : "حاضر";
-    r.tone = open && dayKey!==pcHrToday() ? "warn" : (r.late >= 1 ? "warn" : "ok");
-    if(r.late >= 1 && !open) r.status = "متأخر";
-    else if(r.late >= 1) r.status = "حاضر — متأخر";
+    r.tone = open && dayKey!==pcHrToday() ? "warn" : (r.late >= 1 && !r.lateOk ? "warn" : "ok");
+    if(r.late >= 1 && !open) r.status = r.lateOk ? "متأخر (مبرر)" : "متأخر";
+    else if(r.late >= 1) r.status = r.lateOk ? "حاضر — تأخير مبرر" : "حاضر — متأخر";
     return r;
   }
   if(leave){ r.status = `إجازة ${leave.type}`; r.tone = "info"; return r; }
@@ -7904,6 +7908,9 @@ async function pcHrEditEmployee(id, preset){
     <label class="pc94-lb">الفرع</label>
     <select id="hrBranch" class="pc93-name" onchange="pcHrRoleChanged()">${pcActiveBranches().map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===curB?"selected":""}>${escapeHtml(b.name||"")}</option>`).join("")}</select>
     <div id="hrSecWrap"><label class="pc94-lb">القسم</label><select id="hrSection" class="pc93-name" data-cur="${escapeHtml(e.section||"")}"></select></div>
+    <label class="pc94-lb">المدير المباشر <small>— يوافق أولًا على الإجازة والاستئذان وتبرير التأخير ثم تذهب للموارد البشرية</small></label>
+    <select id="hrManager" class="pc93-name"><option value="">بدون — الطلبات تذهب للموارد البشرية مباشرة</option>
+      ${pcHrEmps().filter(x=>x.id!==id && pcHrActive(x)).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ar")).map(x=>`<option value="${escapeHtml(x.id)}" ${x.id===e.managerId?"selected":""}>${escapeHtml(x.name)}${x.role?` — ${escapeHtml(x.role)}`:""} · ${escapeHtml(pcBranchName(pcBranchOf(x)))}</option>`).join("")}</select>
     ${pcChefExtraFields("hr", e, true)}
     <label class="pc94-lb">أيام العمل</label>
     <div class="pc103-days">${PC_HR_DAYS.map((d,i)=>`<label><input type="checkbox" class="hrDay" value="${i}" ${days.includes(i)?"checked":""}><span>${d}</span></label>`).join("")}</div>
@@ -7921,6 +7928,7 @@ async function pcHrEditEmployee(id, preset){
         branchId:h.querySelector("#hrBranch").value, section:h.querySelector("#hrSection").value,
         hireDate:h.querySelector("#hrHire").value, annualLeaveDays:Number(h.querySelector("#hrAnnual").value||0),
         workDays:[...h.querySelectorAll(".hrDay:checked")].map(x=>Number(x.value)), pin:h.querySelector("#hrPin").value.trim(),
+        managerId:h.querySelector("#hrManager").value,
         extra:pcChefExtraRead("hr")})},
       ...(id && pcPermEditor() ? [{label:"الصلاحيات", kind:"btn-light", value:"perms"}] : []),
       ...(id ? [{label:"المستندات والإجازات", kind:"btn-light", value:"docs"}] : []),
@@ -7936,13 +7944,17 @@ async function pcHrEditEmployee(id, preset){
   if(v.pin && id && (e.isAdmin || pcPermsOf(e).length) && !pcPermEditor()){ showToast("تغيير الرقم السري لموظف له صلاحيات من مدير النظام فقط","error"); return; }
   if(v.pin && !v.extra.data.odooEmployeeId){ showToast("سجّل الرقم الوظيفي أولًا — الموظف يدخل به مع الرقم السري","error"); return; }
   if(!v.workDays.length){ showToast("اختر يوم عمل واحدًا على الأقل","error"); return; }
+  if(v.managerId && id){
+    let m = pcHrEmp(v.managerId), hops = 0;
+    while(m && hops++ < 20){ if(m.id === id){ showToast("لا يمكن: هذا الاختيار يجعل الموظف مديرًا لمديره","error"); return; } m = m.managerId ? pcHrEmp(m.managerId) : null; }
+  }
   if(e.isAdmin && !v.extra.data.odooEmployeeId){ showToast("مدير النظام يحتاج رقمًا وظيفيًا (اسم المستخدم)","error"); return; }
   if(e.isAdmin && v.status !== "نشط" && !pcHrEmps().some(x=>x.id!==id && x.isAdmin && pcHrActive(x))){ showToast("لا يمكن إيقاف آخر مدير نظام","error"); return; }
   if(v.extra.data.odooEmployeeId && pcHrEmps().some(x=>x.id!==id && String(x.odooEmployeeId||"")===v.extra.data.odooEmployeeId)){
     showToast("الرقم الوظيفي مستخدم لموظف آخر","error"); return;
   }
   const data = {name:v.name, role:v.role, status:v.status, branchId:v.branchId, section:isChef ? v.section : (v.section||""),
-    hireDate:v.hireDate, annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, ...v.extra.data, updatedAtMs:Date.now()};
+    hireDate:v.hireDate, annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, managerId:v.managerId||"", ...v.extra.data, updatedAtMs:Date.now()};
   try{
     const {db,addDoc,collection,doc,updateDoc} = window.firebaseDB;
     let empId = id;
@@ -8107,7 +8119,7 @@ function pcHrDayHtml(){
         <td>${pcHrClock(r.inMs)}${pcGeoTag(r.recs[0]?.inGeo)}</td><td>${pcHrClock(r.outMs)}${pcGeoTag(r.recs[r.recs.length-1]?.outGeo)}</td>
         <td>${r.recs.length ? `<b>${pcHrDur(r.worked)}</b>${r.plan ? `<br><small>من ${pcHrDur(r.plan)}</small>` : ""}` : "—"}</td>
         <td>${r.over>=1 ? `<b class="pc124-ot">${pcHrDur(r.over)}</b>` : "—"}</td>
-        <td>${r.short>=1 ? `<b class="pc124-sh">${pcHrDur(r.short)}</b>` : "—"}</td>
+        <td>${r.short>=1 ? `<b class="pc124-sh">${pcHrDur(r.short)}</b>` : "—"}${r.excused>=1 ? `<br><small class="pc125-ex">مستأذن ${pcHrDur(r.excused)}</small>` : ""}</td>
         <td>${r.late>=1 ? pcHrDur(r.late) : "—"}</td><td>${r.early>=1 ? pcHrDur(r.early) : "—"}</td>
         <td><em class="pc103-tag ${r.tone}">${escapeHtml(r.status)}</em>${r.recs.some(a=>a.editedBy)?` <em class="pc103-tag warn" title="سُجّل أو عُدّل يدويًا من الموارد البشرية">يدوي</em>`:""}</td>
         <td>${r.recs.length ? `<button class="mini-btn" data-id="${escapeHtml(r.recs[r.recs.length-1].id)}" onclick="pcHrFixAtt(this.dataset.id)">تصحيح</button>` : ""}</td>
@@ -8168,7 +8180,7 @@ function pcHrRangeHtml(){
       <span>حضور ${s.present} · تأخير ${Math.round(s.lateMin)}د · إضافي ${(s.overMin/60).toFixed(2)} س · نقص ${(s.shortMin/60).toFixed(2)} س · غياب ${s.absent} · ${(s.workedMin/60).toFixed(1)} ساعة</span></summary>
       <div class="premium-table-wrap"><table class="premium-table pc103-table"><thead><tr><th>اليوم</th><th>الدوام</th><th>الحضور</th><th>الانصراف</th><th>العمل الفعلي</th><th>إضافي</th><th>نقص</th><th>التأخير</th><th>خروج مبكر</th><th>الحالة</th></tr></thead><tbody>
       ${days.map(({d,r})=>`<tr><td>${pcHrDateText(d)}</td><td>${r.sh ? pcChefShiftText(s.e) : "—"}</td><td>${pcHrClock(r.inMs)}</td><td>${pcHrClock(r.outMs)}</td>
-        <td>${r.recs.length ? pcHrDur(r.worked) : "—"}</td><td>${r.over>=1 ? `<b class="pc124-ot">${pcHrDur(r.over)}</b>` : "—"}</td><td>${r.short>=1 ? `<b class="pc124-sh">${pcHrDur(r.short)}</b>` : "—"}</td>
+        <td>${r.recs.length ? pcHrDur(r.worked) : "—"}</td><td>${r.over>=1 ? `<b class="pc124-ot">${pcHrDur(r.over)}</b>` : "—"}</td><td>${r.short>=1 ? `<b class="pc124-sh">${pcHrDur(r.short)}</b>` : "—"}${r.excused>=1 ? `<br><small class="pc125-ex">مستأذن ${pcHrDur(r.excused)}</small>` : ""}</td>
         <td>${r.late>=1 ? pcHrDur(r.late) : "—"}</td><td>${r.early>=1 ? pcHrDur(r.early) : "—"}</td>
         <td><em class="pc103-tag ${r.tone}">${escapeHtml(r.status)}</em></td></tr>`).join("")}
       </tbody></table></div></details>`;
@@ -8202,7 +8214,7 @@ function pcHrExportDay(){
   const data = rows.map(({e,r})=>({"التاريخ":pcHrDay, "الموظف":e.name, "الرقم الوظيفي أودو":e.odooEmployeeId||"", "الوظيفة":e.role||"", "القسم":e.section||"", "الفرع":pcBranchName(pcBranchOf(e)),
     "الدوام":r.sh ? pcChefShiftText(e) : "", "الحضور":pcHrClockX(r.inMs), "الانصراف":pcHrClockX(r.outMs),
     "ساعات العمل":r.recs.length ? Number((r.worked/60).toFixed(2)) : 0, "الساعات الطبيعية":Number(((r.plan||0)/60).toFixed(2)),
-    "ساعات إضافية":Number(((r.over||0)/60).toFixed(2)), "ساعات نقص":Number(((r.short||0)/60).toFixed(2)),
+    "ساعات إضافية":Number(((r.over||0)/60).toFixed(2)), "ساعات نقص":Number(((r.short||0)/60).toFixed(2)), "استئذان معتمد (دقائق)":Math.round(r.excused||0),
     "دقائق التأخير":Math.round(r.late||0), "دقائق الخروج المبكر":Math.round(r.early||0), "الحالة":r.status}));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "الحضور");
@@ -8218,7 +8230,7 @@ function pcHrExportRange(){
     "الموظف":s.e.name, "الرقم الوظيفي أودو":s.e.odooEmployeeId||"", "القسم":s.e.section||"", "الفرع":pcBranchName(pcBranchOf(s.e)), "التاريخ":d,
     "الحضور":pcHrClockX(r.inMs), "الانصراف":pcHrClockX(r.outMs),
     "الدوام":r.sh ? pcChefShiftText(s.e) : "", "ساعات العمل":r.recs.length ? Number((r.worked/60).toFixed(2)) : 0, "الساعات الطبيعية":Number(((r.plan||0)/60).toFixed(2)),
-    "ساعات إضافية":Number(((r.over||0)/60).toFixed(2)), "ساعات نقص":Number(((r.short||0)/60).toFixed(2)),
+    "ساعات إضافية":Number(((r.over||0)/60).toFixed(2)), "ساعات نقص":Number(((r.short||0)/60).toFixed(2)), "استئذان معتمد (دقائق)":Math.round(r.excused||0),
     "دقائق التأخير":Math.round(r.late||0), "دقائق الخروج المبكر":Math.round(r.early||0), "الحالة":r.status})));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.map(pcHrSumRow)), "الملخص");
@@ -8285,32 +8297,34 @@ async function pcHrFixAtt(recId){
 
 /* ----- Leaves ----- */
 function pcHrLeaveUsed(empId, year){
-  return pcHrList("hrLeaves", hrLeaves).filter(l=>l.employeeId===empId && l.status==="معتمدة" && l.type==="سنوية" && String(l.from).startsWith(year))
+  return pcHrList("hrLeaves", hrLeaves).filter(l=>pcRqKind(l)==="leave" && l.employeeId===empId && l.status==="معتمدة" && l.type==="سنوية" && String(l.from).startsWith(year))
     .reduce((s,l)=>s + Number(l.days||0), 0);
 }
 function renderSettingsHrLeaves(){
+  if(pcHrLeaveFilter === "معلقة") pcHrLeaveFilter = PC_RQ.hr;
   pcHrShell("hrLeave", `
     <div class="pc103-attbar">
-      <div class="pc60-chips">${["معلقة","معتمدة","مرفوضة","الكل"].map(f=>`<button type="button" class="pc60-fchip ${pcHrLeaveFilter===f?"active":""}" onclick="pcHrLeaveFilter='${f}';renderSettingsHrLeaves()">${f}</button>`).join("")}</div>
-      <button class="btn btn-main" onclick="pcHrAddLeave()">طلب إجازة</button>
+      <div class="pc60-chips">${[PC_RQ.hr, PC_RQ.mgr, PC_RQ.ok, PC_RQ.no, "الكل"].map(f=>{ const n = f===PC_RQ.hr||f===PC_RQ.mgr ? pcRqHrList(f).length : 0; return `<button type="button" class="pc60-fchip ${pcHrLeaveFilter===f?"active":""}" onclick="pcHrLeaveFilter='${f}';renderSettingsHrLeaves()">${f}${n?` (${n})`:""}</button>`; }).join("")}</div>
+      <button class="btn btn-main" onclick="pcHrAddLeave()">طلب جديد لموظف</button>
     </div>
+    <p class="pc85-hint">الإجازة والاستئذان وتبرير التأخير: يوافق المدير المباشر أولًا ثم تعتمدها الموارد البشرية. الموظف بدون مدير مباشر يذهب طلبه للموارد البشرية مباشرة.</p>
     <div id="pcHrLeaveBox"></div>
     <h3 class="pc103-h">أرصدة الإجازة السنوية ${new Date().getFullYear()}</h3>
     <div id="pcHrBalBox"></div>`);
   pcHrDrawLeaves();
 }
+function pcRqHrList(f){
+  const emps = new Set(pcHrBranchEmps(settingsBranch).map(e=>e.id));
+  return pcHrList("hrLeaves", hrLeaves).filter(l=>emps.has(l.employeeId) && (f==="الكل" || pcRqStatus(l)===f))
+    .sort((a,b)=>(b.createdAtMs||0)-(a.createdAtMs||0) || String(b.from||b.day).localeCompare(String(a.from||a.day)));
+}
 function pcHrDrawLeaves(){
   const box = document.getElementById("pcHrLeaveBox"), bal = document.getElementById("pcHrBalBox");
   if(!box) return;
-  const emps = new Set(pcHrBranchEmps(settingsBranch).map(e=>e.id));
-  const list = pcHrList("hrLeaves", hrLeaves).filter(l=>emps.has(l.employeeId) && (pcHrLeaveFilter==="الكل" || l.status===pcHrLeaveFilter)).sort((a,b)=>String(b.from).localeCompare(String(a.from)));
-  box.innerHTML = list.length ? `<div class="pc103-emps">${list.map(l=>`
-    <div class="pc103-leave">
-      <div><b>${escapeHtml(l.name||"")}</b> · <span>${escapeHtml(l.type)}</span> · <span>${l.days} يوم</span>
-        <small>${pcHrDateText(l.from)} ← ${pcHrDateText(l.to)}${l.note?` · ${pcNoteHtml(l.note)}`:""}${l.decidedBy?` · ${escapeHtml(l.status)} بواسطة ${escapeHtml(l.decidedBy)}`:""}</small></div>
-      ${l.status==="معلقة" ? `<span class="pc103-acts"><button class="mini-btn" data-id="${escapeHtml(l.id)}" onclick="pcHrDecideLeave(this.dataset.id,'معتمدة')">اعتماد</button><button class="mini-danger" data-id="${escapeHtml(l.id)}" onclick="pcHrDecideLeave(this.dataset.id,'مرفوضة')">رفض</button></span>`
-        : `<em class="pc103-tag ${l.status==="معتمدة"?"ok":"muted"}">${escapeHtml(l.status)}</em>`}
-    </div>`).join("")}</div>` : `<div class="placeholder">لا توجد طلبات ${pcHrLeaveFilter==="الكل"?"":pcHrLeaveFilter}</div>`;
+  const list = pcRqHrList(pcHrLeaveFilter);
+  box.innerHTML = list.length ? `<div class="pc125-list">${list.map(l=>pcRqCard(l, pcRqStatus(l)===PC_RQ.hr
+      ? `<button class="mini-btn" data-id="${escapeHtml(l.id)}" onclick="pcHrDecideLeave(this.dataset.id,'معتمدة')">اعتماد</button><button class="mini-danger" data-id="${escapeHtml(l.id)}" onclick="pcHrDecideLeave(this.dataset.id,'مرفوضة')">رفض</button>` : "", true)).join("")}</div>`
+    : `<div class="placeholder">لا توجد طلبات ${pcHrLeaveFilter==="الكل"?"":pcHrLeaveFilter}</div>`;
   if(bal){
     const y = String(new Date().getFullYear());
     const rows = pcHrBranchEmps(settingsBranch).filter(pcHrActive);
@@ -8322,40 +8336,211 @@ function pcHrDrawLeaves(){
 async function pcHrAddLeave(){
   const emps = pcHrBranchEmps(settingsBranch).filter(pcHrActive);
   if(!emps.length){ showToast("لا يوجد موظفون نشطون في هذا الفرع","error"); return; }
-  const v = await pcSheet({title:"طلب إجازة", icon:"fa-plane-departure", body:`
-    <label class="pc94-lb">الموظف</label><select id="hrlEmp" class="pc93-name">${emps.map(e=>`<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`).join("")}</select>
-    <label class="pc94-lb">النوع</label><select id="hrlType" class="pc93-name">${PC_HR_LEAVE_TYPES.map(t=>`<option>${t}</option>`).join("")}</select>
-    <div class="pc102-shift"><div><label class="pc94-lb">من</label><input id="hrlFrom" class="pc93-name" type="date" value="${pcHrToday()}"></div>
-      <div><label class="pc94-lb">إلى</label><input id="hrlTo" class="pc93-name" type="date" value="${pcHrToday()}"></div></div>
-    <label class="pc94-lb">ملاحظة</label><input id="hrlNote" class="pc93-name" maxlength="120">`,
-    actions:[{label:"حفظ كطلب معلق", kind:"btn-main", value:h=>({emp:h.querySelector("#hrlEmp").value, type:h.querySelector("#hrlType").value,
-      from:h.querySelector("#hrlFrom").value, to:h.querySelector("#hrlTo").value, note:h.querySelector("#hrlNote").value.trim()})},{label:"إلغاء", kind:"btn-light", value:null}]});
+  const id = await pcSheet({title:"طلب لموظف", icon:"fa-user", body:`<label class="pc94-lb">الموظف</label><select id="hrlEmp" class="pc93-name">${emps.map(e=>`<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`).join("")}</select>`,
+    actions:[{label:"متابعة", kind:"btn-main", value:h=>h.querySelector("#hrlEmp").value},{label:"إلغاء", kind:"btn-light", value:null}]});
+  if(id) pcRqNew(id, {byHr:true});
+}
+async function pcHrDecideLeave(id, status){
+  const l = pcHrList("hrLeaves", hrLeaves).find(x=>x.id===id);
+  if(!l) return;
+  if(pcRqStatus(l) !== PC_RQ.hr){ showToast("الطلب ليس في مرحلة الموارد البشرية","error"); return; }
+  const ok = status === "معتمدة";
+  const me = pcEmpCurrent();
+  const v = await pcSheet({title:ok?"اعتماد الطلب":"رفض الطلب", icon:"fa-signature", body:`
+    ${pcRqCard(l, "", true)}
+    ${me ? "" : pcByField("hrdBy","اسم المعتمد")}
+    <label class="pc94-lb">ملاحظة ${ok?"(اختياري)":"— سبب الرفض"}</label><input id="hrdNote" class="pc93-name" maxlength="160">`,
+    actions:[{label:ok?"اعتماد":"رفض", kind:ok?"btn-main":"btn-danger", value:h=>({by: me ? me.name : (h.querySelector("#hrdBy")?.value||"").trim(), note:h.querySelector("#hrdNote").value.trim()})},{label:"إلغاء", kind:"btn-light", value:null}]});
   if(!v) return;
-  if(!v.from || !v.to || v.to < v.from){ showToast("تأكد من تاريخ البداية والنهاية","error"); return; }
-  const e = pcHrEmp(v.emp);
-  const overlap = pcHrList("hrLeaves", hrLeaves).some(l=>l.employeeId===e.id && l.status!=="مرفوضة" && l.from <= v.to && l.to >= v.from);
-  if(overlap){ showToast("يوجد طلب إجازة متداخل لنفس الموظف","error"); return; }
-  const days = pcHrDaysBetween(v.from, v.to);
-  if(v.type === "سنوية"){
-    const left = Number(e.annualLeaveDays ?? 21) - pcHrLeaveUsed(e.id, v.from.slice(0,4));
-    if(days > left && !(await pcConfirm(`الرصيد المتبقي ${left} يوم والطلب ${days} يوم. حفظه رغم ذلك؟`,{title:"رصيد غير كافٍ", okText:"حفظ"}))) return;
+  if(!v.by){ showToast("اكتب اسم المعتمد","error"); return; }
+  if(!ok && !v.note){ showToast("اكتب سبب الرفض","error"); return; }
+  if(!me) pcStoreSaveBy(v.by);
+  const {db,doc,updateDoc} = window.firebaseDB;
+  try{ await updateDoc(doc(db,"hr_leaves",id), {status, decidedBy:v.by, decidedAtMs:Date.now(), hrNote:v.note}); showToast(ok?"تم اعتماد الطلب":"تم رفض الطلب"); }
+  catch(err){ console.error(err); showToast("تعذر الحفظ","error"); }
+}
+
+/* =========================== Requests: leave / permission / late justification ===========================
+ * Flow: employee (or HR on their behalf) submits → direct manager approves → HR approves.
+ * No direct manager → straight to HR. Stored in hr_leaves with kind: leave | perm | late.
+ * Old records with status "معلقة" are read as waiting for HR. */
+var PC_RQ = {mgr:"بانتظار المدير", hr:"بانتظار الموارد البشرية", ok:"معتمدة", no:"مرفوضة"};
+var PC_RQ_KINDS = {leave:["إجازة","fa-plane-departure"], perm:["استئذان","fa-door-open"], late:["تبرير تأخير","fa-clock"]};
+var pcRqView = null;
+function pcRqKind(l){ return l && l.kind && PC_RQ_KINDS[l.kind] ? l.kind : "leave"; }
+function pcRqStatus(l){ return !l ? "" : (l.status === "معلقة" ? PC_RQ.hr : (l.status || PC_RQ.hr)); }
+function pcHrManagerOf(e){ const m = e && e.managerId ? pcHrEmp(e.managerId) : null; return m && m.id !== e.id && pcHrActive(m) ? m : null; }
+function pcHrReports(mgrId){ return pcHrEmps().filter(x=>x.managerId===mgrId && x.id!==mgrId); }
+function pcRqApprovedOn(empId, day){
+  const out = {min:0, lateOk:false};
+  pcHrList("hrLeaves", hrLeaves).forEach(l=>{
+    if(l.employeeId!==empId || l.status!=="معتمدة" || l.day!==day) return;
+    const k = pcRqKind(l);
+    if(k === "perm") out.min += Number(l.minutes||0);
+    if(k === "late"){ out.min += Number(l.minutes||0); out.lateOk = true; }
+  });
+  return out;
+}
+function pcRqMinOf(t){ const m = pcHrMin(t); return m == null ? null : m; }
+function pcRqWhen(l){
+  const k = pcRqKind(l);
+  if(k === "leave") return `${escapeHtml(l.type||"")} · ${l.days||pcHrDaysBetween(l.from,l.to)} يوم · ${pcHrDateText(l.from)} ← ${pcHrDateText(l.to)}`;
+  if(k === "perm") return `${pcHrDateText(l.day)} · من ${escapeHtml(l.fromTime||"")} إلى ${escapeHtml(l.toTime||"")} · ${pcHrDur(l.minutes||0)}`;
+  return `${pcHrDateText(l.day)} · تأخير ${pcHrDur(l.minutes||0)}`;
+}
+function pcRqTone(st){ return st===PC_RQ.ok ? "ok" : st===PC_RQ.no ? "bad" : "warn"; }
+function pcRqCard(l, actions, showName){
+  const k = pcRqKind(l), st = pcRqStatus(l);
+  const mgr = l.managerName || (l.managerId ? pcHrEmp(l.managerId)?.name : "");
+  const steps = [];
+  if(l.managerId) steps.push(l.mgrBy ? `المدير: ${l.mgrDecision==="رفض"?"رفض":"موافقة"} — ${escapeHtml(l.mgrBy)}${l.mgrNote?` (${pcNoteHtml(l.mgrNote)})`:""}` : `المدير: ${escapeHtml(mgr||"")} — لم يرد بعد`);
+  if(st===PC_RQ.ok || (st===PC_RQ.no && l.decidedBy)) steps.push(`الموارد البشرية: ${st===PC_RQ.ok?"اعتماد":"رفض"} — ${escapeHtml(l.decidedBy||"")}${l.hrNote?` (${pcNoteHtml(l.hrNote)})`:""}`);
+  else if(st===PC_RQ.hr) steps.push("الموارد البشرية: لم ترد بعد");
+  return `<div class="pc125-card">
+    <span class="pc125-ic"><i class="fa-solid ${PC_RQ_KINDS[k][1]}"></i></span>
+    <div class="pc125-body">
+      <div class="pc125-top"><b>${showName ? `${escapeHtml(l.name||"")} · ` : ""}${PC_RQ_KINDS[k][0]}</b><em class="pc103-tag ${pcRqTone(st)}">${escapeHtml(st)}</em></div>
+      <small>${pcRqWhen(l)}</small>
+      ${l.note ? `<p>${pcNoteHtml(l.note)}</p>` : ""}
+      <ul class="pc125-steps">${steps.map(x=>`<li>${x}</li>`).join("")}</ul>
+      ${actions ? `<div class="pc103-acts">${actions}</div>` : ""}
+    </div></div>`;
+}
+
+/* New request (employee for themself, or HR for an employee). */
+async function pcRqNew(empId, opt){
+  opt = opt || {};
+  const e = pcHrEmp(empId);
+  if(!e){ showToast("الموظف غير موجود","error"); return; }
+  const mgr = pcHrManagerOf(e);
+  const today = pcHrToday();
+  const k0 = opt.kind || "leave";
+  const lateToday = pcHrDayResult(e, today).late;
+  if(k0 !== "leave") setTimeout(()=>pcRqKindUi(document), 0);
+  const v = await pcSheet({title:opt.byHr ? `طلب لـ ${e.name}` : "طلب جديد", icon:"fa-paper-plane", body:`
+    <div class="pc60-seg2 pc125-kinds">${Object.keys(PC_RQ_KINDS).map(k=>`<label><input type="radio" name="rqK" value="${k}" ${k===k0?"checked":""} onchange="pcRqKindUi(this.closest('.pcSheet,.pc-sheet,#pcSheetHost')||document)"><span>${PC_RQ_KINDS[k][0]}</span></label>`).join("")}</div>
+    <div data-k="leave">
+      <label class="pc94-lb">نوع الإجازة</label><select id="rqType" class="pc93-name">${PC_HR_LEAVE_TYPES.map(t=>`<option>${t}</option>`).join("")}</select>
+      <div class="pc102-shift"><div><label class="pc94-lb">من</label><input id="rqFrom" class="pc93-name" type="date" value="${today}"></div>
+        <div><label class="pc94-lb">إلى</label><input id="rqTo" class="pc93-name" type="date" value="${today}"></div></div>
+      <p class="pc85-hint">رصيد السنوية المتبقي: ${Number(e.annualLeaveDays ?? 21) - pcHrLeaveUsed(e.id, today.slice(0,4))} يوم</p>
+    </div>
+    <div data-k="perm" hidden>
+      <label class="pc94-lb">اليوم</label><input id="rqPDay" class="pc93-name" type="date" value="${today}">
+      <div class="pc102-shift"><div><label class="pc94-lb">من الساعة</label><input id="rqPFrom" class="pc93-name" type="time"></div>
+        <div><label class="pc94-lb">إلى الساعة</label><input id="rqPTo" class="pc93-name" type="time"></div></div>
+    </div>
+    <div data-k="late" hidden>
+      <label class="pc94-lb">يوم التأخير</label><input id="rqLDay" class="pc93-name" type="date" value="${today}">
+      <p class="pc85-hint">مدة التأخير تُحسب من بصمة الحضور لذلك اليوم${lateToday>=1?` (اليوم: ${pcHrDur(lateToday)})`:""}.</p>
+    </div>
+    <label class="pc94-lb">السبب / ملاحظة</label><input id="rqNote" class="pc93-name" maxlength="160">
+    <p class="pc125-route"><i class="fa-solid fa-route"></i> ${mgr ? `يذهب أولًا للمدير المباشر <b>${escapeHtml(mgr.name)}</b> ثم الموارد البشرية` : "لا يوجد مدير مباشر — يذهب للموارد البشرية مباشرة"}</p>`,
+    actions:[{label:"إرسال الطلب", kind:"btn-main", value:h=>({kind:(h.querySelector("input[name=rqK]:checked")||{}).value||"leave",
+        type:h.querySelector("#rqType").value, from:h.querySelector("#rqFrom").value, to:h.querySelector("#rqTo").value,
+        pDay:h.querySelector("#rqPDay").value, pFrom:h.querySelector("#rqPFrom").value, pTo:h.querySelector("#rqPTo").value,
+        lDay:h.querySelector("#rqLDay").value, note:h.querySelector("#rqNote").value.trim()})},
+      {label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  const me = pcEmpCurrent();
+  const base = {kind:v.kind, employeeId:e.id, name:e.name, branchId:pcBranchOf(e), note:v.note,
+    managerId:mgr ? mgr.id : "", managerName:mgr ? mgr.name : "", status:mgr ? PC_RQ.mgr : PC_RQ.hr,
+    createdAtMs:Date.now(), createdBy:me ? me.name : (opt.byHr ? "الموارد البشرية" : e.name)};
+  const all = pcHrList("hrLeaves", hrLeaves).filter(l=>l.employeeId===e.id && pcRqStatus(l)!==PC_RQ.no);
+  let data;
+  if(v.kind === "leave"){
+    if(!v.from || !v.to || v.to < v.from){ showToast("تأكد من تاريخ البداية والنهاية","error"); return; }
+    if(all.some(l=>pcRqKind(l)==="leave" && l.from <= v.to && l.to >= v.from)){ showToast("يوجد طلب إجازة متداخل لنفس الموظف","error"); return; }
+    const days = pcHrDaysBetween(v.from, v.to);
+    if(v.type === "سنوية"){
+      const left = Number(e.annualLeaveDays ?? 21) - pcHrLeaveUsed(e.id, v.from.slice(0,4));
+      if(days > left && !(await pcConfirm(`الرصيد المتبقي ${left} يوم والطلب ${days} يوم. إرساله رغم ذلك؟`,{title:"رصيد غير كافٍ", okText:"إرسال"}))) return;
+    }
+    data = {...base, type:v.type, from:v.from, to:v.to, days};
+  }else if(v.kind === "perm"){
+    const a = pcRqMinOf(v.pFrom), b = pcRqMinOf(v.pTo);
+    if(!v.pDay || a == null || b == null || b <= a){ showToast("اختر اليوم ووقت البداية والنهاية (النهاية بعد البداية)","error"); return; }
+    if(!v.note){ showToast("اكتب سبب الاستئذان","error"); return; }
+    data = {...base, day:v.pDay, fromTime:v.pFrom, toTime:v.pTo, minutes:b - a};
+  }else{
+    if(!v.lDay){ showToast("اختر يوم التأخير","error"); return; }
+    if(v.lDay > today){ showToast("لا يمكن تبرير تأخير ليوم لم يأتِ بعد","error"); return; }
+    const late = Math.round(pcHrDayResult(e, v.lDay).late || 0);
+    if(late < 1){ showToast("لا يوجد تأخير مسجل في بصمة هذا اليوم","error"); return; }
+    if(!v.note){ showToast("اكتب سبب التأخير","error"); return; }
+    if(all.some(l=>pcRqKind(l)==="late" && l.day===v.lDay)){ showToast("يوجد طلب تبرير لنفس اليوم","error"); return; }
+    data = {...base, day:v.lDay, minutes:late};
   }
   const {db,addDoc,collection} = window.firebaseDB;
   try{
-    await addDoc(collection(db,"hr_leaves"), {employeeId:e.id, name:e.name, branchId:pcBranchOf(e), type:v.type, from:v.from, to:v.to, days, note:v.note, status:"معلقة", createdAtMs:Date.now()});
-    pcHrLeaveFilter = "معلقة"; showToast("تم حفظ طلب الإجازة");
+    await addDoc(collection(db,"hr_leaves"), data);
+    showToast(mgr ? `تم إرسال الطلب إلى ${mgr.name}` : "تم إرسال الطلب إلى الموارد البشرية");
+    if(opt.byHr) pcHrLeaveFilter = data.status;
+  }catch(err){ console.error(err); showToast("تعذر الإرسال، تحقق من الاتصال","error"); }
+}
+function pcRqKindUi(root){
+  const k = (root.querySelector("input[name=rqK]:checked")||{}).value || "leave";
+  root.querySelectorAll("[data-k]").forEach(d=>{ d.hidden = d.dataset.k !== k; });
+}
+
+/* Manager approves or rejects a team member's request; approval sends it to HR. */
+async function pcRqMgrDecide(id, ok){
+  const l = pcHrList("hrLeaves", hrLeaves).find(x=>x.id===id);
+  const me = pcEmpCurrent();
+  if(!l || !me) return;
+  if(pcRqStatus(l) !== PC_RQ.mgr){ showToast("تم التعامل مع هذا الطلب","warn"); return; }
+  if(l.managerId !== me.id && !me.isAdmin){ showToast("هذا الطلب ليس لفريقك","error"); return; }
+  const v = await pcSheet({title:ok?"موافقة المدير":"رفض الطلب", icon:ok?"fa-check":"fa-xmark", tone:ok?"":"warn", body:`
+    ${pcRqCard(l, "", true)}
+    <label class="pc94-lb">ملاحظة ${ok?"(اختياري)":"— سبب الرفض"}</label><input id="rqMNote" class="pc93-name" maxlength="160">
+    ${ok ? `<p class="pc85-hint">بعد موافقتك يذهب الطلب للموارد البشرية للاعتماد النهائي.</p>` : ""}`,
+    actions:[{label:ok?"موافقة وإرسال للموارد البشرية":"رفض", kind:ok?"btn-main":"btn-danger", value:h=>({note:h.querySelector("#rqMNote").value.trim()})},{label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  if(!ok && !v.note){ showToast("اكتب سبب الرفض","error"); return; }
+  const {db,doc,updateDoc} = window.firebaseDB;
+  try{
+    await updateDoc(doc(db,"hr_leaves",id), {status:ok ? PC_RQ.hr : PC_RQ.no, mgrDecision:ok ? "موافقة" : "رفض", mgrBy:me.name, mgrById:me.id, mgrAtMs:Date.now(), mgrNote:v.note});
+    showToast(ok ? "تمت الموافقة وأُرسل للموارد البشرية" : "تم رفض الطلب");
   }catch(err){ console.error(err); showToast("تعذر الحفظ","error"); }
 }
-async function pcHrDecideLeave(id, status){
-  const v = await pcSheet({title:status==="معتمدة"?"اعتماد الإجازة":"رفض الإجازة", icon:"fa-signature", body:`
-    ${pcByField("hrdBy","اسم المعتمد")}`,
-    actions:[{label:status==="معتمدة"?"اعتماد":"رفض", kind:"btn-main", value:h=>h.querySelector("#hrdBy").value.trim()},{label:"إلغاء", kind:"btn-light", value:null}]});
-  if(v === null || v === undefined) return;
-  if(!v){ showToast("اكتب اسم المعتمد","error"); return; }
-  pcStoreSaveBy(v);
-  const {db,doc,updateDoc} = window.firebaseDB;
-  try{ await updateDoc(doc(db,"hr_leaves",id), {status, decidedBy:v, decidedAtMs:Date.now()}); showToast(status==="معتمدة"?"تم اعتماد الإجازة":"تم رفض الإجازة"); }
-  catch(err){ console.error(err); showToast("تعذر الحفظ","error"); }
+
+/* Employee screens: my requests / my team's requests. */
+function pcRqMineList(e){ return pcHrList("hrLeaves", hrLeaves).filter(l=>l.employeeId===e.id).sort((a,b)=>(b.createdAtMs||0)-(a.createdAtMs||0)); }
+function pcRqTeamList(e){ return pcHrList("hrLeaves", hrLeaves).filter(l=>l.managerId===e.id).sort((a,b)=>(b.createdAtMs||0)-(a.createdAtMs||0)); }
+function pcRqBarHtml(e){
+  const minePend = pcRqMineList(e).filter(l=>{ const s = pcRqStatus(l); return s===PC_RQ.mgr || s===PC_RQ.hr; }).length;
+  const team = pcHrReports(e.id).length, teamPend = pcRqTeamList(e).filter(l=>pcRqStatus(l)===PC_RQ.mgr).length;
+  return `<div class="pc125-bar">
+    <button type="button" data-id="${escapeHtml(e.id)}" onclick="pcRqNew(this.dataset.id)"><i class="fa-solid fa-paper-plane"></i><span>طلب إجازة / استئذان</span></button>
+    <button type="button" onclick="pcRqOpen('mine')"><i class="fa-solid fa-list-check"></i><span>طلباتي</span>${minePend?`<em class="pc60-badge">${minePend}</em>`:""}</button>
+    ${team || teamPend ? `<button type="button" onclick="pcRqOpen('team')"><i class="fa-solid fa-people-group"></i><span>طلبات فريقي</span>${teamPend?`<em class="pc60-badge hot">${teamPend}</em>`:""}</button>` : ""}
+  </div>`;
+}
+function pcRqOpen(view){
+  const e = pcEmpCurrent(); if(!e) return;
+  pcRqView = view;
+  pageLayout(view==="team" ? "طلبات فريقي" : "طلباتي", `
+    ${pc60Bar({title:view==="team" ? "طلبات فريقي" : "طلباتي", sub:e.name, back:"pcEmpHome()"})}
+    <section class="pc60-page has-bar"><div id="pcRqBox"></div></section>`, "pcEmpHome()");
+  pcRqDraw();
+}
+function pcRqDraw(){
+  const box = document.getElementById("pcRqBox"), e = pcEmpCurrent();
+  if(!box || !e) return;
+  if(pcRqView === "team"){
+    const list = pcRqTeamList(e), pend = list.filter(l=>pcRqStatus(l)===PC_RQ.mgr), done = list.filter(l=>pcRqStatus(l)!==PC_RQ.mgr).slice(0, 40);
+    const reps = pcHrReports(e.id);
+    box.innerHTML = `
+      <p class="pc85-hint">فريقك: ${reps.length ? reps.map(x=>escapeHtml(x.name)).join("، ") : "لا يوجد موظفون مرتبطون بك"}</p>
+      <div class="pc50-section-title"><h2>بانتظار موافقتك (${pend.length})</h2></div>
+      ${pend.length ? `<div class="pc125-list">${pend.map(l=>pcRqCard(l, `<button class="btn btn-main" data-id="${escapeHtml(l.id)}" onclick="pcRqMgrDecide(this.dataset.id,true)">موافقة</button><button class="btn btn-light pc125-no" data-id="${escapeHtml(l.id)}" onclick="pcRqMgrDecide(this.dataset.id,false)">رفض</button>`, true)).join("")}</div>` : pc60Empty("fa-circle-check","لا توجد طلبات بانتظارك")}
+      ${done.length ? `<div class="pc50-section-title"><h2>السابقة</h2></div><div class="pc125-list">${done.map(l=>pcRqCard(l, "", true)).join("")}</div>` : ""}`;
+    return;
+  }
+  const list = pcRqMineList(e);
+  box.innerHTML = `
+    <button type="button" class="btn btn-main pc125-new" data-id="${escapeHtml(e.id)}" onclick="pcRqNew(this.dataset.id)"><i class="fa-solid fa-plus"></i> طلب جديد</button>
+    ${list.length ? `<div class="pc125-list">${list.map(l=>pcRqCard(l, "", false)).join("")}</div>` : pc60Empty("fa-inbox","لم ترسل أي طلب بعد")}`;
 }
 
 /* ----- Documents & expiry alerts ----- */
@@ -8374,11 +8559,11 @@ function pcHrDocState(empId){
 function pcHrAlertsHtml(){
   const emps = new Map(pcHrBranchEmps(settingsBranch).filter(pcHrActive).map(e=>[e.id,e]));
   const docs = pcHrList("hrDocs", hrDocs).filter(d=>emps.has(d.employeeId)).map(d=>({d, s:pcHrDocStatus(d)})).filter(x=>x.s.k==="expired"||x.s.k==="soon");
-  const pend = pcHrList("hrLeaves", hrLeaves).filter(l=>emps.has(l.employeeId) && l.status==="معلقة").length;
+  const pend = pcHrList("hrLeaves", hrLeaves).filter(l=>emps.has(l.employeeId) && pcRqStatus(l)===PC_RQ.hr).length;
   if(!docs.length && !pend) return "";
   return `<div class="pc103-alerts">
     ${docs.length ? `<button type="button" onclick="pcHrQ='';renderSettingsHrDocs()"><i class="fa-solid fa-file-circle-exclamation"></i> ${docs.filter(x=>x.s.k==="expired").length} مستند منتهي · ${docs.filter(x=>x.s.k==="soon").length} ينتهي خلال 30 يوم</button>` : ""}
-    ${pend ? `<button type="button" onclick="pcHrLeaveFilter='معلقة';renderSettingsHrLeaves()"><i class="fa-solid fa-plane-departure"></i> ${pend} طلب إجازة بانتظار الاعتماد</button>` : ""}
+    ${pend ? `<button type="button" onclick="pcHrLeaveFilter=PC_RQ.hr;renderSettingsHrLeaves()"><i class="fa-solid fa-plane-departure"></i> ${pend} طلب بانتظار اعتماد الموارد البشرية</button>` : ""}
   </div>`;
 }
 function renderSettingsHrDocs(){
@@ -9235,8 +9420,8 @@ function pcEmpTopHtml(e){
   const chef = e.role === "شيف" ? pcEmpChef(e) : null;
   const punch = `<button type="button" class="pc105-punch ${open?"in":""}" data-id="${escapeHtml(e.id)}" onclick="pcHrPunch(this.dataset.id).then(()=>pcEmpHome())">
       <i class="fa-solid fa-user-clock"></i><span><b>${open ? "انصراف" : "حضور"}</b><small>${open ? `منذ ${pcHrClock(open.inMs)}` : (e.shiftStart ? pcChefShiftText(e).replace(/<[^>]+>/g,"") : "")}</small></span></button>`;
-  if(!chef) return `<div class="pc105-me is-solo">${punch}</div>`;
-  return `<div class="pc105-me">${pcEmpChefChips(chef, punch)}</div>`;
+  if(!chef) return `<div class="pc105-me is-solo">${punch}</div>${pcRqBarHtml(e)}`;
+  return `<div class="pc105-me">${pcEmpChefChips(chef, punch)}</div>${pcRqBarHtml(e)}`;
 }
 
 /* Chef tools shown as chips beside attendance on the employee's home. */
@@ -9657,7 +9842,7 @@ var PC_PERMS = [
     ["set.cleaning","مهام النظافة"],["set.operations","مهام التشغيل"],["set.warehouse","أصناف المستودع"],["set.menu","المنيو والإنتاج"],
     ["set.excel","استيراد وتصدير Excel"],["set.home","الرسالة الجماعية والسلايدر"],["set.about","حول البرنامج"]]},
   {k:"hr", name:"الموارد البشرية", ico:"fa-id-card", parts:[
-    ["set.hrEmp","الموظفون: عرض الملفات وتعديلها"],["set.hrAtt","الحضور"],["set.hrLeave","الإجازات"],["set.hrDocs","المستندات"]]},
+    ["set.hrEmp","الموظفون: عرض الملفات وتعديلها"],["set.hrAtt","الحضور"],["set.hrLeave","الطلبات والإجازات (اعتماد الموارد البشرية)"],["set.hrDocs","المستندات"]]},
   {k:"acc", name:"المحاسبة", ico:"fa-calculator", parts:[
     ["acc.sum","الملخص"],
     ["acc.sup","الموردين: عرض الأرصدة وكشوف الحساب"],
