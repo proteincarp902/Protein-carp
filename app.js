@@ -8220,7 +8220,13 @@ function pcHrList(key, fallback){ const r = pcRaw && pcRaw[key]; return Array.is
 function pcHrEmps(){ return pcHrList("hrEmployees", hrEmployees); }
 function pcHrEmp(id){ return pcHrEmps().find(e=>e.id===id) || null; }
 function pcHrBranchEmps(branchId){ return pcHrEmps().filter(e=>pcBranchOf(e)===branchId).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ar")); }
-function pcHrActive(e){ return (e.status||"نشط") === "نشط"; }
+/* Active = status «نشط» and the end-of-service date (if any) not passed yet. */
+function pcHrActive(e){ return (e.status||"نشط") === "نشط" && !(e.endDate && e.endDate < pcHrToday()); }
+/* Employee belongs in a report covering [from, to]: hired by the end and not ended before the start. */
+function pcHrInPeriod(e, from, to){
+  if(e.status === "منتهي الخدمة" && !e.endDate) return false;   /* ended before end dates existed: no date to report up to */
+  return !(e.endDate && from && e.endDate < from) && !(e.hireDate && to && e.hireDate > to);
+}
 
 /* ----- date & time helpers (device local time) ----- */
 function pcHrDayKey(ms){ const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
@@ -8287,7 +8293,8 @@ function pcHrDayResult(e, dayKey){
     return r;
   }
   if(leave){ r.status = `إجازة ${leave.type}`; r.tone = "info"; return r; }
-  if(!pcHrActive(e)){ r.status = e.status; r.tone = "muted"; return r; }
+  if(e.endDate && dayKey > e.endDate){ r.status = "بعد انتهاء الخدمة"; r.tone = "muted"; return r; }
+  if(!e.endDate && !pcHrActive(e)){ r.status = e.status; r.tone = "muted"; return r; }
   if(e.hireDate && dayKey < e.hireDate){ r.status = "قبل المباشرة"; r.tone = "muted"; return r; }
   if(!pcHrWorkday(e, dayKey)){ r.status = "راحة"; r.tone = "muted"; return r; }
   if(dayKey > pcHrToday() || (sh && now < sh.start)){ r.status = "لم يبدأ الدوام"; r.tone = "muted"; return r; }
@@ -8335,7 +8342,7 @@ function pcHrDrawEmployees(){
         <small>${escapeHtml(e.role||"")}${e.section?` · ${escapeHtml(e.section)}`:""}${e.odooEmployeeId?` · #${escapeHtml(e.odooEmployeeId)}`:""}</small>
         <small>${e.shiftStart&&e.shiftEnd ? pcChefShiftText(e) : "بدون دوام محدد"}</small></span>
       <span class="pc103-tags">${e.isAdmin ? `<em class="pc103-tag info">مدير النظام</em>` : pcPermsOf(e).length ? `<em class="pc103-tag info">${escapeHtml(pcPermTplName(e))}</em>` : ""}
-        ${pcHrActive(e) ? "" : `<em class="pc103-tag muted">${escapeHtml(e.status)}</em>`}
+        ${pcHrActive(e) ? (e.endDate ? `<em class="pc103-tag warn">ينتهي ${escapeHtml(e.endDate)}</em>` : "") : `<em class="pc103-tag muted">${escapeHtml(e.endDate ? "انتهت خدمته " + e.endDate : (e.status||""))}</em>`}
         ${docs.expired ? `<em class="pc103-tag bad">${docs.expired} منتهي</em>` : ""}
         ${docs.soon ? `<em class="pc103-tag warn">${docs.soon} قارب الانتهاء</em>` : ""}
       </span></button>`;
@@ -8390,6 +8397,7 @@ async function pcHrEditEmployee(id, preset){
     <div class="pc103-days">${PC_HR_DAYS.map((d,i)=>`<label><input type="checkbox" class="hrDay" value="${i}" ${days.includes(i)?"checked":""}><span>${d}</span></label>`).join("")}</div>
     <div class="pc102-shift">
       <div><label class="pc94-lb">تاريخ المباشرة</label><input id="hrHire" class="pc93-name" type="date" value="${escapeHtml(e.hireDate||"")}"></div>
+      <div><label class="pc94-lb">تاريخ انتهاء الخدمة <small>(آخر يوم عمل)</small></label><input id="hrEnd" class="pc93-name" type="date" value="${escapeHtml(e.endDate||"")}" onchange="if(this.value && this.value <= pcHrToday()){ const st = document.getElementById('hrStatus'); if(st) st.value = 'منتهي الخدمة'; }"></div>
       <div><label class="pc94-lb">رصيد الإجازة السنوية (يوم)</label><input id="hrAnnual" class="pc93-name" type="number" min="0" max="60" value="${escapeHtml(String(e.annualLeaveDays ?? 21))}"></div>
     </div>
     <label class="pc94-lb">الرقم السري لحساب الموظف <small>${e.pwHash||e.pinHash ? "— محفوظ، اتركه فارغًا لعدم التغيير" : "(4 إلى 8 أرقام — يدخل به برقمه الوظيفي)"}</small></label>
@@ -8400,7 +8408,7 @@ async function pcHrEditEmployee(id, preset){
       {label:"حفظ", kind:"btn-main", value:h=>({
         name:h.querySelector("#hrName").value.trim(), role:h.querySelector("#hrRole").value, status:h.querySelector("#hrStatus").value,
         branchId:h.querySelector("#hrBranch").value, section:h.querySelector("#hrSection").value,
-        hireDate:h.querySelector("#hrHire").value, annualLeaveDays:Number(h.querySelector("#hrAnnual").value||0),
+        hireDate:h.querySelector("#hrHire").value, endDate:h.querySelector("#hrEnd").value, annualLeaveDays:Number(h.querySelector("#hrAnnual").value||0),
         workDays:[...h.querySelectorAll(".hrDay:checked")].map(x=>Number(x.value)), pin:h.querySelector("#hrPin").value.trim(),
         managerId:h.querySelector("#hrManager").value,
         extra:pcChefExtraRead("hr")})},
@@ -8418,6 +8426,10 @@ async function pcHrEditEmployee(id, preset){
   if(v.pin && id && (e.isAdmin || pcPermsOf(e).length) && !pcPermEditor()){ showToast("تغيير الرقم السري لموظف له صلاحيات من مدير النظام فقط","error"); return; }
   if(v.pin && !v.extra.data.odooEmployeeId){ showToast("سجّل الرقم الوظيفي أولًا — الموظف يدخل به مع الرقم السري","error"); return; }
   if(!v.workDays.length){ showToast("اختر يوم عمل واحدًا على الأقل","error"); return; }
+  if(v.status === "منتهي الخدمة" && !v.endDate){ showToast("اكتب تاريخ انتهاء الخدمة (آخر يوم عمل)","error"); return; }
+  if(v.endDate && v.hireDate && v.endDate < v.hireDate){ showToast("تاريخ انتهاء الخدمة قبل تاريخ المباشرة","error"); return; }
+  if(v.endDate && v.endDate <= pcHrToday()) v.status = "منتهي الخدمة";
+  if(v.status === "نشط" && v.endDate && v.endDate < pcHrToday()) v.status = "منتهي الخدمة";
   if(v.managerId && id){
     let m = pcHrEmp(v.managerId), hops = 0;
     while(m && hops++ < 20){ if(m.id === id){ showToast("لا يمكن: هذا الاختيار يجعل الموظف مديرًا لمديره","error"); return; } m = m.managerId ? pcHrEmp(m.managerId) : null; }
@@ -8428,7 +8440,7 @@ async function pcHrEditEmployee(id, preset){
     showToast("الرقم الوظيفي مستخدم لموظف آخر","error"); return;
   }
   const data = {name:v.name, role:v.role, status:v.status, branchId:v.branchId, section:isChef ? v.section : (v.section||""),
-    hireDate:v.hireDate, annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, managerId:v.managerId||"", ...v.extra.data, updatedAtMs:Date.now()};
+    hireDate:v.hireDate, endDate:v.endDate||"", annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, managerId:v.managerId||"", ...v.extra.data, updatedAtMs:Date.now()};
   try{
     const {db,addDoc,collection,doc,updateDoc} = window.firebaseDB;
     let empId = id;
@@ -8478,7 +8490,16 @@ function pcHrSecOptions(){
   base.forEach(e=>{ const s = String(e.section||"").trim(); if(s) secs[s] = (secs[s]||0)+1; const r = String(e.role||"").trim(); if(r) roles[r] = (roles[r]||0)+1; });
   return {secs, roles};
 }
+function pcHrPeriod(){
+  if(pcHrAttMode === "day") return [pcHrDay, pcHrDay];
+  if(pcHrAttMode === "month"){ const first = pcHrDay.slice(0,7) + "-01"; const d = new Date(pcHrDayStart(first)); return [first, pcHrDayKey(new Date(d.getFullYear(), d.getMonth()+1, 0).getTime())]; }
+  return [pcHrF.from, pcHrF.to];
+}
 function pcHrScopeEmps(){
+  const [pf, pt] = pcHrPeriod();
+  return pcHrScopeEmpsAll().filter(e=>pcHrInPeriod(e, pf, pt));
+}
+function pcHrScopeEmpsAll(){
   const base = pcHrBaseEmps(), f = pcHrF;
   if(f.scope === "emp") return base.filter(e=>e.id === f.emp);
   if(f.scope === "group") return base.filter(e=>f.group.includes(e.id));
@@ -8582,7 +8603,7 @@ function pcHrBodyHtml(){
 }
 function pcHrDayHtml(){
   const day = pcHrDay;
-  const rows = pcHrScopeEmps().map(e=>({e, r:pcHrDayResult(e, day)})).filter(x=>x.r.status!=="قبل المباشرة");
+  const rows = pcHrScopeEmps().map(e=>({e, r:pcHrDayResult(e, day)})).filter(x=>x.r.status!=="قبل المباشرة" && x.r.status!=="بعد انتهاء الخدمة");
   const c = k=>rows.filter(x=>x.r.tone===k).length;
   return `
     <div class="pc103-kpis"><span class="ok">${c("ok")} حاضر</span><span class="warn">${c("warn")} متأخر / ناقص</span><span class="bad">${c("bad")} غائب</span><span class="info">${c("info")} إجازة</span></div>
@@ -8649,7 +8670,7 @@ function pcHrRangeHtml(){
   const rows = pcHrRangeRows();
   if(!rows.length) return `<div class="placeholder">لا يوجد موظفون ضمن الاختيار</div>`;
   const det = rows.map(s=>{
-    const days = s.days.filter(x=>x.r.status!=="قبل المباشرة");
+    const days = s.days.filter(x=>x.r.status!=="قبل المباشرة" && x.r.status!=="بعد انتهاء الخدمة");
     return `<details class="pc123-emp" ${rows.length===1?"open":""}><summary><b>${escapeHtml(s.e.name)}</b>
       <span>حضور ${s.present} · تأخير ${Math.round(s.lateMin)}د · إضافي ${(s.overMin/60).toFixed(2)} س · نقص ${(s.shortMin/60).toFixed(2)} س · غياب ${s.absent} · ${(s.workedMin/60).toFixed(1)} ساعة</span></summary>
       <div class="premium-table-wrap"><table class="premium-table pc103-table"><thead><tr><th>اليوم</th><th>الدوام</th><th>الحضور</th><th>الانصراف</th><th>العمل الفعلي</th><th>إضافي</th><th>نقص</th><th>التأخير</th><th>خروج مبكر</th><th>الحالة</th></tr></thead><tbody>
@@ -8683,7 +8704,7 @@ function pcHrExportMonth(){
 function pcHrClockX(ms){ if(!ms) return ""; const d = new Date(ms); return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); }
 function pcHrExportDay(){
   if(typeof XLSX === "undefined"){ showToast("مكتبة Excel غير متاحة الآن","error"); return; }
-  const rows = pcHrScopeEmps().map(e=>({e, r:pcHrDayResult(e, pcHrDay)})).filter(x=>x.r.status!=="قبل المباشرة");
+  const rows = pcHrScopeEmps().map(e=>({e, r:pcHrDayResult(e, pcHrDay)})).filter(x=>x.r.status!=="قبل المباشرة" && x.r.status!=="بعد انتهاء الخدمة");
   if(!rows.length){ showToast("لا يوجد موظفون ضمن الاختيار","warn"); return; }
   const data = rows.map(({e,r})=>({"التاريخ":pcHrDay, "الموظف":e.name, "الرقم الوظيفي أودو":e.odooEmployeeId||"", "الوظيفة":e.role||"", "القسم":e.section||"", "الفرع":pcBranchName(pcBranchOf(e)),
     "الدوام":r.sh ? pcChefShiftText(e) : "", "الحضور":pcHrClockX(r.inMs), "الانصراف":pcHrClockX(r.outMs),
@@ -8700,7 +8721,7 @@ function pcHrExportRange(){
   const rows = pcHrRangeRows();
   if(!rows.length){ showToast("لا يوجد موظفون ضمن الاختيار","warn"); return; }
   const det = [];
-  rows.forEach(s=>s.days.filter(x=>x.r.status!=="قبل المباشرة").forEach(({d,r})=>det.push({
+  rows.forEach(s=>s.days.filter(x=>x.r.status!=="قبل المباشرة" && x.r.status!=="بعد انتهاء الخدمة").forEach(({d,r})=>det.push({
     "الموظف":s.e.name, "الرقم الوظيفي أودو":s.e.odooEmployeeId||"", "القسم":s.e.section||"", "الفرع":pcBranchName(pcBranchOf(s.e)), "التاريخ":d,
     "الحضور":pcHrClockX(r.inMs), "الانصراف":pcHrClockX(r.outMs),
     "الدوام":r.sh ? pcChefShiftText(s.e) : "", "ساعات العمل":r.recs.length ? Number((r.worked/60).toFixed(2)) : 0, "الساعات الطبيعية":Number(((r.plan||0)/60).toFixed(2)),
