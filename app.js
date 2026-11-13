@@ -5234,7 +5234,8 @@ function renderWaste(){
 
 function pc60WSource(){
   if(pc60W.src === "menu") return pc17MenuForChef().map(i=>({id:i.id, name:pc17ItemName(i), code:i.code||"", en:pc17ItemEn(i), unit:pc70DefUnit("prod", i)}));
-  return (warehouseItems||[]).map(i=>({id:i.id, name:i.nameAr||i.name||"", code:i.code||"", en:i.nameEn||"", unit:pc70DefUnit("req", i)}));
+  return [...(warehouseItems||[]).map(i=>({id:i.id, name:i.nameAr||i.name||"", code:i.code||"", en:i.nameEn||"", unit:pc70DefUnit("req", i)})),
+          ...pcSemiForSec(currentChef?.section||"").map(i=>({id:i.id, name:pc17ItemName(i), code:i.code||"", en:pc17ItemEn(i), unit:pc70DefUnit("prod", i)}))];
 }
 function pc60WKey(store, name, code){ return store + "|" + (code || name); }
 
@@ -5847,7 +5848,11 @@ function pc75Edit(kind,id){
         <label>الوحدة <small>(تظهر بها في الإنتاج والهدر)</small></label>
         <select id="pc75Unit">${unitOpts.includes(curUnit)||!curUnit ? "" : `<option selected>${escapeHtml(curUnit)}</option>`}${unitOpts.map(u=>`<option ${u===(curUnit||"حبة")?"selected":""}>${u}</option>`).join("")}</select>
       </div>
-      ${pc127BomCard(it)}`}
+      ${pc127BomCard(it)}
+      <div class="pc60-card pc131-card">
+        <label class="pc131-chk"><input type="checkbox" id="pc131AsRaw" ${it.asRaw?"checked":""} onchange="document.getElementById('pc131Secs').hidden=!this.checked"> <span><b>يُستخدم كمادة خام في أقسام أخرى</b><small>نصف مصنّع: يظهر في مستودع الخام ومكونات الأصناف، ويُحوَّل من مستودع إنتاج القسم المنتج إلى مستودع خام القسم المستخدم</small></span></label>
+        <div id="pc131Secs" ${it.asRaw?"":"hidden"}><p class="pc85-hint">الأقسام التي تستخدمه كخام (بدون اختيار = كل الأقسام)</p>${pcItemSecChecks("pc131RawK", Array.isArray(it.rawSecs) ? it.rawSecs : [])}</div>
+      </div>`}
       <div class="pc60-card">
         <label>الأقسام التي يظهر فيها الصنف <small>(الطلب والإنتاج والجرد والصرف)</small></label>
         ${pcItemSecChecks("pc75SecK", pcItemSecs(kind, id))}
@@ -5877,7 +5882,8 @@ async function pc75Save(kind,id){
   }else{
     const bom = pc127BomRead();
     if(bom.error){ showToast(bom.error,"error"); return; }
-    data = {nameAr:v.ar||v.en, nameEn:v.en, nameUr:v.ur, nameBn:v.bn, code:v.code, unit:g("pc75Unit").value||"حبة", section:[...pcItemSecRead("pc75SecK")][0] || "", bom:bom.lines, bomUpdatedAtMs:Date.now()};
+    data = {nameAr:v.ar||v.en, nameEn:v.en, nameUr:v.ur, nameBn:v.bn, code:v.code, unit:g("pc75Unit").value||"حبة", section:[...pcItemSecRead("pc75SecK")][0] || "", bom:bom.lines, bomUpdatedAtMs:Date.now(),
+      asRaw:!!document.getElementById("pc131AsRaw")?.checked, rawSecs:document.getElementById("pc131AsRaw")?.checked ? [...pcItemSecRead("pc131RawK")] : []};
   }
   try{
     const {db,doc,updateDoc} = window.firebaseDB;
@@ -7399,23 +7405,38 @@ function pcStoreMenuFind(src){
 function pcStoreCatalog(store){
   const all = store === "raw" ? (warehouseItems||[]) : (menuItems||[]);
   const f = typeof pcSecFilter === "function" ? pcSecFilter(pcStoreSec, store, all) : null;
-  return f || all;
+  const base = f || all;
+  if(store !== "raw") return base;
+  const semis = pcSemiForSec(pcStoreSec);
+  return semis.length ? [...base, ...semis] : base;
 }
 function pcStoreCatUnit(store, cat){
   return pc70Unit(cat && cat.unit) || (store === "prod" ? "حبة" : "");
 }
 /* Maps any source line to one item key in the store's catalog unit. Lines whose unit cannot be
    converted (e.g. كرتون vs حبة) are kept on their own key instead of being silently mixed. */
+/* Semi-finished: a production item flagged «يُستخدم كمادة خام» also lives in raw stores (own key raw:m:<id>). */
+function pcSemiList(){ return (menuItems||[]).filter(m=>m.asRaw); }
+function pcIsSemi(cat){ return !!(cat && cat.asRaw && (menuItems||[]).includes(cat)); }
+function pcSemiFind(src){
+  const list = pcSemiList(), nm = String(src.name || src.productName || "").trim();
+  return list.find(m=>String(m.id)===String(src.itemId||src.id||"")) ||
+         ((src.code||src.itemCode) ? list.find(m=>String(m.code||"")===String(src.code||src.itemCode)) : null) ||
+         (nm ? list.find(m=>String(pc17ItemName(m)).trim()===nm) : null) || null;
+}
+function pcSemiForSec(sec){ return pcSemiList().filter(m=>!(Array.isArray(m.rawSecs) && m.rawSecs.length) || m.rawSecs.includes(sec)); }
 function pcStoreItem(store, src){
   const qty0 = Number(src.qty || 0);
   const unit0 = pc70Unit(src.unit || "");
-  const cat = store === "raw" ? pc86Find(src) : pcStoreMenuFind(src);
+  const cat = store === "raw" ? (src.srcKind === "menu" ? (pcSemiFind(src) || pc86Find(src)) : (pc86Find(src) || pcSemiFind(src))) : pcStoreMenuFind(src);
   if(cat){
-    const cu = pcStoreCatUnit(store, cat);
+    const semi = store === "raw" && pcIsSemi(cat);
+    const cu = pcStoreCatUnit(semi ? "prod" : store, cat);
     const c = pcStoreConv(qty0, unit0 || cu, cu);
-    const base = {itemId:cat.id, name:pc17ItemName(cat) || src.name || "", code:cat.code || ""};
-    return c.ok ? {...base, key:`${store}:${cat.id}`, unit:cu || unit0, qty:c.q}
-                : {...base, key:`${store}:${cat.id}|${unit0}`, unit:unit0, qty:qty0};
+    const id = semi ? "m:" + cat.id : cat.id;
+    const base = {itemId:cat.id, name:pc17ItemName(cat) || src.name || "", code:cat.code || "", ...(semi ? {srcKind:"menu"} : {})};
+    return c.ok ? {...base, key:`${store}:${id}`, unit:cu || unit0, qty:c.q}
+                : {...base, key:`${store}:${id}|${unit0}`, unit:unit0, qty:qty0};
   }
   const nm = String(src.name || src.productName || "").trim();
   return {itemId:"", key:`${store}:n:${nm}|${unit0}`, name:nm, code:src.code || src.itemCode || "", unit:unit0, qty:qty0};
@@ -7465,18 +7486,20 @@ function pcStoreMoves(store, sec){
   }
   /* transfers between sections / branches: out when sent, in only after the receiver accepts */
   pcStoreRawList("stockTransfers", stockTransfers).forEach(t=>{
-    if(t.store !== store) return;
+    const toStore = t.toStore || t.store;
+    if(t.store !== store && toStore !== store) return;
     const fromHere = t.fromBranch === currentBranch && (!sec || (t.fromSec||PC_NO_SEC) === sec);
     const toHere = t.toBranch === currentBranch && (!sec || (t.toSec||PC_NO_SEC) === sec);
     const lines = (t.lines||[]).map(x=>({...x, qty:Number(x.qty||0)}));
     const got = t.status === "مستلم" || t.status === "مستلم بفروق";
     const diffs = pc127Diffs(t);
     const dNote = diffs.length ? `فروق استلام: ${diffs.map(d=>`${d.name} أُرسل ${pc60Num(d.sent)} واستُلم ${pc60Num(d.got)}`).join("، ")}${t.diffReason?` — ${t.diffReason}`:""}` : "";
-    if(fromHere && (t.status === "مرسل" || got) && start && Number(t.sentAtMs||0) >= start)
+    if(fromHere && t.store === store && (t.status === "مرسل" || got) && start && Number(t.sentAtMs||0) >= start)
       out.push({ms:Number(t.sentAtMs||0), sign:-1, type:"transferOut", icon:"fa-truck-arrow-right", tone:"warn", section:t.fromSec||PC_NO_SEC,
         title:`تحويل صادر #${t.no||""} إلى ${pcBranchName(t.toBranch)} · ${t.toSec||""}${t.status==="مرسل"?" (بانتظار الاستلام)":""}`, by:t.sentBy||"", note:[t.note, dNote].filter(Boolean).join(" · "), lines});
-    if(toHere && got && start && Number(t.recvAtMs||0) >= start){
-      const rl = Array.isArray(t.recvLines) ? t.recvLines.map(x=>({...x, qty:Number(x.qty||0)})).filter(x=>x.qty) : lines;
+    if(toHere && toStore === store && got && start && Number(t.recvAtMs||0) >= start){
+      const rl0 = Array.isArray(t.recvLines) ? t.recvLines.map(x=>({...x, qty:Number(x.qty||0)})).filter(x=>x.qty) : lines;
+      const rl = toStore !== t.store ? rl0.map(x=>pcStoreItem(toStore, {...x, srcKind:t.store === "prod" ? "menu" : x.srcKind})) : rl0;
       if(rl.length) out.push({ms:Number(t.recvAtMs||0), sign:1, type:"transferIn", icon:"fa-truck-ramp-box", tone:diffs.length?"warn":"ok", section:t.toSec||PC_NO_SEC,
         title:`تحويل وارد #${t.no||""} من ${pcBranchName(t.fromBranch)} · ${t.fromSec||""}`, by:t.recvBy||"", note:[t.note, dNote].filter(Boolean).join(" · "), lines:rl});
     }
@@ -7700,7 +7723,8 @@ function pcStorePicked(store, text){
   }) || null;
 }
 function pcStoreLineFor(store, cat, qty){
-  return pcStoreItem(store, {itemId:cat.id, code:cat.code, name:pc17ItemName(cat), qty, unit:pcStoreCatUnit(store, cat)});
+  const semi = store === "raw" && pcIsSemi(cat);
+  return pcStoreItem(store, {itemId:cat.id, code:cat.code, name:pc17ItemName(cat), qty, unit:pcStoreCatUnit(semi ? "prod" : store, cat), ...(semi ? {srcKind:"menu"} : {})});
 }
 function pcStoreBookOf(store, key){
   return (pcStoreBalances(store, pcStoreSec).find(r=>r.key===key) || {qty:0}).qty;
@@ -7821,7 +7845,8 @@ function pcNorm(t){
 var PC_AC = {
   raw: ()=>pcStoreCatalog("raw"), prod: ()=>pcStoreCatalog("prod"),
   store: ()=>pcStoreCatalog(pcStoreCur),
-  wh: ()=>(pcRaw.warehouseItems||warehouseItems||[])
+  wh: ()=>(pcRaw.warehouseItems||warehouseItems||[]),
+  rawAll: ()=>[...(pcRaw.warehouseItems||warehouseItems||[]), ...pcSemiList()]
 };
 function pcAcLabel(c){ const nm = pc17ItemName(c) || c.nameAr || c.name || ""; return nm + (c.code ? " — " + c.code : ""); }
 function pcAcFind(src, text){
@@ -7850,7 +7875,7 @@ function pcAc(inp){
   const top = hits.slice(0, 30);
   if(!top.length){ box.innerHTML = q ? `<div class="pc128-none">لا يوجد صنف مطابق</div>` : ""; box.hidden = !q; return; }
   box.innerHTML = top.map(h=>`<button type="button" data-l="${escapeHtml(pcAcLabel(h.c))}" onmousedown="event.preventDefault()" onclick="pcAcPick(this)">
-    <b>${escapeHtml(pc17ItemName(h.c)||h.c.nameAr||h.c.name||"")}</b><small>${escapeHtml([h.c.code, pc70Unit(h.c.unit)||h.c.unit].filter(Boolean).join(" · "))}</small></button>`).join("")
+    <b>${escapeHtml(pc17ItemName(h.c)||h.c.nameAr||h.c.name||"")}</b><small>${pcIsSemi(h.c) ? `<em class="pc131-semi">نصف مصنّع</em> ` : ""}${escapeHtml([h.c.code, pc70Unit(h.c.unit)||h.c.unit].filter(Boolean).join(" · "))}</small></button>`).join("")
     + (hits.length > top.length ? `<div class="pc128-none">${hits.length - top.length} نتيجة أخرى — اكتب حروفًا أكثر</div>` : "");
   box.hidden = false;
 }
@@ -7884,12 +7909,14 @@ function pc127ConsumeOf(items, live){
     const mu = pc70Unit(m.unit) || "حبة";
     const c = pcStoreConv(Number(it.qty||0), pc70Unit(it.unit) || mu, mu);
     const n = c.ok ? c.q : Number(it.qty||0);
-    bom.forEach(b=>lines.push({itemId:b.itemId||"", code:b.code||"", name:b.name||"", unit:b.unit||"", qty:pc70R(Number(b.qty)*n), forItem:String(it.name||"")}));
+    bom.forEach(b=>lines.push({itemId:b.itemId||"", code:b.code||"", name:b.name||"", unit:b.unit||"", qty:pc70R(Number(b.qty)*n), forItem:String(it.name||""), ...(b.srcKind ? {srcKind:b.srcKind} : {})}));
   });
   return live ? {lines, missing} : lines;
 }
 
+var pc127BomSelf = "";
 function pc127BomCard(it){
+  pc127BomSelf = it.id || "";
   const bom = Array.isArray(it.bom) ? it.bom : [];
   const opts = (pcRaw.warehouseItems||warehouseItems||[]).map(w=>`<option value="${escapeHtml((w.nameAr||w.name||"") + (w.code ? " — " + w.code : ""))}"></option>`).join("");
   return `<div class="pc60-card pc127-bom">
@@ -7901,13 +7928,13 @@ function pc127BomCard(it){
 }
 function pc127WFind(text){
   const t = String(text||"").trim(); if(!t) return null;
-  return pcAcFind("wh", t) || (pcRaw.warehouseItems||warehouseItems||[]).find(w=>{ const nm = w.nameAr||w.name||""; return t === nm + (w.code ? " — " + w.code : "") || t === nm || (w.code && t === String(w.code)); }) || null;
+  return pcAcFind("rawAll", t) || (pcRaw.warehouseItems||warehouseItems||[]).find(w=>{ const nm = w.nameAr||w.name||""; return t === nm + (w.code ? " — " + w.code : "") || t === nm || (w.code && t === String(w.code)); }) || null;
 }
 function pc127BomRow(b){
-  const w = b && b.itemId ? (pcRaw.warehouseItems||warehouseItems||[]).find(x=>x.id===b.itemId) : null;
+  const w = b && b.itemId ? (b.srcKind === "menu" ? pcSemiList().find(x=>x.id===b.itemId) : (pcRaw.warehouseItems||warehouseItems||[]).find(x=>x.id===b.itemId)) : null;
   const label = w ? (w.nameAr||w.name||"") + (w.code ? " — " + w.code : "") : (b && b.name || "");
   return `<div class="pc127-row">
-    <div class="pc128-wrap">${pcAcInput("wh", "pc127-it", "اكتب حروفًا من اسم الخامة", label, "pc127BomUnit(this)")}</div>
+    <div class="pc128-wrap">${pcAcInput("rawAll", "pc127-it", "اكتب حروفًا من اسم الخامة", label, "pc127BomUnit(this)")}</div>
     <input class="pc127-q" type="text" inputmode="decimal" placeholder="الكمية" value="${b && b.qty ? pc60Num(b.qty) : ""}">
     <span class="pc127-u">${escapeHtml(w ? (pc70Unit(w.unit)||"") : (b && b.unit || ""))}</span>
     <button type="button" class="pc70-cart-x" onclick="this.parentNode.remove()" aria-label="حذف"><i class="fa-solid fa-xmark"></i></button>
@@ -7926,7 +7953,8 @@ function pc127BomRead(){
     const q = Number(qv.replace(",", "."));
     if(!isFinite(q) || q <= 0) return {error:`اكتب كمية صحيحة لـ ${w.nameAr||w.name}`};
     if(lines.some(x=>x.itemId===w.id)) return {error:`الخامة ${w.nameAr||w.name} مكررة`};
-    lines.push({itemId:w.id, code:w.code||"", name:w.nameAr||w.name||"", unit:pc70Unit(w.unit)||"", qty:pc70R(q)});
+    if(pcIsSemi(w) && w.id === pc127BomSelf) return {error:"لا يمكن أن يكون الصنف مكونًا لنفسه"};
+    lines.push({itemId:w.id, code:w.code||"", name:w.nameAr||w.name||"", unit:pc70Unit(w.unit)||(pcIsSemi(w)?"حبة":""), qty:pc70R(q), ...(pcIsSemi(w) ? {srcKind:"menu"} : {})});
   }
   return {lines};
 }
@@ -7953,7 +7981,7 @@ function pc127PendingHtml(sec){
   if(!inc.length && !outg.length && !dif.length) return "";
   const card = (t, dir)=>`<div class="pc127-t ${dir}">
       <div><b>${dir==="in" ? `وارد من ${escapeHtml(pcBranchName(t.fromBranch))} · ${escapeHtml(t.fromSec||"")}` : `صادر إلى ${escapeHtml(pcBranchName(t.toBranch))} · ${escapeHtml(t.toSec||"")}`}</b>
-        <small>#${escapeHtml(String(t.no||""))} · ${PC_STORES[t.store]?.short||""} · ${escapeHtml(t.sentBy||"")} · ${escapeHtml(new Date(Number(t.sentAtMs||0)).toLocaleString("ar-SA",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))}</small>
+        <small>#${escapeHtml(String(t.no||""))} · ${PC_STORES[t.store]?.short||""}${(t.toStore && t.toStore!==t.store) ? ` ← ${PC_STORES[t.toStore]?.short||""}` : ""} · ${escapeHtml(t.sentBy||"")} · ${escapeHtml(new Date(Number(t.sentAtMs||0)).toLocaleString("ar-SA",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))}</small>
         <small>${pc127Lines(t)}</small>${t.note?`<small>${pcNoteHtml(t.note)}</small>`:""}</div>
       <div class="pc127-acts">${dir==="in"
         ? `<button class="btn btn-main" data-id="${escapeHtml(t.id)}" onclick="pc127Receive(this.dataset.id,true)">استلام</button><button class="btn btn-light pc125-no" data-id="${escapeHtml(t.id)}" onclick="pc127Receive(this.dataset.id,false)">رفض</button>`
@@ -7998,18 +8026,19 @@ async function pc127Transfer(){
       <div><label class="pc94-lb">إلى الفرع</label><select id="pc127Br" class="pc93-name" onchange="document.getElementById('pc127Sec').innerHTML=pc127SecOpts(this.value,'${escapeHtml(pcStoreSec).replace(/'/g,"\\'")}')">${brs.map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===currentBranch?"selected":""}>${escapeHtml(b.name||"")}</option>`).join("")}</select></div>
       <div><label class="pc94-lb">إلى القسم</label><select id="pc127Sec" class="pc93-name">${pc127SecOpts(currentBranch, pcStoreSec)}</select></div>
     </div>
+    ${store === "prod" ? `<label class="pc94-lb">يدخل عند المستلم في</label><select id="pc127To" class="pc93-name"><option value="prod">مستودع الإنتاج (منتج تام)</option><option value="raw" ${pcSemiList().length?"":"disabled"}>مستودع الخام (نصف مصنّع يُستخدم في الإنتاج)</option></select>` : ""}
     <label class="pc94-lb">الأصناف (بوحدة الصنف)</label>
     <div class="pc127-row pc128-tr pc127-hd"><span>الصنف</span><span>الكمية</span><span>الوحدة</span><span>الرصيد</span><span></span></div>
     <div id="pc127TRows">${pc127LineRow(store)}</div>
     <button type="button" class="btn btn-light" onclick="document.getElementById('pc127TRows').insertAdjacentHTML('beforeend', pc127LineRow())"><i class="fa-solid fa-plus"></i> صنف آخر</button>
     ${pcByField("pc127By","اسم المرسل")}
     <label class="pc94-lb">ملاحظة (اختياري)</label><input id="pc127Note" class="pc93-name" maxlength="140">`,
-    actions:[{label:"إرسال التحويل", kind:"btn-main", value:h=>({br:h.querySelector("#pc127Br").value, sec:h.querySelector("#pc127Sec").value, by:h.querySelector("#pc127By").value.trim(), note:h.querySelector("#pc127Note").value.trim(),
+    actions:[{label:"إرسال التحويل", kind:"btn-main", value:h=>({to:h.querySelector("#pc127To")?.value || store, br:h.querySelector("#pc127Br").value, sec:h.querySelector("#pc127Sec").value, by:h.querySelector("#pc127By").value.trim(), note:h.querySelector("#pc127Note").value.trim(),
       rows:[...h.querySelectorAll("#pc127TRows .pc127-row")].map(r=>({t:r.querySelector(".pc127-it").value, q:r.querySelector(".pc127-q").value}))})},
       {label:"إلغاء", kind:"btn-light", value:null}]});
   if(!v) return;
   if(!v.sec){ showToast("اختر القسم المستلم","error"); return; }
-  if(v.br === currentBranch && v.sec === pcStoreSec){ showToast("لا يمكن التحويل لنفس القسم","error"); return; }
+  if(v.br === currentBranch && v.sec === pcStoreSec && v.to === store){ showToast("لا يمكن التحويل لنفس القسم","error"); return; }
   if(!v.by){ showToast("اكتب اسم المرسل","error"); return; }
   const lines = [], short = [];
   for(const r of v.rows){
@@ -8020,6 +8049,7 @@ async function pc127Transfer(){
     if(!isFinite(q) || q <= 0){ showToast(`اكتب كمية صحيحة لـ ${pc17ItemName(cat)}`,"error"); return; }
     const l = pcStoreLineFor(store, cat, q);
     if(lines.some(x=>x.key===l.key)){ showToast(`${l.name} مكرر`,"error"); return; }
+    if(store === "prod" && v.to === "raw" && !cat.asRaw){ showToast(`${l.name} غير مُعرّف كمادة خام — فعّل «يُستخدم كمادة خام» من إعدادات الصنف`,"error"); return; }
     const book = pcStoreBookOf(store, l.key);
     if(q > book) short.push(`${l.name} (الرصيد ${pc60Num(book)})`);
     lines.push(l);
@@ -8032,8 +8062,8 @@ async function pc127Transfer(){
     pcStoreSaveBy(v.by);
     const {db,addDoc,collection,serverTimestamp} = window.firebaseDB;
     const now = Date.now();
-    await addDoc(collection(db,"stock_transfers"), {no:String(now).slice(-6), store, fromBranch:currentBranch, fromSec:pcStoreSec === PC_NO_SEC ? "" : pcStoreSec,
-      toBranch:v.br, toSec:v.sec, lines:lines.map(l=>({key:l.key, itemId:l.itemId||"", code:l.code||"", name:l.name||"", unit:l.unit||"", qty:pc70R(l.qty)})),
+    await addDoc(collection(db,"stock_transfers"), {no:String(now).slice(-6), store, toStore:v.to || store, fromBranch:currentBranch, fromSec:pcStoreSec === PC_NO_SEC ? "" : pcStoreSec,
+      toBranch:v.br, toSec:v.sec, lines:lines.map(l=>({key:l.key, itemId:l.itemId||"", code:l.code||"", name:l.name||"", unit:l.unit||"", qty:pc70R(l.qty), ...(l.srcKind ? {srcKind:l.srcKind} : {})})),
       status:"مرسل", sentBy:v.by, sentAtMs:now, note:v.note, ...(g.geo ? {sentGeo:g.geo} : {}), createdAtMs:now, createdAt:serverTimestamp()});
     showToast(`تم إرسال التحويل إلى ${pcBranchName(v.br)} · ${v.sec} — بانتظار الاستلام`);
   }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
@@ -8058,7 +8088,8 @@ async function pc127Receive(id, ok){
   if(!t || t.status !== "مرسل"){ showToast("تم التعامل مع هذا التحويل","warn"); return; }
   if(t.toBranch !== currentBranch){ showToast("هذا التحويل ليس لهذا الفرع","error"); return; }
   const rows = (t.lines||[]).map((l, i)=>{
-    const bal = pcStoreBookOf(t.store, l.key);
+    const ts = t.toStore || t.store;
+    const bal = pcStoreBookOf(ts, ts !== t.store ? pcStoreItem(ts, {...l, srcKind:t.store === "prod" ? "menu" : l.srcKind}).key : l.key);
     return `<tr data-i="${i}" data-sent="${Number(l.qty||0)}">
       <td class="pc122-name"><b>${escapeHtml(l.name)}</b><small>${escapeHtml(l.unit||"")}</small></td>
       <td class="pc122-bal">${pc60Num(bal)}</td>

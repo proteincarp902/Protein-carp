@@ -5016,3 +5016,10 @@ div.pc112-line{cursor:default}
 .pc130-alert i{font-size:20px}
 .pc130-alert span{display:grid}
 .pc130-alert small{color:#8a2f28;font-size:12px}
+
+/* pc131 — semi-finished items used as raw */
+.pc131-chk{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.pc131-chk input{width:20px;height:20px;margin-top:2px;flex:none}
+.pc131-chk span{display:grid;gap:2px}
+.pc131-chk small{color:var(--app-muted);font-size:12px;font-weight:500;line-height:1.5}
+.pc131-semi{font-style:normal;font-size:10.5px;font-weight:800;color:#1D4ED8;background:#E8EFFE;border-radius:6px;padding:1px 5px}
