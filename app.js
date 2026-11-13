@@ -8208,7 +8208,7 @@ function pcStoreBackFromOrder(){
    Attendance is recorded by the employee from the branch's "الحضور" card; managers can correct it
    from settings, and every correction keeps who changed it and why. */
 var hrEmployees = [], hrAttendance = [], hrLeaves = [], hrDocs = [], stockTransfers = [];
-var PC_HR_ROLES = ["شيف","مساعد شيف","نظافة","كاشير","توصيل","مستودع","محاسب","إداري","أخرى"];
+var PC_HR_ROLES = ["شيف","مساعد شيف","نظافة","كاشير","توصيل","مستودع","محاسب","مدير مالي","مدخل بيانات","مبيعات","إداري","أخرى"];
 var PC_HR_STATUS = ["نشط","موقوف","منتهي الخدمة"];
 var PC_HR_LEAVE_TYPES = ["سنوية","مرضية","اضطرارية","بدون راتب","أخرى"];
 var PC_HR_DOC_TYPES = ["الشهادة الصحية","عقد العمل","رخصة القيادة","شهادة تدريب","أخرى"];
