@@ -4948,7 +4948,8 @@ function pc122ReqRow(i, bal){
   return `
     <tr class="pc122-r ${qty?"on":""} ${un?"un":""}" data-row="${id}">
       <td class="pc122-name"><b>${escapeHtml(pc60ItemName("req", i))}</b>
-        <small>${escapeHtml(unit)}${i.code?` • ${escapeHtml(i.code)}`:""}${un?` • <span class="pc90-tag">${e?.supplyRequested?"طلب توفير":"غير متوفر"}</span>`:""}</small></td>
+        ${(i.code||un)?`<small>${i.code?escapeHtml(i.code):""}${un?`${i.code?" • ":""}<span class="pc90-tag">${e?.supplyRequested?"طلب توفير":"غير متوفر"}</span>`:""}</small>`:""}</td>
+      <td class="pc122-unit">${escapeHtml(unit)}</td>
       <td class="pc122-bal ${bCls}">${bTxt}</td>
       <td class="pc122-qty"><input type="text" inputmode="decimal" placeholder="0" value="${qty?pc60Num(qty):""}"
         onfocus="pc122Focus(this,'${id}')" onchange="pc60SetQty('req','${id}',String(this.value).replace(',', '.'))" onkeydown="pc122Key(event,this)" aria-label="الكمية المطلوبة"></td>
@@ -4962,7 +4963,7 @@ function pc122Focus(inp, id){
 function pc122Key(ev, inp){
   if(ev.key !== "Enter") return;
   ev.preventDefault();
-  const all = [...document.querySelectorAll("#pc60List .pc122-qty input")];
+  const all = [...(inp.closest("table") || document).querySelectorAll(".pc122-qty input")];
   const nx = all[all.indexOf(inp) + 1];
   if(nx) nx.focus(); else inp.blur();
 }
@@ -4980,7 +4981,7 @@ function pc122ReqDraw(box, list, q, f){
     const groups = {};
     sorted.forEach(i=>{ const c = pc70Category("req", i) || "أخرى"; (groups[c] = groups[c] || []).push(i); });
     const names = Object.keys(groups).sort((a,b)=>a==="أخرى" ? 1 : b==="أخرى" ? -1 : a.localeCompare(b,"ar"));
-    body = names.map(c=>(names.length > 1 ? `<tr class="pc122-grp"><td colspan="3">${escapeHtml(c)} <small>${groups[c].length}</small></td></tr>` : "")
+    body = names.map(c=>(names.length > 1 ? `<tr class="pc122-grp"><td colspan="4">${escapeHtml(c)} <small>${groups[c].length}</small></td></tr>` : "")
       + groups[c].map(i=>pc122ReqRow(i, bal)).join("")).join("");
   }else{
     body = sorted.map(i=>pc122ReqRow(i, bal)).join("");
@@ -4988,7 +4989,7 @@ function pc122ReqDraw(box, list, q, f){
   box.innerHTML = `
     ${bal.on ? "" : `<p class="pc122-note"><i class="fa-solid fa-circle-info"></i> رصيد القسم يظهر بعد تفعيل متابعة المخزون للفرع من شاشة الأقسام.</p>`}
     <div class="pc122-wrap"><table class="pc122-t">
-      <thead><tr><th>الصنف</th><th>الرصيد بالقسم</th><th>الكمية المطلوبة</th></tr></thead>
+      <thead><tr><th>الصنف</th><th>الوحدة</th><th>الرصيد بالقسم</th><th>الكمية المطلوبة</th></tr></thead>
       <tbody>${body}</tbody>
     </table></div>`;
   pc60UpdateBar("req");
@@ -5283,26 +5284,21 @@ function pc60WDrawLines(){
   const n = document.getElementById("pc60WN");
   if(n) n.textContent = pc60W.lines.length ? `${pc60W.lines.length} ${pc60W.lines.length===1?"صنف":"أصناف"}` : "";
   if(!pc60W.lines.length){ box.innerHTML = `<p class="pc122-empty">لم تختر أي صنف بعد</p>`; return; }
-  box.innerHTML = `<div class="pc122-lines">${pc60W.lines.map((l, i)=>`
-    <div class="pc122-line">
-      <div class="pc122-lhead">
-        <div class="pc122-lname"><b>${escapeHtml(l.name)}</b><small>${l.store==="raw"?"مادة خام":"منتج جاهز"}${l.code?` • ${escapeHtml(l.code)}`:""}</small></div>
-        <button type="button" class="pc70-cart-x" onclick="pc60WDel(${i})" aria-label="حذف"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="pc122-lrow">
-        <div class="pc60-step">
-          <button type="button" class="minus" onclick="pc60WStep(${i},-1)" aria-label="إنقاص">−</button>
-          <input type="text" inputmode="decimal" value="${pc60Num(l.qty)}" onfocus="this.select()" onchange="pc60WSet(${i},this.value)" aria-label="الكمية">
-          <button type="button" class="plus" onclick="pc60WStep(${i},1)" aria-label="زيادة">+</button>
-        </div>
-        <span class="pc70-unit pc119-fixed">${escapeHtml(l.unit||"")}</span>
+  const gen = pc60W.reason ? "السبب: "+(pc60W.reason==="أخرى" ? (pc60W.custom||"أخرى") : pc60W.reason) : "اختر السبب";
+  box.innerHTML = `<div class="pc122-wrap"><table class="pc122-t pc122-wt">
+    <thead><tr><th>الصنف</th><th>الوحدة</th><th>الكمية</th><th aria-label="حذف"></th></tr></thead>
+    <tbody>${pc60W.lines.map((l, i)=>`
+    <tr class="pc122-r">
+      <td class="pc122-name"><b>${escapeHtml(l.name)}</b><small>${l.store==="raw"?"مادة خام":"منتج جاهز"}${l.code?` • ${escapeHtml(l.code)}`:""}</small>
         <select class="pc122-rsel" onchange="pc60WLineReason(${i},this.value)" aria-label="السبب">
-          <option value="" ${!l.reason?"selected":""}>${escapeHtml(pc60W.reason ? "السبب: "+(pc60W.reason==="أخرى" ? (pc60W.custom||"أخرى") : pc60W.reason) : "اختر السبب")}</option>
+          <option value="" ${!l.reason?"selected":""}>${escapeHtml(gen)}</option>
           ${PC60_WASTE_REASONS.map(r=>`<option value="${escapeHtml(r)}" ${l.reason===r?"selected":""}>${escapeHtml(r)}</option>`).join("")}
         </select>
-      </div>
-      ${l.reason==="أخرى" ? `<input class="pc60-custom pc122-lcustom" type="text" placeholder="اكتب سبب هذا الصنف" value="${escapeHtml(l.custom||"")}" oninput="pc60W.lines[${i}].custom=this.value;pc60WUpdateBar()">` : ""}
-    </div>`).join("")}</div>`;
+        ${l.reason==="أخرى" ? `<input class="pc60-custom pc122-lcustom" type="text" placeholder="اكتب سبب هذا الصنف" value="${escapeHtml(l.custom||"")}" oninput="pc60W.lines[${i}].custom=this.value;pc60WUpdateBar()">` : ""}</td>
+      <td class="pc122-unit">${escapeHtml(l.unit||"")}</td>
+      <td class="pc122-qty"><input type="text" inputmode="decimal" placeholder="0" value="${Number(l.qty)?pc60Num(l.qty):""}" onfocus="this.select()" onchange="pc60WSet(${i},String(this.value).replace(',', '.'))" onkeydown="pc122Key(event,this)" aria-label="الكمية"></td>
+      <td class="pc122-x"><button type="button" class="pc70-cart-x" onclick="pc60WDel(${i})" aria-label="حذف"><i class="fa-solid fa-xmark"></i></button></td>
+    </tr>`).join("")}</tbody></table></div>`;
 }
 
 function pc60WDel(i){ pc60W.lines.splice(i, 1); pc60WDrawList(); pc60WDrawLines(); pc60WUpdateBar(); }
