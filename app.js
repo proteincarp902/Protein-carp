@@ -535,7 +535,11 @@ function drawInternalDestinations(){
   `).join("") : `<div class="panel placeholder">لا توجد جهات صرف</div>`;
 }
 
-function renderSettingsPasswords(){settingsShell("passwords","الصلاحيات وكلمات المرور",`<div class="premium-form"><label>كلمة مرور الإدارة</label><input id="adminPasswordInput" type="password" placeholder="كلمة مرور الإدارة"><label>كلمة مرور المستودع</label><input id="warehousePasswordInput" type="password" placeholder="كلمة مرور المستودع"><button class="btn btn-main" onclick="savePasswords()">حفظ كلمات المرور</button></div>`);}
+function renderSettingsPasswords(){settingsShell("passwords","الصلاحيات وكلمات المرور",`<div class="premium-form"><label>كلمة مرور الإدارة</label><input id="adminPasswordInput" type="password" placeholder="كلمة مرور الإدارة"><label>كلمة مرور المستودع</label><input id="warehousePasswordInput" type="password" placeholder="كلمة مرور المستودع"><button class="btn btn-main" onclick="savePasswords()">حفظ كلمات المرور</button></div>
+  <div class="premium-form pc121-key"><h3>ترجمة الملاحظات تلقائيًا</h3>
+    <p class="pc85-hint">الملاحظات وأسباب الهدر ورسائل الدردشة تظهر بلغة القارئ. بدون مفتاح يظهر بجوارها زر «ترجم» يفتح Google Translate. مع مفتاح Google Cloud Translation تُترجم تلقائيًا. قيّد المفتاح من Google Cloud على عنوان الموقع وعلى Cloud Translation API فقط.</p>
+    <label>مفتاح Google Cloud Translation API</label><input id="pcTrKey" dir="ltr" autocomplete="off" placeholder="AIza..." value="${escapeHtml(systemSettings.translateKey||"")}">
+    <div class="pc114-row"><button class="btn btn-light" onclick="pcNoteKeyTest()">اختبار المفتاح</button><button class="btn btn-main" onclick="pcNoteKeySave()">حفظ المفتاح</button></div></div>`);}
 
 async function savePasswords(){
   const adminPassword=document.getElementById("adminPasswordInput").value.trim();
@@ -1127,7 +1131,7 @@ function buildProductionReport(source=productionLogs){
       <h3>${escapeHtml(log.section)} - ${escapeHtml(log.chefName)}</h3>
       <div class="meta">${escapeHtml(log.createdAtText||"")}</div>
       ${itemsTable(log.items, false)}
-      ${log.note ? `<div class="note"><b>ملاحظة:</b> ${escapeHtml(log.note)}</div>` : ""}
+      ${log.note ? `<div class="note"><b>ملاحظة:</b> ${pcNoteHtml(log.note)}</div>` : ""}
     </div>
   `).join("");
 }
@@ -1144,7 +1148,7 @@ function buildWasteReport(source=wasteLogs){
           <tr>
             <td>${escapeHtml(log.productName||"")}</td>
             <td>${escapeHtml(log.qty||"")}</td>
-            <td>${escapeHtml(log.reason||"")}</td>
+            <td>${pcNoteHtml(log.reason||"")}</td>
           </tr>
         </tbody>
       </table>
@@ -1163,7 +1167,7 @@ function buildOperationsReport(source=operationLogs){
           <tr><th>المسؤول</th><td>${escapeHtml(log.operatorName||"")}</td></tr>
           <tr><th>الوقت</th><td>${escapeHtml(log.createdAtText||log.completedAtText||"")}</td></tr>
           <tr><th>الحالة</th><td>${log.done ? "تم" : "لم يتم"}</td></tr>
-          ${log.note ? `<tr><th>الملاحظات</th><td>${escapeHtml(log.note)}</td></tr>` : ""}
+          ${log.note ? `<tr><th>الملاحظات</th><td>${pcNoteHtml(log.note)}</td></tr>` : ""}
         </tbody>
       </table>
     </div>
@@ -4552,7 +4556,7 @@ function pc60Timeline(){
   });
   pc17ChefWasteToday().forEach(l=>{
     rows.push({ms:getTimeValue(l), icon:"fa-trash-can", tone:"warn",
-      title:"سجّلت هدر", text:`${escapeHtml(l.productName||"")} × ${pc60Num(l.qty)} ${escapeHtml(l.unit||"")} — ${escapeHtml(l.reason||"")}`, time:pc60Time(l)});
+      title:"سجّلت هدر", text:`${escapeHtml(l.productName||"")} × ${pc60Num(l.qty)} ${escapeHtml(l.unit||"")} — ${pcNoteHtml(l.reason||"")}`, time:pc60Time(l)});
   });
   pc60ChefOrders().filter(o=>pc17DateKey(o)===key).forEach(o=>{
     rows.push({ms:getTimeValue(o), icon:"fa-cart-shopping", tone:o.status==="جاهز"?"ok":"info",
@@ -5101,7 +5105,7 @@ function drawLastProductionForChef(){
     <section class="pc60-last">
       <div class="pc60-last-head"><b><i class="fa-solid fa-circle-check"></i> آخر إنتاج مرفوع</b><small>${escapeHtml(log.createdAtText||"")}</small></div>
       <div class="pc60-last-items">${(log.items||[]).map(i=>`<span>${escapeHtml(i.name||"")} <b>${pc60Num(i.qty)} ${escapeHtml(i.unit||"")}</b></span>`).join("")}</div>
-      ${log.note ? `<p>${escapeHtml(log.note)}</p>` : ""}
+      ${log.note ? `<p>${pcNoteHtml(log.note)}</p>` : ""}
       <small>يبقى ظاهراً لـ ${formatRemaining(remaining)}</small>
     </section>`;
 }
@@ -5254,7 +5258,7 @@ function pc60WDrawToday(){
   box.innerHTML = list.length ? `<div class="pc60-timeline">${list.map(l=>`
       <div class="pc60-tl warn">
         <span class="pc60-tl-icon"><i class="fa-solid fa-trash-can"></i></span>
-        <div><b>${escapeHtml(l.productName||"")} × ${pc60Num(l.qty)} ${escapeHtml(l.unit||"")}</b><small>${escapeHtml(l.reason||"")}</small></div>
+        <div><b>${escapeHtml(l.productName||"")} × ${pc60Num(l.qty)} ${escapeHtml(l.unit||"")}</b><small>${pcNoteHtml(l.reason||"")}</small></div>
         <time>${pc60Time(l)}</time>
       </div>`).join("")}</div>` : pc60Empty("fa-circle-check","لا يوجد هدر مسجّل اليوم");
 }
@@ -5544,7 +5548,7 @@ function pc73Details(id){
   }).join("");
   pcSheet({
     title:`طلب #${o.orderId||""}`, icon:"fa-clipboard-list",
-    body:`${pc73Tracker(o)}<div class="pc73-list">${rows}</div>${o.note?`<p class="pc60-order-note">${escapeHtml(o.note)}</p>`:""}<small class="pc73-time">${escapeHtml(o.createdAtText||"")}</small>`,
+    body:`${pc73Tracker(o)}<div class="pc73-list">${rows}</div>${o.note?`<p class="pc60-order-note">${pcNoteHtml(o.note)}</p>`:""}<small class="pc73-time">${escapeHtml(o.createdAtText||"")}</small>`,
     actions:[{label:"إغلاق", kind:"btn-light", value:"x"}]
   });
 }
@@ -5646,8 +5650,8 @@ function pc74Page(kind){
         </summary>
         <div class="pc74-body">
           ${isProd ? (log.items||[]).map(i=>`<div class="pc73-row"><span>${escapeHtml(i.name||"")}</span><b>${pc60Num(i.qty)} ${escapeHtml(i.unit||"")}</b></div>`).join("")
-                   : `<div class="pc73-row"><span>${escapeHtml(log.productName||"")}</span><b>${pc60Num(log.qty)} ${escapeHtml(log.unit||"")}</b></div><p class="pc60-order-note">السبب: ${escapeHtml(log.reason||"")}</p>`}
-          ${log.note ? `<p class="pc60-order-note">${escapeHtml(log.note)}</p>` : ""}
+                   : `<div class="pc73-row"><span>${escapeHtml(log.productName||"")}</span><b>${pc60Num(log.qty)} ${escapeHtml(log.unit||"")}</b></div><p class="pc60-order-note">السبب: ${pcNoteHtml(log.reason||"")}</p>`}
+          ${log.note ? `<p class="pc60-order-note">${pcNoteHtml(log.note)}</p>` : ""}
           ${adminActionMenu(isProd?'production_logs':'waste_logs',log.id,isProd?`printProductionLog('${log.id}')`:`printWasteLog('${log.id}')`,!!log.printed,isProd?'renderAdminProduction':'renderAdminWaste')}
         </div>
       </details>`).join("") + (logs.length>pc74Lim[kind] ? `<button type="button" class="pc60-more-btn" onclick="pc74Lim['${kind}']+=60;${kind==="prod"?"drawProductionAdmin":"drawWasteAdmin"}()">عرض المزيد (${logs.length-pc74Lim[kind]})</button>` : "") : pc60Empty("fa-chart-simple","لا توجد بيانات في هذه الفترة")}`;
@@ -5980,6 +5984,7 @@ function pcApplyLang(root){
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {acceptNode:n=>{
       const p = n.parentNode; if(!p) return NodeFilter.FILTER_REJECT;
       const tag = p.nodeName; if(tag==="SCRIPT"||tag==="STYLE"||tag==="TEXTAREA") return NodeFilter.FILTER_REJECT;
+      if(p.closest && p.closest(".pcN")) return NodeFilter.FILTER_REJECT;   /* free-text notes have their own translation */
       return NodeFilter.FILTER_ACCEPT;
     }});
     let n;
@@ -6032,6 +6037,7 @@ function pcSetLang(l){
   pcSetDir();
   if(pcLang !== "ar") pcApplyLang();
   document.querySelectorAll(".pc76-lang").forEach(b=>{ b.textContent = PC_LANGS[pcLang].short; });
+  if(typeof pcNotesApply === "function") pcNotesApply();
 }
 /* Choose the language: Arabic, English or Urdu. Kept per device. */
 async function pcToggleLang(){
@@ -6139,7 +6145,7 @@ function pc80DrawBanner(){
   pc80BannerSig = sig;
   if(!el){ el = document.createElement("div"); el.id = "pc80Banner"; document.body.appendChild(el); }
   el.innerHTML = `<span class="pc80-bc-ico"><i class="fa-solid fa-bullhorn"></i></span>
-    <div><b>${escapeHtml(m.text)}</b>${left ? `<small>${left}</small>` : ""}</div>
+    <div><b>${pcNoteHtml(m.text)}</b>${left ? `<small>${left}</small>` : ""}</div>
     <button type="button" aria-label="إغلاق" onclick="pc80Dismiss()"><i class="fa-solid fa-xmark"></i></button>`;
 }
 function pc80Dismiss(){
@@ -6498,7 +6504,7 @@ function pc85ReviewHtml(o){
   return `<div class="pc85-review ${bad.length?"bad":"ok"}">
     <b>${bad.length ? `الشيف أبلغ عن نقص في ${bad.length} ${bad.length===1?"صنف":"أصناف"}` : "الشيف أكّد استلام كل الأصناف"}</b>
     ${bad.length ? `<ul>${bad.map(x=>`<li>${escapeHtml(x.name||"")}</li>`).join("")}</ul>` : ""}
-    ${r.note ? `<p>${escapeHtml(r.note)}</p>` : ""}
+    ${r.note ? `<p>${pcNoteHtml(r.note)}</p>` : ""}
   </div>`;
 }
 
@@ -6842,7 +6848,7 @@ function pc93Draw(){
     const head = !mine && prev !== m.senderId;
     html += `<div class="pc93-msg ${mine?"me":""}">
       ${head ? `<small>${escapeHtml(m.name||"")}${m.section?` <i>${escapeHtml(m.section)}</i>`:""}</small>` : ""}
-      <p>${escapeHtml(m.text).replace(/\n/g,"<br>")}<time>${pc93Time(ms)}</time></p></div>`;
+      <p>${pcNoteHtml(m.text)}<time>${pc93Time(ms)}</time></p></div>`;
     prev = m.senderId;
   });
   box.innerHTML = html || `<div class="pc93-empty"><i class="fa-solid fa-comments"></i><span>لا توجد رسائل بعد</span></div>`;
@@ -7374,7 +7380,7 @@ function pcStoreMovHtml(){
           const v = m.type === "count" ? `${l.qty>=0?"+":""}${pc60Num(l.qty)}` : `${m.sign<0?"−":"+"}${pc60Num(l.qty)}`;
           return `${escapeHtml(l.name)} ${v} ${escapeHtml(l.unit||"")}${m.type==="count"?` (دفتري ${pc60Num(l.book)} ← فعلي ${pc60Num(l.actual)})`:""}`;
         }).join("، ")}</small>
-        ${m.note?`<small class="pc100-note">${escapeHtml(m.note)}</small>`:""}</div>
+        ${m.note?`<small class="pc100-note">${pcNoteHtml(m.note)}</small>`:""}</div>
       <time>${escapeHtml(new Date(m.ms).toLocaleString("ar-SA",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))}</time>
     </div>`).join("")}</div>`;
 }
@@ -7966,7 +7972,7 @@ async function pcHrFixAtt(recId){
   if(!a) return;
   const t = ms=>{ if(!ms) return ""; const d = new Date(ms); return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
   const v = await pcSheet({title:`تصحيح حضور ${a.name||""}`, icon:"fa-user-clock", body:`
-    <p class="pc85-hint">${pcHrDateText(a.day)}${a.editedBy ? ` · آخر تعديل: ${escapeHtml(a.editedBy)} — ${escapeHtml(a.editReason||"")}` : ""}</p>
+    <p class="pc85-hint">${pcHrDateText(a.day)}${a.editedBy ? ` · آخر تعديل: ${escapeHtml(a.editedBy)} — ${pcNoteHtml(a.editReason||"")}` : ""}</p>
     <div class="pc102-shift"><div><label class="pc94-lb">الحضور</label><input id="hrfIn" class="pc93-name" type="time" value="${t(a.inMs)}"></div>
       <div><label class="pc94-lb">الانصراف</label><input id="hrfOut" class="pc93-name" type="time" value="${t(a.outMs)}"></div></div>
     <label class="pc94-lb">سبب التصحيح (مطلوب)</label><input id="hrfWhy" class="pc93-name" maxlength="120">
@@ -8015,7 +8021,7 @@ function pcHrDrawLeaves(){
   box.innerHTML = list.length ? `<div class="pc103-emps">${list.map(l=>`
     <div class="pc103-leave">
       <div><b>${escapeHtml(l.name||"")}</b> · <span>${escapeHtml(l.type)}</span> · <span>${l.days} يوم</span>
-        <small>${pcHrDateText(l.from)} ← ${pcHrDateText(l.to)}${l.note?` · ${escapeHtml(l.note)}`:""}${l.decidedBy?` · ${escapeHtml(l.status)} بواسطة ${escapeHtml(l.decidedBy)}`:""}</small></div>
+        <small>${pcHrDateText(l.from)} ← ${pcHrDateText(l.to)}${l.note?` · ${pcNoteHtml(l.note)}`:""}${l.decidedBy?` · ${escapeHtml(l.status)} بواسطة ${escapeHtml(l.decidedBy)}`:""}</small></div>
       ${l.status==="معلقة" ? `<span class="pc103-acts"><button class="mini-btn" data-id="${escapeHtml(l.id)}" onclick="pcHrDecideLeave(this.dataset.id,'معتمدة')">اعتماد</button><button class="mini-danger" data-id="${escapeHtml(l.id)}" onclick="pcHrDecideLeave(this.dataset.id,'مرفوضة')">رفض</button></span>`
         : `<em class="pc103-tag ${l.status==="معتمدة"?"ok":"muted"}">${escapeHtml(l.status)}</em>`}
     </div>`).join("")}</div>` : `<div class="placeholder">لا توجد طلبات ${pcHrLeaveFilter==="الكل"?"":pcHrLeaveFilter}</div>`;
@@ -8112,7 +8118,7 @@ function pcHrDrawDocs(){
   box.innerHTML = list.length ? `<div class="pc103-emps">${list.map(x=>`
     <div class="pc103-leave">
       <div><b>${escapeHtml(x.e.name)}</b> · <span>${escapeHtml(x.d.type)}</span>
-        <small>${x.d.expiry ? `ينتهي ${pcHrDateText(x.d.expiry)}` : ""}${x.d.note?` · ${escapeHtml(x.d.note)}`:""}</small></div>
+        <small>${x.d.expiry ? `ينتهي ${pcHrDateText(x.d.expiry)}` : ""}${x.d.note?` · ${pcNoteHtml(x.d.note)}`:""}</small></div>
       <span class="pc103-acts"><em class="pc103-tag ${x.s.tone}">${x.s.t}</em>
         ${x.d.hasFile ? `<button class="mini-btn" data-id="${escapeHtml(x.d.id)}" onclick="pcHrViewDocFile(this.dataset.id)"><i class="fa-solid fa-paperclip"></i> عرض</button>` : `<em class="pc103-tag muted">بدون صورة</em>`}
         <button class="mini-btn" data-id="${escapeHtml(x.d.id)}" onclick="pcHrAddDoc(this.dataset.id)">تعديل</button>
@@ -8741,9 +8747,9 @@ function pcOrdDraw(force){
       }).join("")}
     </div>
 
-    ${o.note ? `<p class="pc106-note"><b>ملاحظة الطلب:</b> ${escapeHtml(o.note)}</p>` : ""}
-    ${o.issueNote ? `<p class="pc106-note"><b>ملاحظة المستودع:</b> ${escapeHtml(o.issueNote)}</p>` : ""}
-    ${rv.note ? `<p class="pc106-note"><b>ملاحظة الاستلام:</b> ${escapeHtml(rv.note)}</p>` : ""}
+    ${o.note ? `<p class="pc106-note"><b>ملاحظة الطلب:</b> ${pcNoteHtml(o.note)}</p>` : ""}
+    ${o.issueNote ? `<p class="pc106-note"><b>ملاحظة المستودع:</b> ${pcNoteHtml(o.issueNote)}</p>` : ""}
+    ${rv.note ? `<p class="pc106-note"><b>ملاحظة الاستلام:</b> ${pcNoteHtml(rv.note)}</p>` : ""}
 
     ${canDeliver ? `
       <label class="pc94-lb" for="pcOrdNote">ملاحظة للشيف (اختياري)</label><textarea id="pcOrdNote" class="pc70-cartnote" maxlength="200"></textarea>
@@ -9204,6 +9210,113 @@ function pcGeoPreview(){
   else if(st && p && !/تم/.test(st.textContent)) st.textContent = `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`;
 }
 
+/* =========================== Free-text notes in the reader's language =========================== *
+ * Notes, reasons and chat messages are written by people in their own language. They are marked with
+ * pcNoteHtml() and shown in the reader's language: a dictionary phrase is translated directly; other text
+ * is translated by Google Cloud Translation when a key is set in settings (cached on the device), otherwise
+ * a «Translate» button opens Google Translate. The original is always kept and shown under the translation. */
+var PC_NOTE_BTN = {ar:"ترجم", en:"Translate", ur:"ترجمہ", bn:"অনুবাদ"};
+var PC_NOTE_ORIG = {ar:"الأصل", en:"Original", ur:"اصل", bn:"মূল"};
+var pcNoteCache = (function(){ try{ return JSON.parse(localStorage.getItem("pcNoteTr") || "{}") || {}; }catch(e){ return {}; } })();
+var pcNoteQueue = new Map(), pcNoteTimer = null, pcNoteBusy = false, pcNoteOff = false;
+function pcNoteHtml(t){
+  t = String(t ?? "");
+  if(!t.trim()) return escapeHtml(t);
+  return `<span class="pcN" data-n="${escapeHtml(t)}">${escapeHtml(t)}</span>`;
+}
+function pcNoteLang(t){
+  if(/[ঀ-৿]/.test(t)) return "bn";
+  if(/[ٹڈڑںےۓھکگپچژ]/.test(t)) return "ur";
+  if(/[؀-ۿ]/.test(t)) return "ar";
+  if(/[a-z]/i.test(t)) return "en";
+  return "";
+}
+function pcNoteKey(l, t){ return l + "|" + t; }
+function pcNoteSave(){
+  try{
+    const k = Object.keys(pcNoteCache);
+    if(k.length > 800) k.slice(0, k.length - 800).forEach(x=>delete pcNoteCache[x]);
+    localStorage.setItem("pcNoteTr", JSON.stringify(pcNoteCache));
+  }catch(e){}
+}
+function pcNoteRender(el){
+  const o = el.dataset.n || "", L = pcLang, src = pcNoteLang(o);
+  const state = L + "|" + (pcNoteCache[pcNoteKey(L, o)] ? "t" : "") + "|" + (pcNoteOff ? "x" : "");
+  if(el.dataset.s === state) return;
+  el.dataset.s = state;
+  if(!src || src === L){ el.innerHTML = escapeHtml(o); return; }
+  if(L !== "ar"){
+    if(!pcTrRegex || pcTrSig !== pcTrDynSig()) pcTrBuild();
+    const d = pcTrAll[o.trim()];
+    if(d){ el.innerHTML = escapeHtml(d); return; }
+  }
+  const tr = pcNoteCache[pcNoteKey(L, o)];
+  if(tr){ el.innerHTML = `<span class="pcN-t">${escapeHtml(tr)}</span><small class="pcN-o"><i class="fa-solid fa-language"></i> ${PC_NOTE_ORIG[L]}: ${escapeHtml(o)}</small>`; return; }
+  const key = String(systemSettings.translateKey || "").trim();
+  if(key && !pcNoteOff){
+    el.innerHTML = `${escapeHtml(o)} <i class="fa-solid fa-language pcN-wait"></i>`;
+    const q = pcNoteQueue.get(L) || new Set(); q.add(o); pcNoteQueue.set(L, q);
+    clearTimeout(pcNoteTimer); pcNoteTimer = setTimeout(pcNoteFetch, 250);
+    return;
+  }
+  const url = `https://translate.google.com/?sl=auto&tl=${L}&op=translate&text=${encodeURIComponent(o)}`;
+  el.innerHTML = `${escapeHtml(o)} <a class="pcN-btn" href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="fa-solid fa-language"></i> ${PC_NOTE_BTN[L]}</a>`;
+}
+async function pcNoteFetch(){
+  if(pcNoteBusy) return;
+  const key = String(systemSettings.translateKey || "").trim();
+  if(!key || pcNoteOff){ pcNoteQueue.clear(); pcNotesApply(); return; }
+  pcNoteBusy = true;
+  try{
+    for(const [L, set] of [...pcNoteQueue.entries()]){
+      pcNoteQueue.delete(L);
+      const all = [...set].filter(t=>!pcNoteCache[pcNoteKey(L, t)]);
+      for(let i = 0; i < all.length; i += 100){
+        const q = all.slice(i, i + 100);
+        const r = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(key)}`, {
+          method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({q, target:L, format:"text"})});
+        if(!r.ok){ console.warn("translate", r.status); pcNoteOff = true; break; }
+        const j = await r.json();
+        (j.data?.translations || []).forEach((t, k)=>{ if(t && t.translatedText) pcNoteCache[pcNoteKey(L, q[k])] = t.translatedText; });
+      }
+    }
+    pcNoteSave();
+  }catch(err){ console.warn("translate", err); pcNoteOff = true; }
+  pcNoteBusy = false;
+  pcNotesApply();
+}
+function pcNotesApply(){ document.querySelectorAll(".pcN").forEach(pcNoteRender); }
+(function(){
+  let t = null;
+  const go = ()=>{ t = null; pcNotesApply(); };
+  const start = ()=>new MutationObserver(m=>{
+    if(m.every(x=>x.target.closest && x.target.closest(".pcN"))) return;   /* our own updates */
+    if(!t) t = setTimeout(go, 120);
+  }).observe(document.body, {childList:true, subtree:true});
+  if(document.body) start(); else document.addEventListener("DOMContentLoaded", start);
+})();
+
+/* Settings: Google Cloud Translation key for automatic note translation. */
+async function pcNoteKeySave(){
+  const v = (document.getElementById("pcTrKey")?.value || "").trim();
+  const {db,doc,setDoc} = window.firebaseDB;
+  try{
+    await setDoc(doc(db,"settings","system"), {translateKey:v}, {merge:true});
+    systemSettings.translateKey = v; pcNoteOff = false;
+    showToast(v ? "تم حفظ مفتاح الترجمة" : "تم إيقاف الترجمة التلقائية");
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+}
+async function pcNoteKeyTest(){
+  const v = (document.getElementById("pcTrKey")?.value || "").trim();
+  if(!v){ showToast("اكتب المفتاح أولًا","error"); return; }
+  try{
+    const r = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(v)}`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({q:["الطلب ناقص كيلو بصل"], target:"bn", format:"text"})});
+    const j = await r.json().catch(()=>({}));
+    if(r.ok) showToast(`المفتاح يعمل: ${j.data?.translations?.[0]?.translatedText || ""}`);
+    else showToast(`المفتاح لا يعمل (${r.status}) ${j.error?.message || ""}`, "error");
+  }catch(err){ showToast("تعذر الاتصال بخدمة الترجمة","error"); }
+}
+
 /* =========================== Permissions =========================== *
  * Each employee file holds a list of permission keys (perms) and the template it started from (permTpl).
  * A system admin has everything. Permissions are granted and changed only by a system admin (or, while
@@ -9557,13 +9670,13 @@ function accSupPageHtml(id){
     ${rows.length ? `<div class="premium-table-wrap"><table class="premium-table pc112-table"><thead><tr><th>التاريخ</th><th>البيان</th><th>المرجع</th><th>مدين</th><th>دائن</th><th>الرصيد</th><th></th></tr></thead><tbody>
       ${rows.map(r=>`<tr class="${r.voided?"void":""}">
         <td>${escapeHtml(r.date||"")}</td>
-        <td>${escapeHtml(r.label)}${r.branch?`<br><small>${escapeHtml(r.branch)}</small>`:""}${r.voided?`<br><small class="pc112-vr">ملغي: ${escapeHtml(r.voidReason||"")} — ${escapeHtml(r.voidBy||"")}</small>`:""}${r.by?`<br><small>${escapeHtml(r.by)}</small>`:""}</td>
+        <td>${escapeHtml(r.label)}${r.branch?`<br><small>${escapeHtml(r.branch)}</small>`:""}${r.voided?`<br><small class="pc112-vr">ملغي: ${pcNoteHtml(r.voidReason||"")} — ${escapeHtml(r.voidBy||"")}</small>`:""}${r.by?`<br><small>${escapeHtml(r.by)}</small>`:""}</td>
         <td>${escapeHtml(r.ref||"")}</td>
         <td>${r.debit ? accFmt(r.debit) : ""}</td><td>${r.credit ? accFmt(r.credit) : ""}</td>
         <td>${r.voided ? "" : accFmt(r.bal)}</td>
         <td>${r.id && !r.voided && accCan("void") ? `<button class="mini-danger" data-id="${escapeHtml(r.id)}" onclick="accVoid('acc_supplier_tx',this.dataset.id)">إلغاء</button>` : ""}</td>
       </tr>`).join("")}</tbody></table></div>` : `<p class="pc85-hint">لا توجد حركات بعد</p>`}
-    ${s.notes ? `<p class="pc106-note"><b>ملاحظات:</b> ${escapeHtml(s.notes)}</p>` : ""}`;
+    ${s.notes ? `<p class="pc106-note"><b>ملاحظات:</b> ${pcNoteHtml(s.notes)}</p>` : ""}`;
 }
 /* Statement from the company's side: bills credit the supplier, payments and credit notes debit it. */
 function accStatement(s){
@@ -9749,7 +9862,7 @@ function accSalesHtml(){
       </tbody></table></div>` : ""}
     <h3 class="pc103-h">التسجيلات اليومية</h3>
     ${rows.length ? `<div class="premium-table-wrap"><table class="premium-table pc112-table"><thead><tr><th>التاريخ</th><th>الفرع</th><th>القناة</th><th>قبل الضريبة</th><th>الضريبة</th><th>الإجمالي</th><th>نقدي</th><th>شبكة</th><th>أخرى</th><th>المسجِّل</th><th></th></tr></thead><tbody>
-      ${rows.map(x=>`<tr class="${x.voided?"void":""}"><td>${escapeHtml(x.date)}</td><td>${escapeHtml(accBranchLabel(x.branchId))}</td><td>${escapeHtml(x.channel)}${x.note?`<br><small>${escapeHtml(x.note)}</small>`:""}${x.voided?`<br><small class="pc112-vr">ملغي: ${escapeHtml(x.voidReason||"")} — ${escapeHtml(x.voidBy||"")}</small>`:""}</td>
+      ${rows.map(x=>`<tr class="${x.voided?"void":""}"><td>${escapeHtml(x.date)}</td><td>${escapeHtml(accBranchLabel(x.branchId))}</td><td>${escapeHtml(x.channel)}${x.note?`<br><small>${pcNoteHtml(x.note)}</small>`:""}${x.voided?`<br><small class="pc112-vr">ملغي: ${pcNoteHtml(x.voidReason||"")} — ${escapeHtml(x.voidBy||"")}</small>`:""}</td>
         <td>${accFmt(x.net)}</td><td>${accFmt(x.vat)}</td><td><b>${accFmt(x.total)}</b></td><td>${accFmt(x.cash)}</td><td>${accFmt(x.card)}</td><td>${accFmt(x.other)}</td><td>${escapeHtml(x.by||"")}</td>
         <td>${x.voided || !accCan("void") ? "" : `<button class="mini-danger" data-id="${escapeHtml(x.id)}" onclick="accVoid('acc_sales',this.dataset.id)">إلغاء</button>`}</td></tr>`).join("")}
       </tbody></table></div>` : pc60Empty("fa-cash-register", "لا توجد مبيعات مسجلة لهذا الشهر")}`;

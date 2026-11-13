@@ -310,3 +310,11 @@
 د	m	منٹ
 الاسم بالبنغالي	Bengali name	بنگالی نام
 الاسم بالبنغالي (اختياري	Bengali name (optional	بنگالی نام (اختیاری
+ترجمة الملاحظات تلقائيًا	Automatic note translation	نوٹس کا خودکار ترجمہ
+مفتاح Google Cloud Translation API	Google Cloud Translation API key	Google Cloud Translation API کلید
+اختبار المفتاح	Test key	کلید جانچیں
+حفظ المفتاح	Save key	کلید محفوظ کریں
+تم حفظ مفتاح الترجمة	Translation key saved	ترجمے کی کلید محفوظ ہو گئی
+تم إيقاف الترجمة التلقائية	Automatic translation turned off	خودکار ترجمہ بند ہو گیا
+اكتب المفتاح أولًا	Enter the key first	پہلے کلید لکھیں
+تعذر الاتصال بخدمة الترجمة	Could not reach the translation service	ترجمہ سروس سے رابطہ نہیں ہو سکا

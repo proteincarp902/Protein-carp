@@ -4807,3 +4807,11 @@ div.pc112-line{cursor:default}
 .pc120-l{border:1px solid var(--app-line);background:var(--app-surface);border-radius:14px;padding:14px;font:inherit;font-size:16px;font-weight:800;cursor:pointer;color:var(--app-ink)}
 .pc120-l.on{border-color:var(--app-brand);background:#F3FAEE;color:var(--app-brand)}
 .pc-ur{line-height:1.75}
+
+/* ===== pc121 translated notes ===== */
+.pcN-t{display:inline}
+.pcN-o{display:block;font-size:11px;opacity:.7;margin-top:2px;font-weight:500}
+.pcN-btn{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:800;color:#1D4ED8;background:#EEF4FF;border-radius:999px;padding:1px 8px;text-decoration:none;vertical-align:middle;white-space:nowrap}
+.pcN-wait{font-size:11px;opacity:.5}
+.pc121-key{margin-top:14px}
+.pc121-key h3{margin:0 0 6px;font-size:15px}
