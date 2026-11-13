@@ -7647,6 +7647,9 @@ async function pcStoreActivate(){
 }
 
 function pcStoreItemPicker(store){
+  return `<div class="pc128-wrap">${pcAcInput(store, "pc93-name", "اكتب حرفين أو أكثر من اسم الصنف أو الكود", "").replace('class="pc93-name"', 'id="pc100Item" class="pc93-name"')}</div>`;
+}
+function pcStoreItemPickerOld(store){
   const opts = pcStoreCatalog(store).map(c=>{
     const nm = pc17ItemName(c);
     return `<option value="${escapeHtml(nm + (c.code ? " — " + c.code : ""))}"></option>`;
@@ -7657,6 +7660,7 @@ function pcStoreItemPicker(store){
 function pcStorePicked(store, text){
   const t = String(text||"").trim();
   if(!t) return null;
+  const hit = pcAcFind(store, t); if(hit) return hit;
   return pcStoreCatalog(store).find(c=>{
     const nm = pc17ItemName(c);
     return t === nm + (c.code ? " — " + c.code : "") || t === nm || (c.code && t === String(c.code));
@@ -7755,6 +7759,61 @@ async function pcStoreSave(rec, okMsg){
   finally{ pc60Busy = false; pcDrawStore(); }
 }
 
+/* ===== Item autocomplete: type a few letters (anywhere in the name, code or English name) =====
+ * Arabic letters are normalised (أ إ آ → ا، ة → ه، ى → ي، tashkeel removed) and every typed word must
+ * appear, so "رز بس" finds "أرز بسمتي". The picked label is "name — code", which the pickers resolve. */
+function pcNorm(t){
+  return String(t||"").toLowerCase().replace(/[ً-ْـ]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ة/g,"ه").replace(/ى/g,"ي").replace(/ؤ/g,"و").replace(/ئ/g,"ي").replace(/\s+/g," ").trim();
+}
+var PC_AC = {
+  raw: ()=>pcStoreCatalog("raw"), prod: ()=>pcStoreCatalog("prod"),
+  store: ()=>pcStoreCatalog(pcStoreCur),
+  wh: ()=>(pcRaw.warehouseItems||warehouseItems||[])
+};
+function pcAcLabel(c){ const nm = pc17ItemName(c) || c.nameAr || c.name || ""; return nm + (c.code ? " — " + c.code : ""); }
+function pcAcFind(src, text){
+  const t = String(text||"").trim(); if(!t) return null;
+  const list = (PC_AC[src] || PC_AC.store)();
+  return list.find(c=>pcAcLabel(c) === t) || list.find(c=>(pc17ItemName(c)||c.nameAr||c.name) === t) || list.find(c=>c.code && String(c.code) === t) || null;
+}
+function pcAc(inp){
+  const src = inp.dataset.ac || "store";
+  if(!inp.dataset.acid){ inp.dataset.acid = "a" + Math.random().toString(36).slice(2,8); }
+  let box = document.querySelector(`.pc128-dd[data-for="${inp.dataset.acid}"]`);
+  if(!box){ box = document.createElement("div"); box.className = "pc128-dd"; box.dataset.for = inp.dataset.acid; inp.insertAdjacentElement("afterend", box); }
+  const q = pcNorm(inp.value);
+  const words = q.split(" ").filter(Boolean);
+  const list = (PC_AC[src] || PC_AC.store)();
+  const hits = [];
+  for(const c of list){
+    const hay = pcNorm([pc17ItemName(c), c.nameAr, c.name, c.nameEn, c.code].filter(Boolean).join(" "));
+    if(words.every(w=>hay.includes(w))){
+      const nm = pcNorm(pc17ItemName(c)||c.nameAr||c.name);
+      hits.push({c, score:(q && nm.startsWith(q)) ? 0 : (q && nm.includes(q) ? 1 : 2)});
+      if(hits.length > 400) break;
+    }
+  }
+  hits.sort((a,b)=>a.score-b.score || String(pc17ItemName(a.c)).localeCompare(String(pc17ItemName(b.c)),"ar"));
+  const top = hits.slice(0, 30);
+  if(!top.length){ box.innerHTML = q ? `<div class="pc128-none">لا يوجد صنف مطابق</div>` : ""; box.hidden = !q; return; }
+  box.innerHTML = top.map(h=>`<button type="button" data-l="${escapeHtml(pcAcLabel(h.c))}" onmousedown="event.preventDefault()" onclick="pcAcPick(this)">
+    <b>${escapeHtml(pc17ItemName(h.c)||h.c.nameAr||h.c.name||"")}</b><small>${escapeHtml([h.c.code, pc70Unit(h.c.unit)||h.c.unit].filter(Boolean).join(" · "))}</small></button>`).join("")
+    + (hits.length > top.length ? `<div class="pc128-none">${hits.length - top.length} نتيجة أخرى — اكتب حروفًا أكثر</div>` : "");
+  box.hidden = false;
+}
+function pcAcPick(btn){
+  const box = btn.closest(".pc128-dd");
+  const inp = document.querySelector(`[data-acid="${box.dataset.for}"]`);
+  if(inp){ inp.value = btn.dataset.l; inp.dispatchEvent(new Event("change", {bubbles:true})); }
+  box.hidden = true; box.innerHTML = "";
+  const next = inp && inp.closest(".pc127-row")?.querySelector(".pc127-q") || (inp && document.getElementById("pc100Qty"));
+  if(next) next.focus();
+}
+function pcAcBlur(inp){ setTimeout(()=>{ const box = document.querySelector(`.pc128-dd[data-for="${inp.dataset.acid}"]`); if(box){ box.hidden = true; } }, 180); }
+function pcAcInput(src, cls, ph, val, onchange){
+  return `<input class="${cls}" data-ac="${src}" placeholder="${ph}" value="${escapeHtml(val||"")}" autocomplete="off" oninput="pcAc(this)" onfocus="pcAc(this)" onblur="pcAcBlur(this)" ${onchange?`onchange="${onchange}"`:""}>`;
+}
+
 /* =========================== Recipes (BOM) & transfers ===========================
  * Recipe: a production item lists its raw components per ONE unit of the product (in each raw item's
  * unit). Producing N units draws N × component from the same section's raw store. The draw is
@@ -7782,7 +7841,6 @@ function pc127BomCard(it){
   const opts = (pcRaw.warehouseItems||warehouseItems||[]).map(w=>`<option value="${escapeHtml((w.nameAr||w.name||"") + (w.code ? " — " + w.code : ""))}"></option>`).join("");
   return `<div class="pc60-card pc127-bom">
     <label>مكونات الصنف (الخامات) <small>— لكل 1 ${escapeHtml(pc70Unit(it.unit)||"حبة")} من المنتج، تُخصم من مستودع خام القسم عند تسجيل الإنتاج</small></label>
-    <datalist id="pc127WList">${opts}</datalist>
     <div id="pc127Rows">${bom.map(b=>pc127BomRow(b)).join("")}</div>
     <button type="button" class="btn btn-light" onclick="pc127BomAdd()"><i class="fa-solid fa-plus"></i> إضافة مكوّن</button>
     ${bom.length ? "" : `<p class="pc85-hint">بدون مكونات لن يُخصم أي خام عند إنتاج هذا الصنف، ويظهر تنبيه في مستودع خام القسم.</p>`}
@@ -7790,20 +7848,20 @@ function pc127BomCard(it){
 }
 function pc127WFind(text){
   const t = String(text||"").trim(); if(!t) return null;
-  return (pcRaw.warehouseItems||warehouseItems||[]).find(w=>{ const nm = w.nameAr||w.name||""; return t === nm + (w.code ? " — " + w.code : "") || t === nm || (w.code && t === String(w.code)); }) || null;
+  return pcAcFind("wh", t) || (pcRaw.warehouseItems||warehouseItems||[]).find(w=>{ const nm = w.nameAr||w.name||""; return t === nm + (w.code ? " — " + w.code : "") || t === nm || (w.code && t === String(w.code)); }) || null;
 }
 function pc127BomRow(b){
   const w = b && b.itemId ? (pcRaw.warehouseItems||warehouseItems||[]).find(x=>x.id===b.itemId) : null;
   const label = w ? (w.nameAr||w.name||"") + (w.code ? " — " + w.code : "") : (b && b.name || "");
   return `<div class="pc127-row">
-    <input class="pc127-it" list="pc127WList" placeholder="الخامة" value="${escapeHtml(label)}" oninput="pc127BomUnit(this)">
+    <div class="pc128-wrap">${pcAcInput("wh", "pc127-it", "اكتب حروفًا من اسم الخامة", label, "pc127BomUnit(this)")}</div>
     <input class="pc127-q" type="text" inputmode="decimal" placeholder="الكمية" value="${b && b.qty ? pc60Num(b.qty) : ""}">
     <span class="pc127-u">${escapeHtml(w ? (pc70Unit(w.unit)||"") : (b && b.unit || ""))}</span>
     <button type="button" class="pc70-cart-x" onclick="this.parentNode.remove()" aria-label="حذف"><i class="fa-solid fa-xmark"></i></button>
   </div>`;
 }
 function pc127BomAdd(){ const box = document.getElementById("pc127Rows"); if(box){ box.insertAdjacentHTML("beforeend", pc127BomRow(null)); box.lastElementChild.querySelector("input").focus(); } }
-function pc127BomUnit(inp){ const w = pc127WFind(inp.value); const u = inp.parentNode.querySelector(".pc127-u"); if(u) u.textContent = w ? (pc70Unit(w.unit)||"") : ""; }
+function pc127BomUnit(inp){ const w = pc127WFind(inp.value); const u = inp.closest(".pc127-row").querySelector(".pc127-u"); if(u) u.textContent = w ? (pc70Unit(w.unit)||"") : ""; }
 function pc127BomRead(){
   const rows = [...document.querySelectorAll("#pc127Rows .pc127-row")];
   const lines = [];
@@ -7862,13 +7920,19 @@ function pc127SecOpts(branchId, exclude){
   return names.filter(n=>!(branchId===currentBranch && n===exclude)).map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("") || `<option value="">لا توجد أقسام</option>`;
 }
 function pc127LineRow(store){
-  return `<div class="pc127-row"><input class="pc127-it" list="pc127TList" placeholder="الصنف" oninput="pc127TUnit(this)"><input class="pc127-q" type="text" inputmode="decimal" placeholder="الكمية"><span class="pc127-u"></span>
+  return `<div class="pc127-row pc128-tr"><div class="pc128-wrap">${pcAcInput("store", "pc127-it", "اكتب حروفًا من اسم الصنف", "", "pc127TUnit(this)")}</div>
+    <input class="pc127-q" type="text" inputmode="decimal" placeholder="0"><span class="pc127-u pc128-unit">—</span><span class="pc128-bal">—</span>
     <button type="button" class="pc70-cart-x" onclick="this.parentNode.remove()" aria-label="حذف"><i class="fa-solid fa-xmark"></i></button></div>`;
 }
 function pc127TUnit(inp){
+  const row = inp.closest(".pc127-row");
   const cat = pcStorePicked(pcStoreCur, inp.value);
-  const u = inp.parentNode.querySelector(".pc127-u");
-  if(u){ if(cat){ const key = pcStoreLineFor(pcStoreCur, cat, 1).key; u.innerHTML = `${escapeHtml(pcStoreCatUnit(pcStoreCur, cat))}<small>رصيد ${pc60Num(pcStoreBookOf(pcStoreCur, key))}</small>`; } else u.textContent = ""; }
+  const u = row.querySelector(".pc128-unit"), b = row.querySelector(".pc128-bal");
+  if(cat){
+    const key = pcStoreLineFor(pcStoreCur, cat, 1).key, bal = pcStoreBookOf(pcStoreCur, key);
+    u.textContent = pcStoreCatUnit(pcStoreCur, cat) || "—";
+    b.textContent = pc60Num(bal); b.classList.toggle("neg", bal < 0);
+  }else{ u.textContent = "—"; b.textContent = "—"; b.classList.remove("neg"); }
 }
 async function pc127Transfer(){
   if(!pcStoreCan("issue")){ showToast("ليس لديك صلاحية التحويل","error"); return; }
@@ -7882,8 +7946,7 @@ async function pc127Transfer(){
       <div><label class="pc94-lb">إلى القسم</label><select id="pc127Sec" class="pc93-name">${pc127SecOpts(currentBranch, pcStoreSec)}</select></div>
     </div>
     <label class="pc94-lb">الأصناف (بوحدة الصنف)</label>
-    <datalist id="pc127TList">${opts}</datalist>
-    <div class="pc127-row pc127-hd"><span>الصنف</span><span>الكمية المطلوبة</span><span>الوحدة / الرصيد</span><span></span></div>
+    <div class="pc127-row pc128-tr pc127-hd"><span>الصنف</span><span>الكمية</span><span>الوحدة</span><span>الرصيد</span><span></span></div>
     <div id="pc127TRows">${pc127LineRow(store)}</div>
     <button type="button" class="btn btn-light" onclick="document.getElementById('pc127TRows').insertAdjacentHTML('beforeend', pc127LineRow())"><i class="fa-solid fa-plus"></i> صنف آخر</button>
     ${pcByField("pc127By","اسم المرسل")}
