@@ -6716,7 +6716,7 @@ function pc90OutSummary(orders){
  * Each section's order stays a separate order. This view adds up every open order item by item
  * (in the warehouse item's unit) so the warehouse sees, e.g., meat: 10 kg + 5 kg = 15 kg, with the
  * breakdown per section and order. Lines whose unit cannot be converted stay on their own row. */
-var pc126Scope = "open";   /* open = new + in progress; new = new only */
+var pc126Scope = "open", pc126BuyOnly = false;   /* open = new + in progress; new = new only */
 function pc126Open(o){
   if(o.status === "محذوف") return false;
   const isNew = o.status === "جديد" || !o.status;
@@ -6747,34 +6747,39 @@ function pc126Rows(){
 function pc126Html(){
   const {orders, rows} = pc126Rows();
   const secs = {}; orders.forEach(o=>{ const k = (o.section||"قسم غير محدد") + (pcMulti() && pc19Branch==="all" ? " · "+pcBranchName(pcBranchOf(o)) : ""); secs[k] = (secs[k]||0)+1; });
-  const short = rows.filter(r=>r.short > 0).length;
+  const short = rows.filter(r=>r.short > 0).length, noStock = rows.filter(r=>r.stock === null).length;
   const head = `
     <div class="pc126-bar">
       <div class="pc60-chips">
         <button type="button" class="pc60-fchip ${pc126Scope==="open"?"active":""}" onclick="pc126Scope='open';drawWarehouseOrders()">الجديدة وقيد الصرف</button>
         <button type="button" class="pc60-fchip ${pc126Scope==="new"?"active":""}" onclick="pc126Scope='new';drawWarehouseOrders()">الجديدة فقط</button>
       </div>
-      <button type="button" class="btn btn-light" onclick="pc126Excel()" ${rows.length?"":"disabled"}><i class="fa-solid fa-file-excel"></i> Excel</button>
+      <div class="pc126-acts">
+        <label class="pc123-allbr"><input type="checkbox" ${pc126BuyOnly?"checked":""} onchange="pc126BuyOnly=this.checked;drawWarehouseOrders()"> ما يجب شراؤه فقط</label>
+        <button type="button" class="btn btn-light" onclick="pc126Excel()" ${rows.length?"":"disabled"}><i class="fa-solid fa-file-excel"></i> Excel</button>
+      </div>
     </div>
-    <div class="pc126-kpis"><span><b>${orders.length}</b> طلب</span><span><b>${Object.keys(secs).length}</b> قسم</span><span><b>${rows.length}</b> صنف</span>${short?`<span class="bad"><b>${short}</b> صنف المخزون لا يكفيه</span>`:""}</div>
+    <div class="pc126-kpis"><span><b>${orders.length}</b> طلب</span><span><b>${Object.keys(secs).length}</b> قسم</span><span><b>${rows.length}</b> صنف</span>${short?`<span class="bad"><b>${short}</b> صنف يجب شراؤه</span>`:""}${noStock?`<span class="warn"><b>${noStock}</b> صنف بدون رصيد مسجل</span>`:""}</div>
     ${Object.keys(secs).length ? `<p class="pc126-secs">${Object.keys(secs).map(k=>`<span>${escapeHtml(k)} <b>${secs[k]}</b></span>`).join("")}</p>` : ""}`;
   if(!rows.length) return head + `<div class="pc19-empty">لا توجد طلبات مفتوحة لتجميعها</div>`;
+  const shown = pc126BuyOnly ? rows.filter(r=>r.short > 0) : rows;
+  if(!shown.length) return head + `<div class="pc19-empty">الرصيد الفعلي يغطي كل الكميات المطلوبة — لا يوجد ما يجب شراؤه</div>`;
   let cat = "", body = "";
-  rows.forEach(r=>{
+  shown.forEach(r=>{
     if(r.cat !== cat){ cat = r.cat; body += `<tr class="pc122-grp"><td colspan="5">${escapeHtml(cat)}</td></tr>`; }
     body += `<tr class="${r.short>0?"pc126-low":""}">
       <td class="pc122-name"><b>${escapeHtml(r.name)}</b>${r.code?`<small>${escapeHtml(r.code)}</small>`:""}${r.out?`<small><span class="pc90-tag">غير متوفر</span></small>`:""}
         <div class="pc126-by">${pc126BySec(r).map(x=>`<span title="طلب ${x.nos.map(n=>"#"+n).join("، ")}">${escapeHtml(x.label)}${x.nos.length>1?` <small>(${x.nos.length} طلبات)</small>`:""} <b>${pc60Num(x.q)}</b></span>`).join("")}</div></td>
       <td class="pc122-unit">${escapeHtml(r.unit||"")}</td>
+      <td class="pc122-bal ${r.stock===null?"na":""}">${r.stock===null ? `<small>غير مسجل</small>` : pc60Num(r.stock)}</td>
       <td class="pc126-tot">${pc60Num(r.total)}</td>
-      <td class="pc122-bal">${r.stock===null ? "—" : pc60Num(r.stock)}</td>
-      <td class="pc126-short">${r.short>0 ? pc60Num(r.short) : "—"}</td>
+      <td class="pc126-short">${r.stock===null ? `<small class="pc126-q">؟</small>` : (r.short>0 ? pc60Num(r.short) : `<small class="pc126-ok">0</small>`)}</td>
     </tr>`;
   });
   return head + `<div class="pc122-wrap"><table class="pc122-t pc126-t">
-    <thead><tr><th>الصنف وتوزيعه على الأقسام</th><th>الوحدة</th><th>إجمالي المطلوب</th><th>المتوفر</th><th>العجز</th></tr></thead>
+    <thead><tr><th>الصنف وتوزيعه على الأقسام</th><th>الوحدة</th><th>الرصيد الفعلي</th><th>إجمالي المطلوب</th><th>يجب شراؤه</th></tr></thead>
     <tbody>${body}</tbody></table></div>
-    <p class="pc85-hint">الكميات محوّلة لوحدة الصنف في المستودع. كل قسم يظل طلبه منفصلًا في تبويب «جديد» للصرف والتسليم.</p>`;
+    <p class="pc85-hint">يجب شراؤه = إجمالي المطلوب − الرصيد الفعلي في المستودع (صفر إذا كان الرصيد يكفي). الصنف بدون رصيد مسجل يظهر «؟» حتى يُسجّل رصيده. الكميات محوّلة لوحدة الصنف في المستودع، وكل قسم يظل طلبه منفصلًا في تبويب «جديد» للصرف والتسليم.</p>`;
 }
 function pc126BySec(r){
   const m = {};
@@ -6787,7 +6792,7 @@ function pc126Excel(){
   if(!rows.length){ showToast("لا توجد بيانات","warn"); return; }
   const secs = [...new Set(orders.map(o=>(o.section||"قسم غير محدد") + (pcMulti() && pc19Branch==="all" ? " · "+pcBranchName(pcBranchOf(o)) : "")))];
   const sumRows = rows.map(r=>{
-    const o = {"التصنيف":r.cat, "الصنف":r.name, "الكود":r.code, "الوحدة":r.unit, "إجمالي المطلوب":r.total, "المتوفر":r.stock===null ? "" : r.stock, "العجز":r.short || 0};
+    const o = {"التصنيف":r.cat, "الصنف":r.name, "الكود":r.code, "الوحدة":r.unit, "الرصيد الفعلي":r.stock===null ? "غير مسجل" : r.stock, "إجمالي المطلوب":r.total, "يجب شراؤه":r.stock===null ? "غير معروف" : (r.short || 0)};
     secs.forEach(k=>{ o[k] = r.by.filter(x=>(x.sec + (pcMulti() && pc19Branch==="all" ? " · "+x.br : ""))===k).reduce((a,x)=>a+x.q,0) || ""; });
     return o;
   });
@@ -6795,6 +6800,9 @@ function pc126Excel(){
   rows.forEach(r=>r.by.forEach(x=>det.push({"الصنف":r.name, "الوحدة":r.unit, "القسم":x.sec, "الفرع":x.br, "رقم الطلب":x.no, "الكمية":x.q})));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sumRows), "المجمّع");
+  const buy = rows.filter(r=>r.short > 0 || r.stock === null).map(r=>({"التصنيف":r.cat, "الصنف":r.name, "الكود":r.code, "الوحدة":r.unit,
+    "الرصيد الفعلي":r.stock===null ? "غير مسجل" : r.stock, "إجمالي المطلوب":r.total, "يجب شراؤه":r.stock===null ? "راجع الرصيد" : r.short}));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(buy.length ? buy : [{"ملاحظة":"لا يوجد ما يجب شراؤه"}]), "قائمة الشراء");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(det), "حسب القسم");
   XLSX.writeFile(wb, `warehouse-pick-${pc19Branch==="all"?"all":pcBranchName(pc19Branch)}-${pcHrToday()}.xlsx`);
 }

@@ -4944,3 +4944,8 @@ div.pc112-line{cursor:default}
 .pc126-by{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .pc126-by span{font-size:11px;background:var(--app-bg);border:1px solid var(--app-line);border-radius:8px;padding:2px 7px;color:var(--app-muted)}
 .pc126-by b{color:var(--app-ink)}
+.pc126-acts{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.pc126-kpis span.warn{background:var(--app-amber-tint);color:#7A5600;border-color:#F0D68A}
+.pc126-q{color:var(--app-amber);font-weight:900;font-size:15px}
+.pc126-ok{color:var(--app-muted)}
+.pc126-t td:nth-child(3),.pc126-t td:nth-child(5){text-align:center}
