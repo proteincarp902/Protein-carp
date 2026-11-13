@@ -4949,3 +4949,18 @@ div.pc112-line{cursor:default}
 .pc126-q{color:var(--app-amber);font-weight:900;font-size:15px}
 .pc126-ok{color:var(--app-muted)}
 .pc126-t td:nth-child(3),.pc126-t td:nth-child(5){text-align:center}
+
+/* pc127 — recipes (BOM) and stock transfers */
+.pc127-bom .btn{margin-top:8px}
+.pc127-row{display:grid;grid-template-columns:minmax(0,1fr) 90px 58px 36px;gap:6px;align-items:center;margin-top:6px}
+.pc127-row input{margin:0!important;min-width:0}
+.pc127-u{font-size:12px;font-weight:700;color:var(--app-muted);text-align:center;line-height:1.2}
+.pc127-u small{display:block;font-weight:600;font-size:10.5px}
+.pc127-box{display:grid;gap:8px;margin:10px 0}
+.pc127-box h4{margin:4px 2px 0;font-size:13.5px;color:var(--app-brand-dark)}
+.pc127-t{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;border:1px solid var(--app-line);border-radius:14px;padding:10px 12px;background:var(--app-surface)}
+.pc127-t.in{border-color:#BFD8A4;background:#F6FBF1}
+.pc127-t>div:first-child{min-width:0;flex:1 1 220px;display:grid;gap:2px}
+.pc127-t small{color:var(--app-muted);font-size:12px}
+.pc127-acts{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.pc127-in{font-style:normal;color:#1D4ED8;font-weight:800}

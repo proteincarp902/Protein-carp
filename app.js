@@ -360,6 +360,7 @@ async function initCloud(){
   listen("chat_messages", v=>chatMessages=v);
   listen("branches", plain("branches", v=>branches=v));
   listen("branch_stock_moves", plain("branchStockMoves", v=>branchStockMoves=v));
+  listen("stock_transfers", plain("stockTransfers", v=>stockTransfers=v));
   listen("hr_employees", plain("hrEmployees", v=>hrEmployees=v));
   listen("hr_attendance", plain("hrAttendance", v=>hrAttendance=v));
   listen("hr_leaves", plain("hrLeaves", v=>hrLeaves=v));
@@ -569,6 +570,8 @@ async function submitProductionCore(){
     section:currentChef.section,
     branchId:currentBranch,
     items:[...productionDraft],
+    consume:pc127ConsumeOf(productionDraft, true).lines,
+    consumeMissing:pc127ConsumeOf(productionDraft, true).missing,
     note,
     createdAtText:nowText(),
     timeMs,
@@ -5843,7 +5846,8 @@ function pc75Edit(kind,id){
       <div class="pc60-card">
         <label>الوحدة <small>(تظهر بها في الإنتاج والهدر)</small></label>
         <select id="pc75Unit">${unitOpts.includes(curUnit)||!curUnit ? "" : `<option selected>${escapeHtml(curUnit)}</option>`}${unitOpts.map(u=>`<option ${u===(curUnit||"حبة")?"selected":""}>${u}</option>`).join("")}</select>
-      </div>`}
+      </div>
+      ${pc127BomCard(it)}`}
       <div class="pc60-card">
         <label>الأقسام التي يظهر فيها الصنف <small>(الطلب والإنتاج والجرد والصرف)</small></label>
         ${pcItemSecChecks("pc75SecK", pcItemSecs(kind, id))}
@@ -5871,7 +5875,9 @@ async function pc75Save(kind,id){
             category:g("pc75Cat").value.trim(), stockQty:(st!=="" && isFinite(Number(st))) ? Number(st) : null,
             unavailable:g("pc75Unavail").checked};
   }else{
-    data = {nameAr:v.ar||v.en, nameEn:v.en, nameUr:v.ur, nameBn:v.bn, code:v.code, unit:g("pc75Unit").value||"حبة", section:[...pcItemSecRead("pc75SecK")][0] || ""};
+    const bom = pc127BomRead();
+    if(bom.error){ showToast(bom.error,"error"); return; }
+    data = {nameAr:v.ar||v.en, nameEn:v.en, nameUr:v.ur, nameBn:v.bn, code:v.code, unit:g("pc75Unit").value||"حبة", section:[...pcItemSecRead("pc75SecK")][0] || "", bom:bom.lines, bomUpdatedAtMs:Date.now()};
   }
   try{
     const {db,doc,updateDoc} = window.firebaseDB;
@@ -7410,6 +7416,32 @@ function pcStoreMoves(store, sec){
         title:"إنتاج", by:l.chefName||"", note:l.note||"", lines});
     });
   }
+  if(store === "raw"){
+    /* production draws its raw materials (recipe components) from the same section's raw store */
+    pcStoreMine(pcStoreRawList("productionLogs", productionLogs)).forEach(l=>{
+      if(l.noProduction) return;
+      const ms = pcStoreMs(l);
+      if(!keep(ms, l)) return;
+      const c = Array.isArray(l.consume) ? {lines:l.consume, missing:l.consumeMissing||[]} : pc127ConsumeOf(l.items||[], true);
+      const lines = (c.lines||[]).map(x=>pcStoreItem("raw", x)).filter(x=>x.qty);
+      const miss = c.missing || [];
+      if(lines.length || miss.length) out.push({ms, sign:-1, type:"consume", icon:"fa-blender", tone:"info", section:pcStoreSecOf(l),
+        title:"استهلاك خامات للإنتاج", by:l.chefName||"", note:miss.length ? `بدون مكونات مسجلة (لم يُخصم خام): ${miss.join("، ")}` : "", lines, missing:miss});
+    });
+  }
+  /* transfers between sections / branches: out when sent, in only after the receiver accepts */
+  pcStoreRawList("stockTransfers", stockTransfers).forEach(t=>{
+    if(t.store !== store) return;
+    const fromHere = t.fromBranch === currentBranch && (!sec || (t.fromSec||PC_NO_SEC) === sec);
+    const toHere = t.toBranch === currentBranch && (!sec || (t.toSec||PC_NO_SEC) === sec);
+    const lines = (t.lines||[]).map(x=>({...x, qty:Number(x.qty||0)}));
+    if(fromHere && (t.status === "مرسل" || t.status === "مستلم") && start && Number(t.sentAtMs||0) >= start)
+      out.push({ms:Number(t.sentAtMs||0), sign:-1, type:"transferOut", icon:"fa-truck-arrow-right", tone:"warn", section:t.fromSec||PC_NO_SEC,
+        title:`تحويل صادر #${t.no||""} إلى ${pcBranchName(t.toBranch)} · ${t.toSec||""}${t.status==="مرسل"?" (بانتظار الاستلام)":""}`, by:t.sentBy||"", note:t.note||"", lines});
+    if(toHere && t.status === "مستلم" && start && Number(t.recvAtMs||0) >= start)
+      out.push({ms:Number(t.recvAtMs||0), sign:1, type:"transferIn", icon:"fa-truck-ramp-box", tone:"ok", section:t.toSec||PC_NO_SEC,
+        title:`تحويل وارد #${t.no||""} من ${pcBranchName(t.fromBranch)} · ${t.fromSec||""}`, by:t.recvBy||"", note:t.note||"", lines});
+  });
   pcStoreMine(pcStoreRawList("wasteLogs", wasteLogs)).forEach(w=>{
     if(pcStoreWasteStore(w) !== store) return;
     const ms = pcStoreMs(w);
@@ -7482,7 +7514,7 @@ function pcDrawStoreSections(){
       const nCh = pcStoreSecChefs(sec).length;
       return `<div class="pc100-sec ${r.neg||p.neg?"neg":""}">
         <button type="button" class="pc100-sec-head" onclick='renderBranchStore(${js},"raw")'>
-          <b>${escapeHtml(sec)}</b><small>${nCh ? `${nCh} شيف` : "لا يوجد شيف"}</small><i class="fa-solid fa-chevron-left"></i></button>
+          <b>${escapeHtml(sec)}</b><small>${nCh ? `${nCh} شيف` : "لا يوجد شيف"}${pc127Incoming(sec).length ? ` · <em class="pc127-in">${pc127Incoming(sec).length} تحويل وارد</em>` : ""}</small><i class="fa-solid fa-chevron-left"></i></button>
         ${on ? `<div class="pc100-sec-btns">
           <button type="button" onclick='renderBranchStore(${js},"raw")'>
             <i class="fa-solid ${PC_STORES.raw.icon}"></i><span>خام</span><em>${r.items} صنف${r.neg?` · ${r.neg} سالب`:""}</em></button>
@@ -7539,10 +7571,12 @@ function pcDrawStore(){
       </div>
       <div class="pc100-acts">
         ${pcStoreCan("issue") ? `<button type="button" class="btn btn-light" onclick="pcStoreIssue()"><i class="fa-solid fa-right-from-bracket"></i> صرف</button>` : ""}
+        ${pcStoreCan("issue") ? `<button type="button" class="btn btn-light" onclick="pc127Transfer()"><i class="fa-solid fa-truck-arrow-right"></i> تحويل</button>` : ""}
         ${pcStoreCan("count") ? `<button type="button" class="btn btn-main" onclick="renderStoreCount()"><i class="fa-solid fa-clipboard-list"></i> جرد</button>` : ""}
       </div>
     </div>
-    <small class="pc100-since">الاحتساب من ${escapeHtml(new Date(pcStoreStart()).toLocaleDateString("ar-SA"))}</small>`;
+    <small class="pc100-since">الاحتساب من ${escapeHtml(new Date(pcStoreStart()).toLocaleDateString("ar-SA"))}</small>
+    ${pc127PendingHtml(pcStoreSec)}${store === "raw" ? pc127MissingHtml(pcStoreSec) : ""}`;
   box.innerHTML = head + (pcStoreView === "bal" ? pcStoreBalHtml() : pcStoreMovHtml());
   window.scrollTo(0,y);
 }
@@ -7715,6 +7749,198 @@ async function pcStoreSave(rec, okMsg){
   finally{ pc60Busy = false; pcDrawStore(); }
 }
 
+/* =========================== Recipes (BOM) & transfers ===========================
+ * Recipe: a production item lists its raw components per ONE unit of the product (in each raw item's
+ * unit). Producing N units draws N × component from the same section's raw store. The draw is
+ * snapshotted on the production record (consume) so later recipe edits do not rewrite history;
+ * records made before this used the current recipe.
+ * Transfers: section → section (same or another branch), raw→raw or production→production.
+ * Leaves the sender's store when sent; enters the receiver's store only when the receiver accepts.
+ * Rejected / cancelled transfers return to the sender automatically. */
+function pc127ConsumeOf(items, live){
+  const lines = [], missing = [];
+  (items||[]).forEach(it=>{
+    const m = pcStoreMenuFind(it);
+    const bom = m && Array.isArray(m.bom) ? m.bom.filter(c=>Number(c.qty) > 0) : [];
+    if(!bom.length){ missing.push(String(it.name||it.productName||"")); return; }
+    const mu = pc70Unit(m.unit) || "حبة";
+    const c = pcStoreConv(Number(it.qty||0), pc70Unit(it.unit) || mu, mu);
+    const n = c.ok ? c.q : Number(it.qty||0);
+    bom.forEach(b=>lines.push({itemId:b.itemId||"", code:b.code||"", name:b.name||"", unit:b.unit||"", qty:pc70R(Number(b.qty)*n), forItem:String(it.name||"")}));
+  });
+  return live ? {lines, missing} : lines;
+}
+
+function pc127BomCard(it){
+  const bom = Array.isArray(it.bom) ? it.bom : [];
+  const opts = (pcRaw.warehouseItems||warehouseItems||[]).map(w=>`<option value="${escapeHtml((w.nameAr||w.name||"") + (w.code ? " — " + w.code : ""))}"></option>`).join("");
+  return `<div class="pc60-card pc127-bom">
+    <label>مكونات الصنف (الخامات) <small>— لكل 1 ${escapeHtml(pc70Unit(it.unit)||"حبة")} من المنتج، تُخصم من مستودع خام القسم عند تسجيل الإنتاج</small></label>
+    <datalist id="pc127WList">${opts}</datalist>
+    <div id="pc127Rows">${bom.map(b=>pc127BomRow(b)).join("")}</div>
+    <button type="button" class="btn btn-light" onclick="pc127BomAdd()"><i class="fa-solid fa-plus"></i> إضافة مكوّن</button>
+    ${bom.length ? "" : `<p class="pc85-hint">بدون مكونات لن يُخصم أي خام عند إنتاج هذا الصنف، ويظهر تنبيه في مستودع خام القسم.</p>`}
+  </div>`;
+}
+function pc127WFind(text){
+  const t = String(text||"").trim(); if(!t) return null;
+  return (pcRaw.warehouseItems||warehouseItems||[]).find(w=>{ const nm = w.nameAr||w.name||""; return t === nm + (w.code ? " — " + w.code : "") || t === nm || (w.code && t === String(w.code)); }) || null;
+}
+function pc127BomRow(b){
+  const w = b && b.itemId ? (pcRaw.warehouseItems||warehouseItems||[]).find(x=>x.id===b.itemId) : null;
+  const label = w ? (w.nameAr||w.name||"") + (w.code ? " — " + w.code : "") : (b && b.name || "");
+  return `<div class="pc127-row">
+    <input class="pc127-it" list="pc127WList" placeholder="الخامة" value="${escapeHtml(label)}" oninput="pc127BomUnit(this)">
+    <input class="pc127-q" type="text" inputmode="decimal" placeholder="الكمية" value="${b && b.qty ? pc60Num(b.qty) : ""}">
+    <span class="pc127-u">${escapeHtml(w ? (pc70Unit(w.unit)||"") : (b && b.unit || ""))}</span>
+    <button type="button" class="pc70-cart-x" onclick="this.parentNode.remove()" aria-label="حذف"><i class="fa-solid fa-xmark"></i></button>
+  </div>`;
+}
+function pc127BomAdd(){ const box = document.getElementById("pc127Rows"); if(box){ box.insertAdjacentHTML("beforeend", pc127BomRow(null)); box.lastElementChild.querySelector("input").focus(); } }
+function pc127BomUnit(inp){ const w = pc127WFind(inp.value); const u = inp.parentNode.querySelector(".pc127-u"); if(u) u.textContent = w ? (pc70Unit(w.unit)||"") : ""; }
+function pc127BomRead(){
+  const rows = [...document.querySelectorAll("#pc127Rows .pc127-row")];
+  const lines = [];
+  for(const r of rows){
+    const t = r.querySelector(".pc127-it").value.trim(), qv = r.querySelector(".pc127-q").value.trim();
+    if(!t && !qv) continue;
+    const w = pc127WFind(t);
+    if(!w) return {error:`اختر الخامة «${t || "—"}» من القائمة`};
+    const q = Number(qv.replace(",", "."));
+    if(!isFinite(q) || q <= 0) return {error:`اكتب كمية صحيحة لـ ${w.nameAr||w.name}`};
+    if(lines.some(x=>x.itemId===w.id)) return {error:`الخامة ${w.nameAr||w.name} مكررة`};
+    lines.push({itemId:w.id, code:w.code||"", name:w.nameAr||w.name||"", unit:pc70Unit(w.unit)||"", qty:pc70R(q)});
+  }
+  return {lines};
+}
+function pc127MissingHtml(sec){
+  const start = pcStoreStart(); if(!start) return "";
+  const names = new Set();
+  pcStoreMoves("raw", sec).forEach(m=>{ if(m.type === "consume") (m.missing||[]).forEach(n=>names.add(n)); });
+  if(!names.size) return "";
+  return `<div class="pc100-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${names.size} صنف إنتاج بدون مكونات مسجلة، فلم يُخصم خامه من هذا القسم: ${[...names].slice(0,8).map(escapeHtml).join("، ")}${names.size>8?"…":""}. أضف المكونات من إعدادات أصناف الإنتاج.</div>`;
+}
+
+/* ----- Transfers ----- */
+function pc127All(){ return pcStoreRawList("stockTransfers", stockTransfers); }
+function pc127Incoming(sec){ return pc127All().filter(t=>t.status==="مرسل" && t.toBranch===currentBranch && (t.toSec||PC_NO_SEC)===sec); }
+function pc127Outgoing(sec){ return pc127All().filter(t=>t.status==="مرسل" && t.fromBranch===currentBranch && (t.fromSec||PC_NO_SEC)===sec); }
+function pc127Lines(t){ return (t.lines||[]).map(l=>`${escapeHtml(l.name)} <b>${pc60Num(l.qty)} ${escapeHtml(l.unit||"")}</b>`).join("، "); }
+function pc127PendingHtml(sec){
+  const inc = pc127Incoming(sec), outg = pc127Outgoing(sec);
+  if(!inc.length && !outg.length) return "";
+  const card = (t, dir)=>`<div class="pc127-t ${dir}">
+      <div><b>${dir==="in" ? `وارد من ${escapeHtml(pcBranchName(t.fromBranch))} · ${escapeHtml(t.fromSec||"")}` : `صادر إلى ${escapeHtml(pcBranchName(t.toBranch))} · ${escapeHtml(t.toSec||"")}`}</b>
+        <small>#${escapeHtml(String(t.no||""))} · ${PC_STORES[t.store]?.short||""} · ${escapeHtml(t.sentBy||"")} · ${escapeHtml(new Date(Number(t.sentAtMs||0)).toLocaleString("ar-SA",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))}</small>
+        <small>${pc127Lines(t)}</small>${t.note?`<small>${pcNoteHtml(t.note)}</small>`:""}</div>
+      <div class="pc127-acts">${dir==="in"
+        ? `<button class="btn btn-main" data-id="${escapeHtml(t.id)}" onclick="pc127Receive(this.dataset.id,true)">استلام</button><button class="btn btn-light pc125-no" data-id="${escapeHtml(t.id)}" onclick="pc127Receive(this.dataset.id,false)">رفض</button>`
+        : `<em class="pc103-tag warn">بانتظار الاستلام</em><button class="mini-danger" data-id="${escapeHtml(t.id)}" onclick="pc127Cancel(this.dataset.id)">إلغاء</button>`}</div>
+    </div>`;
+  return `<div class="pc127-box">
+    ${inc.length ? `<h4><i class="fa-solid fa-truck-ramp-box"></i> تحويلات واردة بانتظار استلامك (${inc.length})</h4>${inc.map(t=>card(t,"in")).join("")}` : ""}
+    ${outg.length ? `<h4><i class="fa-solid fa-truck-arrow-right"></i> تحويلات صادرة لم تُستلم بعد (${outg.length})</h4>${outg.map(t=>card(t,"out")).join("")}` : ""}
+  </div>`;
+}
+function pc127SecOpts(branchId, exclude){
+  const names = typeof pcChefSecNames === "function" ? pcChefSecNames(branchId) : [];
+  return names.filter(n=>!(branchId===currentBranch && n===exclude)).map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("") || `<option value="">لا توجد أقسام</option>`;
+}
+function pc127LineRow(store){
+  return `<div class="pc127-row"><input class="pc127-it" list="pc127TList" placeholder="الصنف" oninput="pc127TUnit(this)"><input class="pc127-q" type="text" inputmode="decimal" placeholder="الكمية"><span class="pc127-u"></span>
+    <button type="button" class="pc70-cart-x" onclick="this.parentNode.remove()" aria-label="حذف"><i class="fa-solid fa-xmark"></i></button></div>`;
+}
+function pc127TUnit(inp){
+  const cat = pcStorePicked(pcStoreCur, inp.value);
+  const u = inp.parentNode.querySelector(".pc127-u");
+  if(u){ if(cat){ const key = pcStoreLineFor(pcStoreCur, cat, 1).key; u.innerHTML = `${escapeHtml(pcStoreCatUnit(pcStoreCur, cat))}<small>رصيد ${pc60Num(pcStoreBookOf(pcStoreCur, key))}</small>`; } else u.textContent = ""; }
+}
+async function pc127Transfer(){
+  if(!pcStoreCan("issue")){ showToast("ليس لديك صلاحية التحويل","error"); return; }
+  const store = pcStoreCur, S = PC_STORES[store];
+  const brs = pcActiveBranches();
+  const opts = pcStoreCatalog(store).map(c=>`<option value="${escapeHtml(pc17ItemName(c) + (c.code ? " — " + c.code : ""))}"></option>`).join("");
+  const v = await pcSheet({title:`تحويل من ${S.name}`, icon:"fa-truck-arrow-right", body:`
+    <p class="pc85-hint">من: <b>${escapeHtml(pcBranchName(currentBranch))} · ${escapeHtml(pcStoreSec)}</b> (${S.short}). يخرج من رصيدك عند الإرسال، ويدخل رصيد المستلم بعد قبوله. لو رُفض يرجع لرصيدك.</p>
+    <div class="pc102-shift">
+      <div><label class="pc94-lb">إلى الفرع</label><select id="pc127Br" class="pc93-name" onchange="document.getElementById('pc127Sec').innerHTML=pc127SecOpts(this.value,'${escapeHtml(pcStoreSec).replace(/'/g,"\\'")}')">${brs.map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===currentBranch?"selected":""}>${escapeHtml(b.name||"")}</option>`).join("")}</select></div>
+      <div><label class="pc94-lb">إلى القسم</label><select id="pc127Sec" class="pc93-name">${pc127SecOpts(currentBranch, pcStoreSec)}</select></div>
+    </div>
+    <label class="pc94-lb">الأصناف (بوحدة الصنف)</label>
+    <datalist id="pc127TList">${opts}</datalist>
+    <div id="pc127TRows">${pc127LineRow(store)}</div>
+    <button type="button" class="btn btn-light" onclick="document.getElementById('pc127TRows').insertAdjacentHTML('beforeend', pc127LineRow())"><i class="fa-solid fa-plus"></i> صنف آخر</button>
+    ${pcByField("pc127By","اسم المرسل")}
+    <label class="pc94-lb">ملاحظة (اختياري)</label><input id="pc127Note" class="pc93-name" maxlength="140">`,
+    actions:[{label:"إرسال التحويل", kind:"btn-main", value:h=>({br:h.querySelector("#pc127Br").value, sec:h.querySelector("#pc127Sec").value, by:h.querySelector("#pc127By").value.trim(), note:h.querySelector("#pc127Note").value.trim(),
+      rows:[...h.querySelectorAll("#pc127TRows .pc127-row")].map(r=>({t:r.querySelector(".pc127-it").value, q:r.querySelector(".pc127-q").value}))})},
+      {label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  if(!v.sec){ showToast("اختر القسم المستلم","error"); return; }
+  if(v.br === currentBranch && v.sec === pcStoreSec){ showToast("لا يمكن التحويل لنفس القسم","error"); return; }
+  if(!v.by){ showToast("اكتب اسم المرسل","error"); return; }
+  const lines = [], short = [];
+  for(const r of v.rows){
+    if(!r.t.trim() && !String(r.q).trim()) continue;
+    const cat = pcStorePicked(store, r.t);
+    const q = Number(String(r.q).replace(",", "."));
+    if(!cat){ showToast(`اختر الصنف «${r.t||"—"}» من القائمة`,"error"); return; }
+    if(!isFinite(q) || q <= 0){ showToast(`اكتب كمية صحيحة لـ ${pc17ItemName(cat)}`,"error"); return; }
+    const l = pcStoreLineFor(store, cat, q);
+    if(lines.some(x=>x.key===l.key)){ showToast(`${l.name} مكرر`,"error"); return; }
+    const book = pcStoreBookOf(store, l.key);
+    if(q > book) short.push(`${l.name} (الرصيد ${pc60Num(book)})`);
+    lines.push(l);
+  }
+  if(!lines.length){ showToast("أضف صنفًا واحدًا على الأقل","error"); return; }
+  if(short.length && !(await pcConfirm(`الكمية أكبر من الرصيد الدفتري: ${short.join("، ")}. سيصبح الرصيد سالبًا. هل تتابع؟`,{title:"رصيد غير كافٍ", okText:"إرسال رغم ذلك"}))) return;
+  const g = await pcGeoCheck(currentBranch, "التحويل");
+  if(!g) return;
+  try{
+    pcStoreSaveBy(v.by);
+    const {db,addDoc,collection,serverTimestamp} = window.firebaseDB;
+    const now = Date.now();
+    await addDoc(collection(db,"stock_transfers"), {no:String(now).slice(-6), store, fromBranch:currentBranch, fromSec:pcStoreSec === PC_NO_SEC ? "" : pcStoreSec,
+      toBranch:v.br, toSec:v.sec, lines:lines.map(l=>({key:l.key, itemId:l.itemId||"", code:l.code||"", name:l.name||"", unit:l.unit||"", qty:pc70R(l.qty)})),
+      status:"مرسل", sentBy:v.by, sentAtMs:now, note:v.note, ...(g.geo ? {sentGeo:g.geo} : {}), createdAtMs:now, createdAt:serverTimestamp()});
+    showToast(`تم إرسال التحويل إلى ${pcBranchName(v.br)} · ${v.sec} — بانتظار الاستلام`);
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+}
+async function pc127Receive(id, ok){
+  const t = pc127All().find(x=>x.id===id);
+  if(!t || t.status !== "مرسل"){ showToast("تم التعامل مع هذا التحويل","warn"); return; }
+  if(t.toBranch !== currentBranch){ showToast("هذا التحويل ليس لهذا الفرع","error"); return; }
+  const v = await pcSheet({title:ok ? "استلام التحويل" : "رفض التحويل", icon:ok ? "fa-truck-ramp-box" : "fa-xmark", tone:ok ? "" : "warn", body:`
+    <p class="pc85-hint">من ${escapeHtml(pcBranchName(t.fromBranch))} · ${escapeHtml(t.fromSec||"")} — #${escapeHtml(String(t.no||""))}</p>
+    <div class="pc122-confirm">${(t.lines||[]).map(l=>`<div><b>${escapeHtml(l.name)}</b><span>${pc60Num(l.qty)} ${escapeHtml(l.unit||"")}</span></div>`).join("")}</div>
+    ${ok ? `<p class="pc85-hint">بالاستلام تدخل الكميات رصيد ${PC_STORES[t.store]?.name||""} في قسمك. لو الكمية الفعلية مختلفة ارفض التحويل واطلب إعادة إرساله بالكمية الصحيحة.</p>` : ""}
+    ${pcByField("pc127RBy", ok ? "اسم المستلم" : "اسم الرافض")}
+    ${ok ? "" : `<label class="pc94-lb">سبب الرفض</label><input id="pc127RNote" class="pc93-name" maxlength="140">`}`,
+    actions:[{label:ok ? "تأكيد الاستلام" : "رفض", kind:ok ? "btn-main" : "btn-danger", value:h=>({by:h.querySelector("#pc127RBy").value.trim(), note:(h.querySelector("#pc127RNote")?.value||"").trim()})},{label:"إلغاء", kind:"btn-light", value:null}]});
+  if(!v) return;
+  if(!v.by){ showToast("اكتب الاسم","error"); return; }
+  if(!ok && !v.note){ showToast("اكتب سبب الرفض","error"); return; }
+  const g = ok ? await pcGeoCheck(currentBranch, "الاستلام") : {geo:null};
+  if(!g) return;
+  try{
+    pcStoreSaveBy(v.by);
+    const {db,doc,updateDoc} = window.firebaseDB;
+    await updateDoc(doc(db,"stock_transfers",id), ok ? {status:"مستلم", recvBy:v.by, recvAtMs:Date.now(), ...(g.geo ? {recvGeo:g.geo} : {})}
+                                                    : {status:"مرفوض", recvBy:v.by, recvAtMs:Date.now(), rejectReason:v.note});
+    showToast(ok ? "تم الاستلام وأضيفت الكميات لرصيد القسم" : "تم رفض التحويل وعادت الكميات للمرسل");
+  }catch(err){ console.error(err); showToast("تعذر الحفظ","error"); }
+}
+async function pc127Cancel(id){
+  const t = pc127All().find(x=>x.id===id);
+  if(!t || t.status !== "مرسل") return;
+  if(!(await pcConfirm("إلغاء هذا التحويل؟ تعود الكميات لرصيد قسمك.",{title:"إلغاء التحويل", okText:"إلغاء التحويل"}))) return;
+  try{
+    const {db,doc,updateDoc} = window.firebaseDB;
+    await updateDoc(doc(db,"stock_transfers",id), {status:"ملغي", cancelledBy:pcStoreByName(), cancelledAtMs:Date.now()});
+    showToast("تم إلغاء التحويل");
+  }catch(err){ console.error(err); showToast("تعذر الحفظ","error"); }
+}
+
 /* ----- Chef contact, Odoo employee number and shift times ----- */
 var PC_CHEF_EXTRA = [
   {k:"email",          label:"البريد الإلكتروني", type:"email", ph:"name@example.com", dir:"ltr"},
@@ -7831,7 +8057,7 @@ function pcStoreBackFromOrder(){
    mirrored to the chefs collection (name, branch, section, employeeId) so chef screens keep working.
    Attendance is recorded by the employee from the branch's "الحضور" card; managers can correct it
    from settings, and every correction keeps who changed it and why. */
-var hrEmployees = [], hrAttendance = [], hrLeaves = [], hrDocs = [];
+var hrEmployees = [], hrAttendance = [], hrLeaves = [], hrDocs = [], stockTransfers = [];
 var PC_HR_ROLES = ["شيف","مساعد شيف","نظافة","كاشير","توصيل","مستودع","محاسب","إداري","أخرى"];
 var PC_HR_STATUS = ["نشط","موقوف","منتهي الخدمة"];
 var PC_HR_LEAVE_TYPES = ["سنوية","مرضية","اضطرارية","بدون راتب","أخرى"];
