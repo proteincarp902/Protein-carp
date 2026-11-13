@@ -6067,7 +6067,13 @@ var PC_EN = {
 "،":",","؟":"?","لا يوجد إنتاج اليوم؟ سجّلها":"No production today? Log it","سجّلها":"Log it","اليوم؟":"today?","طلبات جارية":"Orders in progress","معلومات":"Info","المهام الناقصة":"Missing tasks","ظهراً":"Noon","فرن":"Oven","وجبات":"Meals","شوي":"Grill","سلطة":"Salad","قيد العمل":"In progress"
 };
 
-var pcTrAll = PC_EN;
+var pcTrAll = PC_EN, pcTrLat = {};
+function pcTrLatin(s){
+  if(!s || (pcLang !== "ur" && pcLang !== "bn")) return s;
+  if(!pcTrRegex || pcTrSig !== pcTrDynSig()) pcTrBuild();
+  const k = s.trim();
+  return k && pcTrLat[k] ? s.replace(k, pcTrLat[k]) : s;
+}
 var pcTrSig = "";
 function pcTrDynSig(){
   const w = pcRaw.warehouseItems||warehouseItems||[], m = pcRaw.menuItems||menuItems||[], f = pcLang === "ur" ? "nameUr" : pcLang === "bn" ? "nameBn" : "nameEn";
@@ -6083,6 +6089,9 @@ function pcTrBuild(){
     if(ar && t && ar !== t) dyn[ar] = t;
   });
   pcTrAll = L === "en" ? Object.assign({}, PC_EN, I.en || {}, dyn) : Object.assign({}, I[L] || {}, dyn);
+  /* item names written in Latin letters (e.g. from Odoo): exact whole-text match only */
+  pcTrLat = {};
+  if(L !== "en") Object.keys(dyn).forEach(k=>{ if(!/[؀-ۿ]/.test(k)) pcTrLat[k] = dyn[k]; });
   pcTrSig = pcTrDynSig();
   const keys = Object.keys(pcTrAll).sort((a,b)=>b.length-a.length).map(k=>k.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));
   pcTrRegex = keys.length ? new RegExp("(?<![\\u0600-\\u06FF])(?:"+keys.join("|")+")(?![\\u0600-\\u06FF])","g") : /$^/g;
@@ -6116,8 +6125,7 @@ function pcApplyLang(root){
       if(en){
         if(rec && n.nodeValue === rec.t) continue;
         const o = n.nodeValue;
-        if(!/[؀-ۿ]/.test(o)) continue;
-        const t = pcTr(o);
+        const t = /[؀-ۿ]/.test(o) ? pcTr(o) : pcTrLatin(o);
         if(t !== o){ n.__pcTr = {o,t}; n.nodeValue = t; pcTrNodes.add(n); }
       }
     }
