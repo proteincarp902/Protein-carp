@@ -537,9 +537,11 @@ function drawInternalDestinations(){
 
 function renderSettingsPasswords(){settingsShell("passwords","الصلاحيات وكلمات المرور",`<div class="premium-form"><label>كلمة مرور الإدارة</label><input id="adminPasswordInput" type="password" placeholder="كلمة مرور الإدارة"><label>كلمة مرور المستودع</label><input id="warehousePasswordInput" type="password" placeholder="كلمة مرور المستودع"><button class="btn btn-main" onclick="savePasswords()">حفظ كلمات المرور</button></div>
   <div class="premium-form pc121-key"><h3>ترجمة الملاحظات تلقائيًا</h3>
-    <p class="pc85-hint">الملاحظات وأسباب الهدر ورسائل الدردشة تظهر بلغة القارئ. بدون مفتاح يظهر بجوارها زر «ترجم» يفتح Google Translate. مع مفتاح Google Cloud Translation تُترجم تلقائيًا. قيّد المفتاح من Google Cloud على عنوان الموقع وعلى Cloud Translation API فقط.</p>
-    <label>مفتاح Google Cloud Translation API</label><input id="pcTrKey" dir="ltr" autocomplete="off" placeholder="AIza..." value="${escapeHtml(systemSettings.translateKey||"")}">
-    <div class="pc114-row"><button class="btn btn-light" onclick="pcNoteKeyTest()">اختبار المفتاح</button><button class="btn btn-main" onclick="pcNoteKeySave()">حفظ المفتاح</button></div></div>`);}
+    <p class="pc85-hint">الملاحظات وأسباب الهدر ورسائل الدردشة تظهر بلغة القارئ. بدون مفتاح يظهر بجوارها زر «ترجم» يفتح Google Translate. مع مفتاح Microsoft Azure Translator (أو Google Cloud) تُترجم تلقائيًا. مع Azure استخدم الباقة المجانية F0 حتى لا تُحسب أي تكلفة.</p>
+    <label>مزوّد الترجمة</label><select id="pcTrProv" onchange="pcNoteProvUi()"><option value="azure" ${pcNoteProv()==="azure"?"selected":""}>Microsoft Azure Translator</option><option value="google" ${pcNoteProv()==="google"?"selected":""}>Google Cloud Translation</option></select>
+    <label>المفتاح (Key)</label><input id="pcTrKey" dir="ltr" autocomplete="off" placeholder="KEY 1" value="${escapeHtml(systemSettings.translateKey||"")}">
+    <div id="pcTrRegWrap"><label>المنطقة (Location / Region)</label><input id="pcTrReg" dir="ltr" autocomplete="off" placeholder="مثال: westeurope أو uaenorth أو global" value="${escapeHtml(systemSettings.translateRegion||"")}"></div>
+    <div class="pc114-row"><button class="btn btn-light" onclick="pcNoteKeyTest()">اختبار المفتاح</button><button class="btn btn-main" onclick="pcNoteKeySave()">حفظ المفتاح</button></div></div>`);setTimeout(pcNoteProvUi,0);}
 
 async function savePasswords(){
   const adminPassword=document.getElementById("adminPasswordInput").value.trim();
@@ -9273,11 +9275,9 @@ async function pcNoteFetch(){
       const all = [...set].filter(t=>!pcNoteCache[pcNoteKey(L, t)]);
       for(let i = 0; i < all.length; i += 100){
         const q = all.slice(i, i + 100);
-        const r = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(key)}`, {
-          method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({q, target:L, format:"text"})});
-        if(!r.ok){ console.warn("translate", r.status); pcNoteOff = true; break; }
-        const j = await r.json();
-        (j.data?.translations || []).forEach((t, k)=>{ if(t && t.translatedText) pcNoteCache[pcNoteKey(L, q[k])] = t.translatedText; });
+        const out = await pcNoteApi(q, L, pcNoteProv(), key, systemSettings.translateRegion);
+        if(!out.ok){ console.warn("translate", out.status, out.msg); pcNoteOff = true; break; }
+        out.texts.forEach((t, k)=>{ if(t) pcNoteCache[pcNoteKey(L, q[k])] = t; });
       }
     }
     pcNoteSave();
@@ -9296,25 +9296,58 @@ function pcNotesApply(){ document.querySelectorAll(".pcN").forEach(pcNoteRender)
   if(document.body) start(); else document.addEventListener("DOMContentLoaded", start);
 })();
 
-/* Settings: Google Cloud Translation key for automatic note translation. */
+/* Translation provider: Azure Translator (key + region) or Google Cloud Translation (key only).
+ * Old settings that only have a Google key (AIza...) keep working as Google. */
+function pcNoteProv(){
+  const p = systemSettings.translateProvider;
+  if(p === "azure" || p === "google") return p;
+  return /^AIza/.test(String(systemSettings.translateKey || "")) ? "google" : "azure";
+}
+function pcNoteProvUi(){
+  const w = document.getElementById("pcTrRegWrap"), p = document.getElementById("pcTrProv");
+  if(w && p) w.hidden = p.value !== "azure";
+}
+async function pcNoteApi(texts, L, prov, key, region){
+  try{
+    if(prov === "google"){
+      const r = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(key)}`, {
+        method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({q:texts, target:L, format:"text"})});
+      const j = await r.json().catch(()=>({}));
+      if(!r.ok) return {ok:false, status:r.status, msg:j.error?.message || ""};
+      return {ok:true, texts:(j.data?.translations || []).map(t=>t && t.translatedText)};
+    }
+    const h = {"Content-Type":"application/json", "Ocp-Apim-Subscription-Key":key};
+    const reg = String(region || "").trim().toLowerCase().replace(/\s+/g, "");
+    if(reg && reg !== "global") h["Ocp-Apim-Subscription-Region"] = reg;
+    const r = await fetch(`https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&to=${encodeURIComponent(L)}`, {
+      method:"POST", headers:h, body:JSON.stringify(texts.map(t=>({Text:t})))});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) return {ok:false, status:r.status, msg:j.error?.message || ""};
+    return {ok:true, texts:(Array.isArray(j) ? j : []).map(x=>x && x.translations && x.translations[0] && x.translations[0].text)};
+  }catch(err){ return {ok:false, status:0, msg:String(err && err.message || err)}; }
+}
 async function pcNoteKeySave(){
   const v = (document.getElementById("pcTrKey")?.value || "").trim();
+  const prov = document.getElementById("pcTrProv")?.value || "azure";
+  const reg = (document.getElementById("pcTrReg")?.value || "").trim().toLowerCase().replace(/\s+/g, "");
   const {db,doc,setDoc} = window.firebaseDB;
   try{
-    await setDoc(doc(db,"settings","system"), {translateKey:v}, {merge:true});
-    systemSettings.translateKey = v; pcNoteOff = false;
+    await setDoc(doc(db,"settings","system"), {translateKey:v, translateProvider:prov, translateRegion:reg}, {merge:true});
+    Object.assign(systemSettings, {translateKey:v, translateProvider:prov, translateRegion:reg}); pcNoteOff = false;
     showToast(v ? "تم حفظ مفتاح الترجمة" : "تم إيقاف الترجمة التلقائية");
+    pcNotesApply();
   }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
 }
 async function pcNoteKeyTest(){
   const v = (document.getElementById("pcTrKey")?.value || "").trim();
+  const prov = document.getElementById("pcTrProv")?.value || "azure";
+  const reg = document.getElementById("pcTrReg")?.value || "";
   if(!v){ showToast("اكتب المفتاح أولًا","error"); return; }
-  try{
-    const r = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(v)}`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({q:["الطلب ناقص كيلو بصل"], target:"bn", format:"text"})});
-    const j = await r.json().catch(()=>({}));
-    if(r.ok) showToast(`المفتاح يعمل: ${j.data?.translations?.[0]?.translatedText || ""}`);
-    else showToast(`المفتاح لا يعمل (${r.status}) ${j.error?.message || ""}`, "error");
-  }catch(err){ showToast("تعذر الاتصال بخدمة الترجمة","error"); }
+  if(prov === "azure" && !reg.trim()){ showToast("اكتب المنطقة (Location) كما تظهر في Azure","error"); return; }
+  const out = await pcNoteApi(["الطلب ناقص كيلو بصل"], "bn", prov, v, reg);
+  if(out.ok) showToast(`المفتاح يعمل: ${out.texts[0] || ""}`);
+  else if(out.status === 0) showToast("تعذر الاتصال بخدمة الترجمة","error");
+  else showToast(`المفتاح لا يعمل (${out.status}) ${out.msg}`, "error");
 }
 
 /* =========================== Permissions =========================== *
