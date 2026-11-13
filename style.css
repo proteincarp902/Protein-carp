@@ -4871,3 +4871,29 @@ div.pc112-line{cursor:default}
 .pc122-lrow>.pc70-unit,.pc122-lrow>.pc60-step{margin:0!important;align-self:center}
 .pc122-rsel{flex-basis:100%}
 .pc60-step-label{flex-wrap:wrap}
+
+/* pc123 — attendance report scope */
+.pc123-scope{display:grid;gap:10px;margin-bottom:12px;padding:12px;border:1px solid var(--app-line);border-radius:14px;background:var(--app-surface)}
+.pc123-scope .pc60-chips{align-items:center}
+.pc123-allbr{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;width:fit-content}
+.pc123-allbr input{width:18px;height:18px;margin:0}
+.pc123-pick select{width:100%;max-width:420px;margin:0}
+.pc123-group{border:1px solid var(--app-line);border-radius:12px;padding:8px 10px;max-width:520px}
+.pc123-group summary{cursor:pointer;font-weight:800;font-size:13.5px;list-style:none;display:flex;justify-content:space-between;align-items:center}
+.pc123-group summary::-webkit-details-marker{display:none}
+.pc123-group input[type=search]{width:100%;margin:10px 0 6px}
+.pc123-gact{display:flex;gap:6px;margin-bottom:6px}
+.pc123-glist{display:grid;gap:2px;max-height:280px;overflow:auto}
+.pc123-glist label{display:flex;align-items:center;gap:8px;padding:7px 6px;border-radius:8px;cursor:pointer;font-size:14px}
+.pc123-glist label:hover{background:var(--app-bg)}
+.pc123-glist input{width:18px;height:18px;margin:0;flex:none}
+.pc123-glist small{margin-inline-start:auto;color:var(--app-muted);font-size:11.5px}
+.pc123-range{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pc123-range input{max-width:160px!important}
+.pc123-label{margin:0 2px 10px;font-weight:800;color:var(--app-brand-dark);font-size:13.5px}
+.pc123-total td{background:var(--app-tint);font-weight:800}
+.pc123-dets{display:grid;gap:8px;margin-top:14px}
+.pc123-emp{border:1px solid var(--app-line);border-radius:12px;background:var(--app-surface);overflow:hidden}
+.pc123-emp summary{cursor:pointer;padding:10px 12px;display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:space-between;align-items:center}
+.pc123-emp summary span{font-size:12.5px;color:var(--app-muted)}
+.pc123-emp .premium-table-wrap{margin:0;border-radius:0}
