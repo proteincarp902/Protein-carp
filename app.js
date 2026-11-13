@@ -4851,8 +4851,8 @@ function pc60RefreshRow(kind,id){
   if(!row || !item) return;
   const qty = Number(pc60Entry(kind,id)?.qty || 0);
   if(pc60Filter[kind] === "picked" && !qty){ row.remove(); pc60DrawChips(kind); return; }
-  const tmp = document.createElement("div");
-  tmp.innerHTML = pc70TileHtml(kind,item).trim();
+  const tmp = document.createElement(kind === "req" ? "tbody" : "div");
+  tmp.innerHTML = (kind === "req" ? pc122ReqRow(item, pc122Bal || (pc122Bal = pc122BalMap())) : pc70TileHtml(kind,item)).trim();
   row.replaceWith(tmp.firstElementChild);
   pc60DrawChips(kind);
 }
@@ -4897,6 +4897,7 @@ function pc60DrawList(kind){
   pc60DrawChips(kind);
   pc70DrawQuick(kind);
 
+  if(kind === "req") return pc122ReqDraw(box, list, q, f);
   const mode = pcViewMode("catalog");
   if(!list.length){
     box.innerHTML = pc60Empty("fa-face-meh", f==="picked" ? "لم تختر أي صنف بعد" :
@@ -4920,6 +4921,77 @@ function pc60DrawList(kind){
   if(list.length > shown.length) html += `<button type="button" class="pc60-more-btn" onclick="pc70More('${kind}')">عرض المزيد (${list.length-shown.length})</button>`;
   box.innerHTML = `<div class="pc70-grid ${mode==="list"?"is-list":""}" data-view-scope="catalog">${html}</div>`;
   pc60UpdateBar(kind);
+}
+
+/* Warehouse request as one sheet: every item of the section, one under the other, with the section's
+   current balance and the quantity to request side by side. Balances come from the section stock
+   (pcStoreBalances) and show only once stock tracking is switched on for the branch. */
+function pc122BalMap(){
+  const out = {on:false, map:{}};
+  try{
+    if(typeof pcStoreStart !== "function" || !pcStoreStart()) return out;
+    out.on = true;
+    pcStoreBalances("raw", currentChef?.section || "").forEach(r=>{ if(r.itemId && !out.map[r.itemId]) out.map[r.itemId] = r; });
+  }catch(e){ console.warn("balances", e); out.on = false; }
+  return out;
+}
+function pc122ReqRow(i, bal){
+  const id = escapeHtml(i.id);
+  const e = pc60Entry("req", i.id);
+  const qty = Number(e?.qty || 0);
+  const unit = e?.unit || pc70DefUnit("req", i);
+  const un = pc90Unavailable(i);
+  const b = bal.on ? bal.map[i.id] : null;
+  const bq = b ? pcStoreConv(b.qty, b.unit, unit) : null;
+  const bTxt = !bal.on ? "—" : (b ? pc60Num(bq && bq.ok ? bq.q : b.qty) : "0");
+  const bCls = !bal.on ? "na" : (!b || !b.qty ? "zero" : (b.qty < 0 ? "neg" : ""));
+  return `
+    <tr class="pc122-r ${qty?"on":""} ${un?"un":""}" data-row="${id}">
+      <td class="pc122-name"><b>${escapeHtml(pc60ItemName("req", i))}</b>
+        <small>${escapeHtml(unit)}${i.code?` • ${escapeHtml(i.code)}`:""}${un?` • <span class="pc90-tag">${e?.supplyRequested?"طلب توفير":"غير متوفر"}</span>`:""}</small></td>
+      <td class="pc122-bal ${bCls}">${bTxt}</td>
+      <td class="pc122-qty"><input type="text" inputmode="decimal" placeholder="0" value="${qty?pc60Num(qty):""}"
+        onfocus="pc122Focus(this,'${id}')" onchange="pc60SetQty('req','${id}',String(this.value).replace(',', '.'))" onkeydown="pc122Key(event,this)" aria-label="الكمية المطلوبة"></td>
+    </tr>`;
+}
+function pc122Focus(inp, id){
+  const src = pc60Source("req").find(x=>String(x.id)===String(id));
+  if(src && pc90Unavailable(src) && !pc60Entry("req", id)){ inp.blur(); pc91Ask("req", src); return; }
+  inp.select();
+}
+function pc122Key(ev, inp){
+  if(ev.key !== "Enter") return;
+  ev.preventDefault();
+  const all = [...document.querySelectorAll("#pc60List .pc122-qty input")];
+  const nx = all[all.indexOf(inp) + 1];
+  if(nx) nx.focus(); else inp.blur();
+}
+var pc122Bal = null;
+function pc122ReqDraw(box, list, q, f){
+  if(!list.length){
+    box.innerHTML = pc60Empty("fa-face-meh", f==="picked" ? "لم تطلب أي صنف بعد" : (q ? "لا توجد نتائج مطابقة" : "لا توجد أصناف مستودع لقسمك. اطلب من الإدارة تحديدها."));
+    pc60UpdateBar("req");
+    return;
+  }
+  const bal = pc122Bal = pc122BalMap();
+  const sorted = list.slice().sort((a,b)=>pc60ItemName("req",a).localeCompare(pc60ItemName("req",b),"ar"));
+  let body = "";
+  if(!q && f === "all"){
+    const groups = {};
+    sorted.forEach(i=>{ const c = pc70Category("req", i) || "أخرى"; (groups[c] = groups[c] || []).push(i); });
+    const names = Object.keys(groups).sort((a,b)=>a==="أخرى" ? 1 : b==="أخرى" ? -1 : a.localeCompare(b,"ar"));
+    body = names.map(c=>(names.length > 1 ? `<tr class="pc122-grp"><td colspan="3">${escapeHtml(c)} <small>${groups[c].length}</small></td></tr>` : "")
+      + groups[c].map(i=>pc122ReqRow(i, bal)).join("")).join("");
+  }else{
+    body = sorted.map(i=>pc122ReqRow(i, bal)).join("");
+  }
+  box.innerHTML = `
+    ${bal.on ? "" : `<p class="pc122-note"><i class="fa-solid fa-circle-info"></i> رصيد القسم يظهر بعد تفعيل متابعة المخزون للفرع من شاشة الأقسام.</p>`}
+    <div class="pc122-wrap"><table class="pc122-t">
+      <thead><tr><th>الصنف</th><th>الرصيد بالقسم</th><th>الكمية المطلوبة</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table></div>`;
+  pc60UpdateBar("req");
 }
 
 function pc70LastDoc(kind){
@@ -5057,7 +5129,7 @@ function pc60ListPage({kind, title, placeholder, handler, tab, extra=""}){
         <div class="pc70-searchrow">
           <label class="pc60-search"><i class="fa-solid fa-magnifying-glass"></i>
             <input id="pc60Search" type="search" placeholder="${placeholder}" oninput="pc70Search('${kind}')" autocomplete="off"></label>
-          ${pcViewToggle("catalog")}
+          ${kind==="req" ? "" : pcViewToggle("catalog")}
         </div>
         <div class="pc60-chips" id="pc60Chips"></div>
       </div>
@@ -5113,26 +5185,29 @@ function drawLastProductionForChef(){
 }
 
 var PC60_WASTE_REASONS = ["تالف","منتهي الصلاحية","احتراق","سقط / انسكب","خطأ تحضير","زيادة إنتاج","أخرى"];
-var pc60W = {src:"menu", name:"", code:"", qty:1, unit:"حبة", reason:"", custom:""};
+/* Waste: several items in one entry. Each line keeps its own quantity and reason; the reason chips set
+   the reason for every line at once. Saving writes one waste_logs record per line (same batchId), so
+   reports and section balances keep reading the same record shape. */
+var pc60W = {src:"menu", lines:[], reason:"", custom:""};
 
 function renderWaste(){
   if(!currentChef) return renderChefs();
-  pc60W = {src:"menu", name:"", code:"", qty:1, unit:"حبة", reason:"", custom:""};
+  pc60W = {src:"menu", lines:[], reason:"", custom:""};
   const today = pc17ChefWasteToday();
   pageLayout("الهدر", `
     ${pc60Bar({title:"الهدر والتالف", sub:`${currentChef.section||""} • ${currentChef.name||""}`, back:"renderChefDashboard(currentChef)",
       trailing:`<span class="pc60-chip ${today.length?"pending":"none"}" id="pc60WasteCount">اليوم ${today.length}</span>`})}
     <section class="pc60-page has-bar has-tabs">
       <section class="pc60-card">
-        <div class="pc60-step-label"><i>1</i> ما الذي تلف؟</div>
+        <div class="pc60-step-label"><i>1</i> اختر الأصناف التالفة <small class="pc122-hint">اضغط على أكثر من صنف</small></div>
         <div id="pc60WSel"></div>
       </section>
       <section class="pc60-card">
-        <div class="pc60-step-label"><i>2</i> الكمية</div>
-        <div class="pc60-bigstep" id="pc60WQty"></div>
+        <div class="pc60-step-label"><i>2</i> الكميات <span class="pc122-count" id="pc60WN"></span></div>
+        <div id="pc60WLines"></div>
       </section>
       <section class="pc60-card">
-        <div class="pc60-step-label"><i>3</i> السبب</div>
+        <div class="pc60-step-label"><i>3</i> السبب <small class="pc122-hint">يُطبّق على كل الأصناف، ويمكن تغييره لصنف واحد</small></div>
         <div class="pc60-reasons" id="pc60WReasons"></div>
         <input id="pc60WCustom" class="pc60-custom" type="text" placeholder="اكتب السبب" hidden oninput="pc60W.custom=this.value;pc60WUpdateBar()">
       </section>
@@ -5145,32 +5220,26 @@ function renderWaste(){
     </div>
     ${pc60Tabs("waste")}
   `,"renderChefDashboard(currentChef)");
-  pc60WDrawSel(); pc60WDrawQty(); pc60WDrawReasons(); pc60WDrawToday(); pc60WUpdateBar();
+  pc60WDrawSel(); pc60WDrawLines(); pc60WDrawReasons(); pc60WDrawToday(); pc60WUpdateBar();
 }
 
 function pc60WSource(){
-  if(pc60W.src === "menu") return pc17MenuForChef().map(i=>({name:pc17ItemName(i), code:i.code||"", en:pc17ItemEn(i), unit:pc70DefUnit("prod", i)}));
-  return (warehouseItems||[]).map(i=>({name:i.nameAr||i.name||"", code:i.code||"", en:i.nameEn||"", unit:pc70DefUnit("req", i)}));
+  if(pc60W.src === "menu") return pc17MenuForChef().map(i=>({id:i.id, name:pc17ItemName(i), code:i.code||"", en:pc17ItemEn(i), unit:pc70DefUnit("prod", i)}));
+  return (warehouseItems||[]).map(i=>({id:i.id, name:i.nameAr||i.name||"", code:i.code||"", en:i.nameEn||"", unit:pc70DefUnit("req", i)}));
 }
+function pc60WKey(store, name, code){ return store + "|" + (code || name); }
 
 function pc60WDrawSel(){
   const box = document.getElementById("pc60WSel");
   if(!box) return;
-  if(pc60W.name){
-    box.innerHTML = `
-      <div class="pc60-picked">
-        <div><b>${escapeHtml(pc60W.name)}</b>${pc60W.code ? `<small>${escapeHtml(pc60W.code)}</small>` : ""}</div>
-        <button type="button" onclick="pc60WPick('','')">تغيير</button>
-      </div>`;
-    return;
-  }
+  const keep = document.getElementById("pc60WSearch")?.value || "";
   box.innerHTML = `
     <div class="pc60-seg2">
       <button type="button" class="${pc60W.src==="menu"?"active":""}" onclick="pc60W.src='menu';pc60WDrawSel()">منتج جاهز</button>
       <button type="button" class="${pc60W.src==="raw"?"active":""}" onclick="pc60W.src='raw';pc60WDrawSel()">مادة خام</button>
     </div>
     <label class="pc60-search"><i class="fa-solid fa-magnifying-glass"></i>
-      <input id="pc60WSearch" type="search" placeholder="ابحث أو اكتب اسم الصنف" oninput="pc60WDrawList()" autocomplete="off"></label>
+      <input id="pc60WSearch" type="search" placeholder="ابحث أو اكتب اسم الصنف" oninput="pc60WDrawList()" autocomplete="off" value="${escapeHtml(keep)}"></label>
     <div id="pc60WList" class="pc60-wlist"></div>`;
   pc60WDrawList();
 }
@@ -5180,47 +5249,77 @@ function pc60WDrawList(){
   if(!box) return;
   const q = (document.getElementById("pc60WSearch")?.value||"").trim();
   const ql = q.toLowerCase();
+  const store = pc60W.src === "raw" ? "raw" : "prod";
+  const on = new Set(pc60W.lines.map(l=>l.key));
   const list = pc60WSource().filter(i=>!ql || [i.name,i.en,i.code].some(v=>String(v||"").toLowerCase().includes(ql)))
-    .sort((a,b)=>a.name.localeCompare(b.name,"ar")).slice(0,40);
-  let html = list.map(i=>`
-    <button type="button" class="pc60-pick" data-name="${escapeHtml(i.name)}" data-code="${escapeHtml(i.code)}" data-unit="${escapeHtml(i.unit||"")}" onclick="pc60WPick(this.dataset.name,this.dataset.code,this.dataset.unit)">
-      <b>${escapeHtml(i.name)}</b><small>${escapeHtml([i.code,i.en].filter(Boolean).join(" • "))}</small></button>`).join("");
+    .sort((a,b)=>a.name.localeCompare(b.name,"ar")).slice(0,60);
+  let html = list.map(i=>{
+    const k = pc60WKey(store, i.name, i.code), sel = on.has(k);
+    return `
+    <button type="button" class="pc60-pick pc122-pick ${sel?"on":""}" data-name="${escapeHtml(i.name)}" data-code="${escapeHtml(i.code)}" data-unit="${escapeHtml(i.unit||"")}" onclick="pc60WToggle(this.dataset.name,this.dataset.code,this.dataset.unit)">
+      <i class="fa-solid ${sel?"fa-square-check":"fa-square"}"></i>
+      <span><b>${escapeHtml(i.name)}</b><small>${escapeHtml([i.code,i.en,i.unit].filter(Boolean).join(" • "))}</small></span></button>`;
+  }).join("");
   if(q && !list.some(i=>i.name===q)){
-    html += `<button type="button" class="pc60-pick manual" data-name="${escapeHtml(q)}" data-code="" onclick="pc60WPick(this.dataset.name,'')"><b>استخدام «${escapeHtml(q)}» كاسم يدوي</b></button>`;
+    html += `<button type="button" class="pc60-pick manual" data-name="${escapeHtml(q)}" onclick="pc60WToggle(this.dataset.name,'','');document.getElementById('pc60WSearch').value='';pc60WDrawList()"><b>إضافة «${escapeHtml(q)}» كاسم يدوي</b></button>`;
   }
   box.innerHTML = html || pc60Empty("fa-face-meh","اكتب اسم الصنف للبحث");
 }
 
-function pc60WPick(name,code,unit){
-  pc60W.name = name; pc60W.code = code || "";
-  pc60W.unit = unit || "حبة";
-  pc60WDrawSel(); pc60WDrawQty(); pc60WUpdateBar();
+function pc60WToggle(name, code, unit){
+  name = String(name||"").trim(); if(!name) return;
+  const store = pc60W.src === "raw" ? "raw" : "prod";
+  const key = pc60WKey(store, name, code);
+  const i = pc60W.lines.findIndex(l=>l.key===key);
+  if(i >= 0) pc60W.lines.splice(i, 1);
+  else pc60W.lines.push({key, store, name, code:code||"", unit:unit || (store==="raw" ? "كجم" : "حبة"), qty:pc70Init(unit) || 1, reason:"", custom:""});
+  try{ navigator.vibrate && navigator.vibrate(5); }catch(e){}
+  pc60WDrawList(); pc60WDrawLines(); pc60WUpdateBar();
 }
 
-function pc60WDrawQty(){
-  const box = document.getElementById("pc60WQty");
+function pc60WDrawLines(){
+  const box = document.getElementById("pc60WLines");
   if(!box) return;
-  box.innerHTML = `
-    <button type="button" onclick="pc60WStep(-1)" aria-label="إنقاص">−</button>
-    <input type="text" inputmode="decimal" value="${pc60Num(pc60W.qty)}" onfocus="this.select()" onchange="pc60WSet(this.value)" aria-label="الكمية">
-    <button type="button" onclick="pc60WStep(1)" aria-label="زيادة">+</button>
-    <span class="pc70-unit pc119-fixed">${escapeHtml(pc60W.name ? pc60W.unit : "—")}</span>`;
+  const n = document.getElementById("pc60WN");
+  if(n) n.textContent = pc60W.lines.length ? `${pc60W.lines.length} ${pc60W.lines.length===1?"صنف":"أصناف"}` : "";
+  if(!pc60W.lines.length){ box.innerHTML = `<p class="pc122-empty">لم تختر أي صنف بعد</p>`; return; }
+  box.innerHTML = `<div class="pc122-lines">${pc60W.lines.map((l, i)=>`
+    <div class="pc122-line">
+      <div class="pc122-lhead">
+        <div class="pc122-lname"><b>${escapeHtml(l.name)}</b><small>${l.store==="raw"?"مادة خام":"منتج جاهز"}${l.code?` • ${escapeHtml(l.code)}`:""}</small></div>
+        <button type="button" class="pc70-cart-x" onclick="pc60WDel(${i})" aria-label="حذف"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="pc122-lrow">
+        <div class="pc60-step">
+          <button type="button" class="minus" onclick="pc60WStep(${i},-1)" aria-label="إنقاص">−</button>
+          <input type="text" inputmode="decimal" value="${pc60Num(l.qty)}" onfocus="this.select()" onchange="pc60WSet(${i},this.value)" aria-label="الكمية">
+          <button type="button" class="plus" onclick="pc60WStep(${i},1)" aria-label="زيادة">+</button>
+        </div>
+        <span class="pc70-unit pc119-fixed">${escapeHtml(l.unit||"")}</span>
+        <select class="pc122-rsel" onchange="pc60WLineReason(${i},this.value)" aria-label="السبب">
+          <option value="" ${!l.reason?"selected":""}>${escapeHtml(pc60W.reason ? "السبب: "+(pc60W.reason==="أخرى" ? (pc60W.custom||"أخرى") : pc60W.reason) : "اختر السبب")}</option>
+          ${PC60_WASTE_REASONS.map(r=>`<option value="${escapeHtml(r)}" ${l.reason===r?"selected":""}>${escapeHtml(r)}</option>`).join("")}
+        </select>
+      </div>
+      ${l.reason==="أخرى" ? `<input class="pc60-custom pc122-lcustom" type="text" placeholder="اكتب سبب هذا الصنف" value="${escapeHtml(l.custom||"")}" oninput="pc60W.lines[${i}].custom=this.value;pc60WUpdateBar()">` : ""}
+    </div>`).join("")}</div>`;
 }
 
-function pc60WUnit(u){
-  return;   /* the unit comes from the item */
-  pc60W.qty = pc70Conv(Number(pc60W.qty||0), pc60W.unit, u) || pc60W.qty;
-  pc60W.unit = u;
-  pc60WDrawQty(); pc60WUpdateBar();
-}
-
-function pc60WSet(v){
-  let q = Math.round(Number(v||0)*100)/100;
+function pc60WDel(i){ pc60W.lines.splice(i, 1); pc60WDrawList(); pc60WDrawLines(); pc60WUpdateBar(); }
+function pc60WSet(i, v){
+  const l = pc60W.lines[i]; if(!l) return;
+  let q = Math.round(Number(String(v).replace(",", "."))*1000)/1000;
   if(!isFinite(q) || q < 0) q = 0;
-  pc60W.qty = q; pc60WDrawQty(); pc60WUpdateBar();
+  l.qty = q; pc60WDrawLines(); pc60WUpdateBar();
 }
-
-function pc60WStep(d){ pc60WSet(Math.max(0, Number(pc60W.qty||0)+d*pc70Step(pc60W.unit)*(pc70Step(pc60W.unit)>=100?1:1))); }
+function pc60WStep(i, d){
+  const l = pc60W.lines[i]; if(!l) return;
+  pc60WSet(i, Math.max(0, pc70R(Number(l.qty||0) + d*pc70Step(l.unit))));
+}
+function pc60WLineReason(i, r){
+  const l = pc60W.lines[i]; if(!l) return;
+  l.reason = r; pc60WDrawLines(); pc60WUpdateBar();
+}
 
 function pc60WDrawReasons(){
   const box = document.getElementById("pc60WReasons");
@@ -5232,22 +5331,28 @@ function pc60WDrawReasons(){
 }
 
 function pc60WReason(r){
-  pc60W.reason = r; pc60WDrawReasons();
+  pc60W.reason = r;
+  pc60W.lines.forEach(l=>{ l.reason = ""; l.custom = ""; });   /* the chip applies to every line */
+  pc60WDrawReasons(); pc60WDrawLines();
   if(r === "أخرى") setTimeout(()=>document.getElementById("pc60WCustom")?.focus(),30);
   pc60WUpdateBar();
 }
 
-function pc60WReasonText(){
+function pc60WReasonText(l){
+  if(l && l.reason) return l.reason === "أخرى" ? String(l.custom||"").trim() : l.reason;
   return pc60W.reason === "أخرى" ? String(pc60W.custom||"").trim() : pc60W.reason;
 }
 
 function pc60WUpdateBar(){
   const sum = document.getElementById("pc60WSum");
   const btn = document.querySelector("#pc60Bar button");
-  const ok = !!pc60W.name && Number(pc60W.qty) > 0 && !!pc60WReasonText();
-  if(sum) sum.innerHTML = pc60W.name
-    ? `<b>${escapeHtml(pc60W.name)} × ${pc60Num(pc60W.qty)} ${escapeHtml(pc60W.unit||"")}</b><small>${escapeHtml(pc60WReasonText() || "اختر السبب")}</small>`
-    : `<b>اختر الصنف أولاً</b><small>ثم الكمية والسبب</small>`;
+  const L = pc60W.lines;
+  const noQty = L.filter(l=>!(Number(l.qty) > 0)).length;
+  const noReason = L.filter(l=>!pc60WReasonText(l)).length;
+  const ok = L.length && !noQty && !noReason;
+  if(sum) sum.innerHTML = !L.length
+    ? `<b>اختر الأصناف أولاً</b><small>ثم الكميات والسبب</small>`
+    : `<b>${L.length} ${L.length===1?"صنف":"أصناف"}</b><small>${noQty ? `${noQty} بدون كمية` : (noReason ? `${noReason} بدون سبب` : "جاهز للتسجيل")}</small>`;
   if(btn) btn.disabled = !ok || pc60Busy;
 }
 
@@ -5268,35 +5373,39 @@ function pc60WDrawToday(){
 async function submitWaste(){
   if(!currentChef) return renderChefs();
   if(pc60Busy) return;
-  const productName = String(pc60W.name||"").trim();
-  const qty = Number(pc60W.qty);
-  const reason = pc60WReasonText();
-  if(!productName || !qty || qty <= 0 || !reason){
-    showToast("أكمل الصنف والكمية والسبب","error");
+  const L = pc60W.lines.filter(l=>String(l.name||"").trim());
+  if(!L.length || L.some(l=>!(Number(l.qty) > 0) || !pc60WReasonText(l))){
+    showToast("أكمل الكمية والسبب لكل صنف","error");
     return;
+  }
+  if(L.length > 1){
+    const ok = await pcSheet({title:"تأكيد تسجيل الهدر", icon:"fa-trash-can", tone:"warn",
+      body:`<div class="pc122-confirm">${L.map(l=>`<div><b>${escapeHtml(l.name)}</b><span>${pc60Num(l.qty)} ${escapeHtml(l.unit||"")} · ${escapeHtml(pc60WReasonText(l))}</span></div>`).join("")}</div>`,
+      actions:[{label:`تسجيل ${L.length} أصناف`, kind:"btn-danger", value:true},{label:"رجوع", kind:"btn-light", value:false}]});
+    if(!ok) return;
   }
   pc60Busy = true; pc60WUpdateBar();
   try{
-    const {db,addDoc,collection,serverTimestamp} = window.firebaseDB;
-    await addDoc(collection(db,"waste_logs"),{
-      chefName:currentChef.name,
-      chefId:currentChef.id,
-      section:currentChef.section,
-    branchId:currentBranch,
-      productName,
-      store:pc60W.src === "raw" ? "raw" : "prod",
-      itemCode:pc60W.code || "",
-      qty,
-      unit:pc60W.unit || "",
-      reason,
-      createdAtText:nowText(),
-      timeMs:Date.now(),
-      createdAt:serverTimestamp()
-    });
-    showToast("تم تسجيل الهدر");
-    pc60W = {src:pc60W.src, name:"", code:"", qty:1, unit:pc60W.src==="menu"?"حبة":"كجم", reason:"", custom:""};
+    const {db,doc,addDoc,collection,writeBatch,serverTimestamp} = window.firebaseDB;
+    const now = Date.now(), batchId = "w" + now.toString(36) + Math.random().toString(36).slice(2,6);
+    const recs = L.map(l=>({
+      chefName:currentChef.name, chefId:currentChef.id, section:currentChef.section, branchId:currentBranch,
+      productName:String(l.name).trim(), store:l.store === "raw" ? "raw" : "prod", itemCode:l.code || "",
+      qty:Number(l.qty), unit:l.unit || "", reason:pc60WReasonText(l),
+      batchId, batchSize:L.length,
+      createdAtText:nowText(), timeMs:now, createdAt:serverTimestamp()
+    }));
+    if(typeof writeBatch === "function" && recs.length > 1){
+      const b = writeBatch(db);
+      recs.forEach(r=>b.set(doc(collection(db,"waste_logs")), r));
+      await b.commit();
+    }else{
+      for(const r of recs) await addDoc(collection(db,"waste_logs"), r);
+    }
+    showToast(L.length > 1 ? `تم تسجيل هدر ${L.length} أصناف` : "تم تسجيل الهدر");
+    pc60W = {src:pc60W.src, lines:[], reason:"", custom:""};
     const custom = document.getElementById("pc60WCustom"); if(custom) custom.value = "";
-    pc60WDrawSel(); pc60WDrawQty(); pc60WDrawReasons(); pc60WDrawToday();
+    pc60WDrawSel(); pc60WDrawLines(); pc60WDrawReasons(); pc60WDrawToday();
   }catch(err){
     console.error(err);
     showToast("تعذر تسجيل الهدر، حاول مرة أخرى","error");
