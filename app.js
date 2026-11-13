@@ -8903,16 +8903,15 @@ function pcRqBarHtml(e){
   const minePend = pcRqMineList(e).filter(l=>{ const s = pcRqStatus(l); return s===PC_RQ.mgr || s===PC_RQ.hr; }).length;
   const team = pcHrReports(e.id).length, teamPend = pcRqTeamList(e).filter(l=>pcRqStatus(l)===PC_RQ.mgr).length;
   return `<div class="pc125-bar">
-    <button type="button" data-id="${escapeHtml(e.id)}" onclick="pcRqNew(this.dataset.id)"><i class="fa-solid fa-paper-plane"></i><span>طلب إجازة / استئذان</span></button>
-    <button type="button" onclick="pcRqOpen('mine')"><i class="fa-solid fa-list-check"></i><span>طلباتي</span>${minePend?`<em class="pc60-badge">${minePend}</em>`:""}</button>
+    <button type="button" onclick="pcRqOpen('mine')"><i class="fa-solid fa-paper-plane"></i><span>إجازة / استئذان</span>${minePend?`<em class="pc60-badge">${minePend}</em>`:""}</button>
     ${team || teamPend ? `<button type="button" onclick="pcRqOpen('team')"><i class="fa-solid fa-people-group"></i><span>طلبات فريقي</span>${teamPend?`<em class="pc60-badge hot">${teamPend}</em>`:""}</button>` : ""}
   </div>`;
 }
 function pcRqOpen(view){
   const e = pcEmpCurrent(); if(!e) return;
   pcRqView = view;
-  pageLayout(view==="team" ? "طلبات فريقي" : "طلباتي", `
-    ${pc60Bar({title:view==="team" ? "طلبات فريقي" : "طلباتي", sub:e.name, back:"pcEmpHome()"})}
+  pageLayout(view==="team" ? "طلبات فريقي" : "الإجازات والاستئذان", `
+    ${pc60Bar({title:view==="team" ? "طلبات فريقي" : "الإجازات والاستئذان", sub:e.name, back:"pcEmpHome()"})}
     <section class="pc60-page has-bar"><div id="pcRqBox"></div></section>`, "pcEmpHome()");
   pcRqDraw();
 }
@@ -8931,7 +8930,7 @@ function pcRqDraw(){
   }
   const list = pcRqMineList(e);
   box.innerHTML = `
-    <button type="button" class="btn btn-main pc125-new" data-id="${escapeHtml(e.id)}" onclick="pcRqNew(this.dataset.id)"><i class="fa-solid fa-plus"></i> طلب جديد</button>
+    <button type="button" class="btn btn-main pc125-new" data-id="${escapeHtml(e.id)}" onclick="pcRqNew(this.dataset.id)"><i class="fa-solid fa-plus"></i> طلب إجازة / استئذان / تبرير تأخير</button>
     ${list.length ? `<div class="pc125-list">${list.map(l=>pcRqCard(l, "", false)).join("")}</div>` : pc60Empty("fa-inbox","لم ترسل أي طلب بعد")}`;
 }
 
