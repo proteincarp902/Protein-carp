@@ -1435,6 +1435,7 @@ function renderWarehouse(){
         <button class="${pc19WarehouseTab==="new"?"active":""}" onclick="pc19WarehouseTab='new';drawWarehouseOrders()">جديد</button>
         <button class="${pc19WarehouseTab==="progress"?"active":""}" onclick="pc19WarehouseTab='progress';drawWarehouseOrders()">قيد الصرف</button>
         <button class="${pc19WarehouseTab==="done"?"active":""}" onclick="pc19WarehouseTab='done';drawWarehouseOrders()">تم التسليم</button>
+        <button class="${pc19WarehouseTab==="sum"?"active":""}" onclick="pc19WarehouseTab='sum';drawWarehouseOrders()"><i class="fa-solid fa-layer-group"></i> المجمّع</button>
         <button onclick="renderInternalIssue()">صرف داخلي</button>
       </section>
 
@@ -1450,6 +1451,8 @@ function drawWarehouseOrders(){
   const box = document.getElementById("warehouseOrdersBox");
   if(!box) return;
 
+  document.querySelectorAll(".pc19-tabs button").forEach(b=>{ const m = (b.getAttribute("onclick")||"").match(/pc19WarehouseTab='(\w+)'/); if(m) b.classList.toggle("active", m[1]===pc19WarehouseTab); });
+  if(pc19WarehouseTab === "sum"){ box.innerHTML = pcBranchChips(pc19Branch,"pc19SetBranch") + pc126Html(); return; }
   const orders = pc19FilteredOrders().filter(o=>pc19Branch==="all" || pcBranchOf(o)===pc19Branch);
   const chips = pcBranchChips(pc19Branch,"pc19SetBranch");
   if(!orders.length){
@@ -6707,6 +6710,93 @@ function pc90OutSummary(orders){
   if(!names.size) return "";
   return `<div class="pc90-sum"><b><i class="fa-solid fa-triangle-exclamation"></i> أصناف غير متوفرة مطلوبة الآن (${names.size})</b>
     <div>${[...names].slice(0,12).map(n=>`<span class="pc90-tag">${escapeHtml(n)}</span>`).join("")}</div></div>`;
+}
+
+/* ===== Warehouse: consolidated pick list =====
+ * Each section's order stays a separate order. This view adds up every open order item by item
+ * (in the warehouse item's unit) so the warehouse sees, e.g., meat: 10 kg + 5 kg = 15 kg, with the
+ * breakdown per section and order. Lines whose unit cannot be converted stay on their own row. */
+var pc126Scope = "open";   /* open = new + in progress; new = new only */
+function pc126Open(o){
+  if(o.status === "محذوف") return false;
+  const isNew = o.status === "جديد" || !o.status;
+  const prog = String(o.issueStatus||"").includes("قيد") || o.status === "قيد الصرف";
+  return pc126Scope === "new" ? isNew && !prog : (isNew || prog);
+}
+function pc126Rows(){
+  const orders = (warehouseOrders||[]).filter(o=>pc126Open(o) && (pc19Branch==="all" || pcBranchOf(o)===pc19Branch));
+  const map = {};
+  orders.forEach(o=>(o.items||[]).forEach(it=>{
+    const q0 = Number(it.qty||0); if(!(q0 > 0)) return;
+    const w = pc86Find(it);
+    const u0 = pc70Unit(it.unit||"");
+    let key, unit = u0, q = q0;
+    if(w){
+      const wu = pc70Unit(w.unit||"") || u0;
+      const c = pcStoreConv(q0, u0 || wu, wu);
+      if(c.ok){ key = "w:"+w.id; unit = wu; q = c.q; } else key = "w:"+w.id+"|"+u0;
+    }else key = "n:"+String(it.name||"").trim()+"|"+u0;
+    const r = map[key] || (map[key] = {key, w, name:w ? (w.nameAr||w.name||it.name) : (it.name||""), code:(w&&w.code)||it.code||"", unit, total:0, by:[], cat:w ? pc70Category("req", w) : "أخرى", out:w ? pc90Unavailable(w) : false});
+    r.total = pc70R(r.total + q);
+    r.by.push({sec:o.section||"قسم غير محدد", br:pcBranchName(pcBranchOf(o)), no:pc19OrderNo(o), q, id:o.id});
+  }));
+  const rows = Object.values(map);
+  rows.forEach(r=>{ const st = r.w ? pc86Stock(r.w) : null; r.stock = (st !== null && !r.key.includes("|")) ? st : null; r.short = r.stock !== null ? Math.max(0, pc70R(r.total - r.stock)) : 0; });
+  return {orders, rows:rows.sort((a,b)=>String(a.cat).localeCompare(String(b.cat),"ar") || String(a.name).localeCompare(String(b.name),"ar"))};
+}
+function pc126Html(){
+  const {orders, rows} = pc126Rows();
+  const secs = {}; orders.forEach(o=>{ const k = (o.section||"قسم غير محدد") + (pcMulti() && pc19Branch==="all" ? " · "+pcBranchName(pcBranchOf(o)) : ""); secs[k] = (secs[k]||0)+1; });
+  const short = rows.filter(r=>r.short > 0).length;
+  const head = `
+    <div class="pc126-bar">
+      <div class="pc60-chips">
+        <button type="button" class="pc60-fchip ${pc126Scope==="open"?"active":""}" onclick="pc126Scope='open';drawWarehouseOrders()">الجديدة وقيد الصرف</button>
+        <button type="button" class="pc60-fchip ${pc126Scope==="new"?"active":""}" onclick="pc126Scope='new';drawWarehouseOrders()">الجديدة فقط</button>
+      </div>
+      <button type="button" class="btn btn-light" onclick="pc126Excel()" ${rows.length?"":"disabled"}><i class="fa-solid fa-file-excel"></i> Excel</button>
+    </div>
+    <div class="pc126-kpis"><span><b>${orders.length}</b> طلب</span><span><b>${Object.keys(secs).length}</b> قسم</span><span><b>${rows.length}</b> صنف</span>${short?`<span class="bad"><b>${short}</b> صنف المخزون لا يكفيه</span>`:""}</div>
+    ${Object.keys(secs).length ? `<p class="pc126-secs">${Object.keys(secs).map(k=>`<span>${escapeHtml(k)} <b>${secs[k]}</b></span>`).join("")}</p>` : ""}`;
+  if(!rows.length) return head + `<div class="pc19-empty">لا توجد طلبات مفتوحة لتجميعها</div>`;
+  let cat = "", body = "";
+  rows.forEach(r=>{
+    if(r.cat !== cat){ cat = r.cat; body += `<tr class="pc122-grp"><td colspan="5">${escapeHtml(cat)}</td></tr>`; }
+    body += `<tr class="${r.short>0?"pc126-low":""}">
+      <td class="pc122-name"><b>${escapeHtml(r.name)}</b>${r.code?`<small>${escapeHtml(r.code)}</small>`:""}${r.out?`<small><span class="pc90-tag">غير متوفر</span></small>`:""}
+        <div class="pc126-by">${pc126BySec(r).map(x=>`<span title="طلب ${x.nos.map(n=>"#"+n).join("، ")}">${escapeHtml(x.label)}${x.nos.length>1?` <small>(${x.nos.length} طلبات)</small>`:""} <b>${pc60Num(x.q)}</b></span>`).join("")}</div></td>
+      <td class="pc122-unit">${escapeHtml(r.unit||"")}</td>
+      <td class="pc126-tot">${pc60Num(r.total)}</td>
+      <td class="pc122-bal">${r.stock===null ? "—" : pc60Num(r.stock)}</td>
+      <td class="pc126-short">${r.short>0 ? pc60Num(r.short) : "—"}</td>
+    </tr>`;
+  });
+  return head + `<div class="pc122-wrap"><table class="pc122-t pc126-t">
+    <thead><tr><th>الصنف وتوزيعه على الأقسام</th><th>الوحدة</th><th>إجمالي المطلوب</th><th>المتوفر</th><th>العجز</th></tr></thead>
+    <tbody>${body}</tbody></table></div>
+    <p class="pc85-hint">الكميات محوّلة لوحدة الصنف في المستودع. كل قسم يظل طلبه منفصلًا في تبويب «جديد» للصرف والتسليم.</p>`;
+}
+function pc126BySec(r){
+  const m = {};
+  r.by.forEach(x=>{ const k = x.sec + (pcMulti() && pc19Branch==="all" ? " · "+x.br : ""); const g = m[k] || (m[k] = {label:k, q:0, nos:[]}); g.q = pc70R(g.q + x.q); g.nos.push(x.no); });
+  return Object.values(m);
+}
+function pc126Excel(){
+  if(typeof XLSX === "undefined"){ showToast("مكتبة Excel غير متاحة الآن","error"); return; }
+  const {orders, rows} = pc126Rows();
+  if(!rows.length){ showToast("لا توجد بيانات","warn"); return; }
+  const secs = [...new Set(orders.map(o=>(o.section||"قسم غير محدد") + (pcMulti() && pc19Branch==="all" ? " · "+pcBranchName(pcBranchOf(o)) : "")))];
+  const sumRows = rows.map(r=>{
+    const o = {"التصنيف":r.cat, "الصنف":r.name, "الكود":r.code, "الوحدة":r.unit, "إجمالي المطلوب":r.total, "المتوفر":r.stock===null ? "" : r.stock, "العجز":r.short || 0};
+    secs.forEach(k=>{ o[k] = r.by.filter(x=>(x.sec + (pcMulti() && pc19Branch==="all" ? " · "+x.br : ""))===k).reduce((a,x)=>a+x.q,0) || ""; });
+    return o;
+  });
+  const det = [];
+  rows.forEach(r=>r.by.forEach(x=>det.push({"الصنف":r.name, "الوحدة":r.unit, "القسم":x.sec, "الفرع":x.br, "رقم الطلب":x.no, "الكمية":x.q})));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sumRows), "المجمّع");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(det), "حسب القسم");
+  XLSX.writeFile(wb, `warehouse-pick-${pc19Branch==="all"?"all":pcBranchName(pc19Branch)}-${pcHrToday()}.xlsx`);
 }
 
 /* ===== Start (must stay last: all state above is initialised first) ===== */
