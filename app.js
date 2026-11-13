@@ -7786,14 +7786,21 @@ function pcHrDayResult(e, dayKey){
   const sh = pcHrShift(e, dayKey);
   const leave = pcHrLeaveOn(e.id, dayKey);
   const now = Date.now();
-  const r = {recs, sh, leave, inMs:recs[0]?.inMs || 0, outMs:0, late:0, early:0, over:0, worked:0, status:"", tone:""};
+  const r = {recs, sh, leave, inMs:recs[0]?.inMs || 0, outMs:0, late:0, early:0, over:0, short:0, plan:0, worked:0, status:"", tone:""};
   const last = recs[recs.length-1];
   r.outMs = last && last.outMs ? last.outMs : 0;
   recs.forEach(a=>{ r.worked += ((a.outMs || (a.day===pcHrToday() ? now : a.inMs)) - a.inMs)/60000; });
   if(recs.length){
     if(sh) r.late = Math.max(0, (r.inMs - sh.start)/60000);
     if(sh && r.outMs) r.early = Math.max(0, (sh.end - r.outMs)/60000);
-    if(sh && r.outMs) r.over = Math.max(0, (r.outMs - sh.end)/60000);   /* overtime = time after the set shift end */
+    /* Overtime / shortfall compare total worked time with the normal hours of the day, so coming in
+       early and leaving early evens out. A rest day has 0 normal hours, so all of it is overtime.
+       Not computed while a punch-out is missing. */
+    if(sh && !(last && !last.outMs)){
+      r.plan = pcHrWorkday(e, dayKey) ? (sh.end - sh.start)/60000 : 0;
+      const diff = Math.round(r.worked) - Math.round(r.plan);
+      r.over = Math.max(0, diff); r.short = Math.max(0, -diff);
+    }
     const open = last && !last.outMs;
     r.status = open ? (dayKey===pcHrToday() ? "حاضر الآن" : "لم يسجل انصراف") : "حاضر";
     r.tone = open && dayKey!==pcHrToday() ? "warn" : (r.late >= 1 ? "warn" : "ok");
@@ -8093,24 +8100,25 @@ function pcHrDayHtml(){
   const c = k=>rows.filter(x=>x.r.tone===k).length;
   return `
     <div class="pc103-kpis"><span class="ok">${c("ok")} حاضر</span><span class="warn">${c("warn")} متأخر / ناقص</span><span class="bad">${c("bad")} غائب</span><span class="info">${c("info")} إجازة</span></div>
-    ${rows.length ? `<div class="premium-table-wrap"><table class="premium-table pc103-table"><thead><tr><th>الموظف</th><th>الدوام</th><th>الحضور</th><th>الانصراف</th><th>التأخير</th><th>خروج مبكر</th><th>إضافي</th><th>العمل الفعلي</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>
+    ${rows.length ? `<div class="premium-table-wrap"><table class="premium-table pc103-table"><thead><tr><th>الموظف</th><th>الدوام</th><th>الحضور</th><th>الانصراف</th><th>العمل الفعلي</th><th>إضافي</th><th>نقص</th><th>التأخير</th><th>خروج مبكر</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>
       ${rows.map(({e,r})=>`<tr>
         <td><b>${escapeHtml(e.name)}</b><br><small>${escapeHtml([e.role, e.section, pcHrF.allBr ? pcBranchName(pcBranchOf(e)) : ""].filter(Boolean).join(" · "))}</small></td>
         <td>${r.sh ? pcChefShiftText(e) : "—"}</td>
         <td>${pcHrClock(r.inMs)}${pcGeoTag(r.recs[0]?.inGeo)}</td><td>${pcHrClock(r.outMs)}${pcGeoTag(r.recs[r.recs.length-1]?.outGeo)}</td>
-        <td>${r.late>=1 ? pcHrDur(r.late) : "—"}</td><td>${r.early>=1 ? pcHrDur(r.early) : "—"}</td>
+        <td>${r.recs.length ? `<b>${pcHrDur(r.worked)}</b>${r.plan ? `<br><small>من ${pcHrDur(r.plan)}</small>` : ""}` : "—"}</td>
         <td>${r.over>=1 ? `<b class="pc124-ot">${pcHrDur(r.over)}</b>` : "—"}</td>
-        <td>${r.recs.length ? pcHrDur(r.worked) : "—"}</td>
+        <td>${r.short>=1 ? `<b class="pc124-sh">${pcHrDur(r.short)}</b>` : "—"}</td>
+        <td>${r.late>=1 ? pcHrDur(r.late) : "—"}</td><td>${r.early>=1 ? pcHrDur(r.early) : "—"}</td>
         <td><em class="pc103-tag ${r.tone}">${escapeHtml(r.status)}</em>${r.recs.some(a=>a.editedBy)?` <em class="pc103-tag warn" title="سُجّل أو عُدّل يدويًا من الموارد البشرية">يدوي</em>`:""}</td>
         <td>${r.recs.length ? `<button class="mini-btn" data-id="${escapeHtml(r.recs[r.recs.length-1].id)}" onclick="pcHrFixAtt(this.dataset.id)">تصحيح</button>` : ""}</td>
       </tr>`).join("")}</tbody></table></div>` : `<div class="placeholder">لا يوجد موظفون ضمن الاختيار</div>`}`;
 }
 function pcHrSumRange(e, from, to){
-  const s = {e, present:0, late:0, lateMin:0, earlyMin:0, overMin:0, overDays:0, absent:0, leave:0, missingOut:0, workedMin:0, days:[]};
+  const s = {e, present:0, late:0, lateMin:0, earlyMin:0, overMin:0, overDays:0, shortMin:0, shortDays:0, absent:0, leave:0, missingOut:0, workedMin:0, days:[]};
   for(let d = from; d <= to; d = pcHrAddDays(d,1)){
     const r = pcHrDayResult(e, d);
     s.days.push({d, r});
-    if(r.recs.length){ s.present++; s.workedMin += r.worked; if(r.late>=1){ s.late++; s.lateMin += r.late; } s.earlyMin += r.early; if(r.over>=1){ s.overDays++; s.overMin += r.over; } if(r.status==="لم يسجل انصراف") s.missingOut++; }
+    if(r.recs.length){ s.present++; s.workedMin += r.worked; if(r.late>=1){ s.late++; s.lateMin += r.late; } s.earlyMin += r.early; if(r.over>=1){ s.overDays++; s.overMin += r.over; } if(r.short>=1){ s.shortDays++; s.shortMin += r.short; } if(r.status==="لم يسجل انصراف") s.missingOut++; }
     else if(r.leave) s.leave++;
     else if(r.status==="غائب") s.absent++;
   }
@@ -8123,19 +8131,20 @@ function pcHrMonthRows(){
   return pcHrScopeEmps().map(e=>pcHrSumRange(e, first, end));
 }
 function pcHrSumTable(rows){
-  return `<div class="premium-table-wrap"><table class="premium-table pc103-table"><thead><tr><th>الموظف</th><th>أيام الحضور</th><th>مرات التأخير</th><th>دقائق التأخير</th><th>دقائق الخروج المبكر</th><th>ساعات إضافية</th><th>غياب</th><th>إجازة</th><th>بدون انصراف</th><th>ساعات العمل</th></tr></thead><tbody>
+  return `<div class="premium-table-wrap"><table class="premium-table pc103-table"><thead><tr><th>الموظف</th><th>أيام الحضور</th><th>مرات التأخير</th><th>دقائق التأخير</th><th>دقائق الخروج المبكر</th><th>ساعات العمل</th><th>ساعات إضافية</th><th>ساعات نقص</th><th>غياب</th><th>إجازة</th><th>بدون انصراف</th></tr></thead><tbody>
     ${rows.map(s=>`<tr><td><b>${escapeHtml(s.e.name)}</b><br><small>${escapeHtml([s.e.odooEmployeeId?"#"+s.e.odooEmployeeId:"", s.e.role, s.e.section, pcHrF.allBr ? pcBranchName(pcBranchOf(s.e)) : ""].filter(Boolean).join(" · "))}</small></td>
       <td>${s.present}</td><td>${s.late}</td><td>${Math.round(s.lateMin)}</td><td>${Math.round(s.earlyMin)}</td>
+      <td><b>${(s.workedMin/60).toFixed(2)}</b></td>
       <td>${s.overMin>=1 ? `<b class="pc124-ot">${(s.overMin/60).toFixed(2)}</b><br><small>${s.overDays} يوم</small>` : "0"}</td>
-      <td>${s.absent ? `<em class="pc103-tag bad">${s.absent}</em>` : 0}</td><td>${s.leave}</td><td>${s.missingOut ? `<em class="pc103-tag warn">${s.missingOut}</em>` : 0}</td>
-      <td>${(s.workedMin/60).toFixed(1)}</td></tr>`).join("")}
-    ${rows.length > 1 ? (()=>{ const t = k=>rows.reduce((a,s)=>a+s[k],0); return `<tr class="pc123-total"><td><b>الإجمالي (${rows.length})</b></td><td>${t("present")}</td><td>${t("late")}</td><td>${Math.round(t("lateMin"))}</td><td>${Math.round(t("earlyMin"))}</td><td>${(t("overMin")/60).toFixed(2)}</td><td>${t("absent")}</td><td>${t("leave")}</td><td>${t("missingOut")}</td><td>${(t("workedMin")/60).toFixed(1)}</td></tr>`; })() : ""}
+      <td>${s.shortMin>=1 ? `<b class="pc124-sh">${(s.shortMin/60).toFixed(2)}</b><br><small>${s.shortDays} يوم</small>` : "0"}</td>
+      <td>${s.absent ? `<em class="pc103-tag bad">${s.absent}</em>` : 0}</td><td>${s.leave}</td><td>${s.missingOut ? `<em class="pc103-tag warn">${s.missingOut}</em>` : 0}</td></tr>`).join("")}
+    ${rows.length > 1 ? (()=>{ const t = k=>rows.reduce((a,s)=>a+s[k],0); return `<tr class="pc123-total"><td><b>الإجمالي (${rows.length})</b></td><td>${t("present")}</td><td>${t("late")}</td><td>${Math.round(t("lateMin"))}</td><td>${Math.round(t("earlyMin"))}</td><td>${(t("workedMin")/60).toFixed(2)}</td><td>${(t("overMin")/60).toFixed(2)}</td><td>${(t("shortMin")/60).toFixed(2)}</td><td>${t("absent")}</td><td>${t("leave")}</td><td>${t("missingOut")}</td></tr>`; })() : ""}
     </tbody></table></div>`;
 }
 function pcHrMonthHtml(){
   const rows = pcHrMonthRows();
   if(!rows.length) return `<div class="placeholder">لا يوجد موظفون ضمن الاختيار</div>`;
-  return `<p class="pc85-hint">من أول الشهر حتى اليوم. الغياب = يوم عمل بلا حضور ولا إجازة معتمدة.</p>${pcHrSumTable(rows)}`;
+  return `<p class="pc85-hint">من أول الشهر حتى اليوم. الغياب = يوم عمل بلا حضور ولا إجازة معتمدة. الإضافي والنقص = ساعات العمل الفعلية مقارنة بساعات الدوام الطبيعية لليوم (الحضور المبكر يعوّض الانصراف المبكر). يوم الراحة كله إضافي.</p>${pcHrSumTable(rows)}`;
 }
 function pcHrRangeOk(){
   const f = pcHrF;
@@ -8156,14 +8165,15 @@ function pcHrRangeHtml(){
   const det = rows.map(s=>{
     const days = s.days.filter(x=>x.r.status!=="قبل المباشرة");
     return `<details class="pc123-emp" ${rows.length===1?"open":""}><summary><b>${escapeHtml(s.e.name)}</b>
-      <span>حضور ${s.present} · تأخير ${Math.round(s.lateMin)}د · إضافي ${(s.overMin/60).toFixed(2)} س · غياب ${s.absent} · ${(s.workedMin/60).toFixed(1)} ساعة</span></summary>
-      <div class="premium-table-wrap"><table class="premium-table pc103-table"><thead><tr><th>اليوم</th><th>الدوام</th><th>الحضور</th><th>الانصراف</th><th>التأخير</th><th>خروج مبكر</th><th>إضافي</th><th>العمل الفعلي</th><th>الحالة</th></tr></thead><tbody>
+      <span>حضور ${s.present} · تأخير ${Math.round(s.lateMin)}د · إضافي ${(s.overMin/60).toFixed(2)} س · نقص ${(s.shortMin/60).toFixed(2)} س · غياب ${s.absent} · ${(s.workedMin/60).toFixed(1)} ساعة</span></summary>
+      <div class="premium-table-wrap"><table class="premium-table pc103-table"><thead><tr><th>اليوم</th><th>الدوام</th><th>الحضور</th><th>الانصراف</th><th>العمل الفعلي</th><th>إضافي</th><th>نقص</th><th>التأخير</th><th>خروج مبكر</th><th>الحالة</th></tr></thead><tbody>
       ${days.map(({d,r})=>`<tr><td>${pcHrDateText(d)}</td><td>${r.sh ? pcChefShiftText(s.e) : "—"}</td><td>${pcHrClock(r.inMs)}</td><td>${pcHrClock(r.outMs)}</td>
-        <td>${r.late>=1 ? pcHrDur(r.late) : "—"}</td><td>${r.early>=1 ? pcHrDur(r.early) : "—"}</td><td>${r.over>=1 ? `<b class="pc124-ot">${pcHrDur(r.over)}</b>` : "—"}</td><td>${r.recs.length ? pcHrDur(r.worked) : "—"}</td>
+        <td>${r.recs.length ? pcHrDur(r.worked) : "—"}</td><td>${r.over>=1 ? `<b class="pc124-ot">${pcHrDur(r.over)}</b>` : "—"}</td><td>${r.short>=1 ? `<b class="pc124-sh">${pcHrDur(r.short)}</b>` : "—"}</td>
+        <td>${r.late>=1 ? pcHrDur(r.late) : "—"}</td><td>${r.early>=1 ? pcHrDur(r.early) : "—"}</td>
         <td><em class="pc103-tag ${r.tone}">${escapeHtml(r.status)}</em></td></tr>`).join("")}
       </tbody></table></div></details>`;
   }).join("");
-  return `<p class="pc85-hint">ملخص الفترة ثم تفاصيل كل موظف يومًا بيوم. الغياب = يوم عمل بلا حضور ولا إجازة معتمدة.</p>${pcHrSumTable(rows)}<div class="pc123-dets">${det}</div>`;
+  return `<p class="pc85-hint">ملخص الفترة ثم تفاصيل كل موظف يومًا بيوم. الغياب = يوم عمل بلا حضور ولا إجازة معتمدة. الإضافي والنقص = ساعات العمل الفعلية مقارنة بساعات الدوام الطبيعية لليوم (الحضور المبكر يعوّض الانصراف المبكر). يوم الراحة كله إضافي.</p>${pcHrSumTable(rows)}<div class="pc123-dets">${det}</div>`;
 }
 function pcHrXlsxName(tag){
   return `attendance-${pcHrScopeLabel().replace(/[\\/:*?"<>|]+/g," ").replace(/\s+/g,"-")}-${tag}.xlsx`;
@@ -8171,8 +8181,9 @@ function pcHrXlsxName(tag){
 function pcHrSumRow(s){
   return {"الموظف":s.e.name, "الرقم الوظيفي أودو":s.e.odooEmployeeId||"", "الوظيفة":s.e.role||"", "القسم":s.e.section||"", "الفرع":pcBranchName(pcBranchOf(s.e)),
     "أيام الحضور":s.present, "مرات التأخير":s.late, "دقائق التأخير":Math.round(s.lateMin), "دقائق الخروج المبكر":Math.round(s.earlyMin),
-    "دقائق إضافية":Math.round(s.overMin), "ساعات إضافية":Number((s.overMin/60).toFixed(2)), "أيام بها إضافي":s.overDays,
-    "أيام الغياب":s.absent, "أيام الإجازة":s.leave, "أيام بدون انصراف":s.missingOut, "ساعات العمل":Number((s.workedMin/60).toFixed(2))};
+    "ساعات العمل":Number((s.workedMin/60).toFixed(2)), "ساعات إضافية":Number((s.overMin/60).toFixed(2)), "أيام بها إضافي":s.overDays,
+    "ساعات نقص":Number((s.shortMin/60).toFixed(2)), "أيام بها نقص":s.shortDays,
+    "أيام الغياب":s.absent, "أيام الإجازة":s.leave, "أيام بدون انصراف":s.missingOut};
 }
 function pcHrExportMonth(){
   if(typeof XLSX === "undefined"){ showToast("مكتبة Excel غير متاحة الآن","error"); return; }
@@ -8190,8 +8201,9 @@ function pcHrExportDay(){
   if(!rows.length){ showToast("لا يوجد موظفون ضمن الاختيار","warn"); return; }
   const data = rows.map(({e,r})=>({"التاريخ":pcHrDay, "الموظف":e.name, "الرقم الوظيفي أودو":e.odooEmployeeId||"", "الوظيفة":e.role||"", "القسم":e.section||"", "الفرع":pcBranchName(pcBranchOf(e)),
     "الدوام":r.sh ? pcChefShiftText(e) : "", "الحضور":pcHrClockX(r.inMs), "الانصراف":pcHrClockX(r.outMs),
-    "دقائق التأخير":Math.round(r.late||0), "دقائق الخروج المبكر":Math.round(r.early||0), "دقائق إضافية":Math.round(r.over||0), "ساعات إضافية":Number(((r.over||0)/60).toFixed(2)),
-    "دقائق العمل":r.recs.length ? Math.round(r.worked) : 0, "الحالة":r.status}));
+    "ساعات العمل":r.recs.length ? Number((r.worked/60).toFixed(2)) : 0, "الساعات الطبيعية":Number(((r.plan||0)/60).toFixed(2)),
+    "ساعات إضافية":Number(((r.over||0)/60).toFixed(2)), "ساعات نقص":Number(((r.short||0)/60).toFixed(2)),
+    "دقائق التأخير":Math.round(r.late||0), "دقائق الخروج المبكر":Math.round(r.early||0), "الحالة":r.status}));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "الحضور");
   XLSX.writeFile(wb, pcHrXlsxName(pcHrDay));
@@ -8205,8 +8217,9 @@ function pcHrExportRange(){
   rows.forEach(s=>s.days.filter(x=>x.r.status!=="قبل المباشرة").forEach(({d,r})=>det.push({
     "الموظف":s.e.name, "الرقم الوظيفي أودو":s.e.odooEmployeeId||"", "القسم":s.e.section||"", "الفرع":pcBranchName(pcBranchOf(s.e)), "التاريخ":d,
     "الحضور":pcHrClockX(r.inMs), "الانصراف":pcHrClockX(r.outMs),
-    "الدوام":r.sh ? pcChefShiftText(s.e) : "", "دقائق التأخير":Math.round(r.late||0), "دقائق الخروج المبكر":Math.round(r.early||0),
-    "دقائق إضافية":Math.round(r.over||0), "ساعات إضافية":Number(((r.over||0)/60).toFixed(2)), "دقائق العمل":r.recs.length ? Math.round(r.worked) : 0, "الحالة":r.status})));
+    "الدوام":r.sh ? pcChefShiftText(s.e) : "", "ساعات العمل":r.recs.length ? Number((r.worked/60).toFixed(2)) : 0, "الساعات الطبيعية":Number(((r.plan||0)/60).toFixed(2)),
+    "ساعات إضافية":Number(((r.over||0)/60).toFixed(2)), "ساعات نقص":Number(((r.short||0)/60).toFixed(2)),
+    "دقائق التأخير":Math.round(r.late||0), "دقائق الخروج المبكر":Math.round(r.early||0), "الحالة":r.status})));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.map(pcHrSumRow)), "الملخص");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(det), "التفاصيل");
