@@ -1378,7 +1378,7 @@ async function submitWarehouseOrderCore(){
 
 const pc18OldRenderAdmin = typeof renderAdmin === "function" ? renderAdmin : null;
 
-let pc19WarehouseTab = "new";
+let pc19WarehouseTab = "sum";
 let pc19OpenWarehouseOrderId = null;
 let pc19IssueDraft = {};
 
@@ -1413,6 +1413,8 @@ function pc19FilteredOrders(){
 }
 
 function renderWarehouse(){
+  if(!pc126Can()) return renderWarehouseGate();
+  pcSetScope("all");
   pc19OpenWarehouseOrderId = null;
   const c = pc19WarehouseCounts();
 
@@ -1446,7 +1448,7 @@ function renderWarehouse(){
         <button class="${pc19WarehouseTab==="new"?"active":""}" onclick="pc19WarehouseTab='new';drawWarehouseOrders()">جديد</button>
         <button class="${pc19WarehouseTab==="progress"?"active":""}" onclick="pc19WarehouseTab='progress';drawWarehouseOrders()">قيد الصرف</button>
         <button class="${pc19WarehouseTab==="done"?"active":""}" onclick="pc19WarehouseTab='done';drawWarehouseOrders()">تم التسليم</button>
-        <button class="${pc19WarehouseTab==="sum"?"active":""}" onclick="pc19WarehouseTab='sum';drawWarehouseOrders()"><i class="fa-solid fa-layer-group"></i> المجمّع</button>
+        <button class="${pc19WarehouseTab==="sum"?"active":""}" onclick="pc19WarehouseTab='sum';drawWarehouseOrders()"><i class="fa-solid fa-layer-group"></i> الطلب المجمّع</button>
         <button onclick="renderInternalIssue()">صرف داخلي</button>
       </section>
 
@@ -6750,95 +6752,93 @@ function pc90OutSummary(orders){
  * Each section's order stays a separate order. This view adds up every open order item by item
  * (in the warehouse item's unit) so the warehouse sees, e.g., meat: 10 kg + 5 kg = 15 kg, with the
  * breakdown per section and order. Lines whose unit cannot be converted stay on their own row. */
-var pc126Scope = "open", pc126BuyOnly = false;   /* open = new + in progress; new = new only */
+var pc126Scope = "open", pc126BuyOnly = false;
+function pc126Can(){return !pcEmpSessionRaw()||pcEmpIsAdmin()||pcCan("wh.open");}
 function pc126Open(o){
-  if(o.status === "محذوف") return false;
-  const isNew = o.status === "جديد" || !o.status;
-  const prog = String(o.issueStatus||"").includes("قيد") || o.status === "قيد الصرف";
-  return pc126Scope === "new" ? isNew && !prog : (isNew || prog);
+  const status=String(o.status||"").trim(),issue=String(o.issueStatus||"").trim();
+  if(["محذوف","ملغي","ملغى","مرفوض","تم الإلغاء","تم الاستلام","تم الصرف","تم التسليم","جاهز","مكتمل"].includes(status)||["تم الصرف","صرف جزئي","لم يصرف","تم التسليم"].includes(issue)||Number(o.issuedAtMs||0)>0)return false;
+  const fresh=!status||status==="جديد",progress=issue.includes("قيد")||["قيد الصرف","قيد التجهيز"].includes(status);
+  return pc126Scope==="new"?fresh&&!progress:fresh||progress;
+}
+function pc126Item(it){
+  const all=warehouseItems||[],id=String(it.itemId||it.id||""),code=String(it.code||it.itemCode||"").trim(),name=String(it.name||it.productName||"").trim();
+  const matches=id?all.filter(w=>String(w.id)===id):code?all.filter(w=>String(w.code||"").trim()===code):all.filter(w=>String(w.nameAr||w.name||"").trim()===name);
+  return {item:matches.length===1?matches[0]:null,ambiguous:matches.length>1,id,code,name};
 }
 function pc126Rows(){
-  const orders = (warehouseOrders||[]).filter(o=>pc126Open(o) && (pc19Branch==="all" || pcBranchOf(o)===pc19Branch));
-  const map = {};
-  orders.forEach(o=>(o.items||[]).forEach(it=>{
-    const q0 = Number(it.qty||0); if(!(q0 > 0)) return;
-    const w = pc86Find(it);
-    const u0 = pc70Unit(it.unit||"");
-    let key, unit = u0, q = q0;
-    if(w){
-      const wu = pc70Unit(w.unit||"") || u0;
-      const c = pcStoreConv(q0, u0 || wu, wu);
-      if(c.ok){ key = "w:"+w.id; unit = wu; q = c.q; } else key = "w:"+w.id+"|"+u0;
-    }else key = "n:"+String(it.name||"").trim()+"|"+u0;
-    const r = map[key] || (map[key] = {key, w, name:w ? (w.nameAr||w.name||it.name) : (it.name||""), code:(w&&w.code)||it.code||"", unit, total:0, by:[], cat:w ? pc70Category("req", w) : "أخرى", out:w ? pc90Unavailable(w) : false});
-    r.total = pc70R(r.total + q);
-    r.by.push({sec:o.section||"قسم غير محدد", br:pcBranchName(pcBranchOf(o)), no:pc19OrderNo(o), q, id:o.id});
-  }));
-  const rows = Object.values(map);
-  rows.forEach(r=>{ const st = r.w ? pc86Stock(r.w) : null; r.stock = (st !== null && !r.key.includes("|")) ? st : null; r.short = r.stock !== null ? Math.max(0, pc70R(r.total - r.stock)) : 0; });
-  return {orders, rows:rows.sort((a,b)=>String(a.cat).localeCompare(String(b.cat),"ar") || String(a.name).localeCompare(String(b.name),"ar"))};
+  if(!pc126Can())return {orders:[],rows:[],skipped:0};
+  const source=Array.isArray(pcRaw.warehouseOrders)?pcRaw.warehouseOrders:(warehouseOrders||[]),map=new Map(),seen=new Set(),orders=[];
+  let skipped=0;
+  source.forEach((o,oi)=>{
+    const orderKey=o.id||`row-${oi}`;
+    if(seen.has(orderKey)||!pc126Open(o)||(pc19Branch!=="all"&&pcBranchOf(o)!==pc19Branch))return;
+    seen.add(orderKey);let kept=false;
+    (o.items||[]).forEach((it,ii)=>{
+      const qty=Number(it.qty),resolved=pc126Item(it),w=resolved.item;
+      if(!Number.isFinite(qty)||qty<=0||(!w&&!resolved.name&&!resolved.id&&!resolved.code)){skipped++;return;}
+      const originalUnit=pc70Unit(it.unit||""),catalogUnit=pc70Unit(w?.unit||""),conversion=w&&catalogUnit?pcStoreConv(qty,originalUnit||catalogUnit,catalogUnit):{ok:false,q:qty};
+      const unit=conversion.ok?catalogUnit:originalUnit,q=pc70R(conversion.q);
+      if(!Number.isFinite(q)||q<=0){skipped++;return;}
+      const identity=w?["catalog",String(w.id)]:resolved.ambiguous?["unresolved",orderKey,ii]:resolved.id?["id",resolved.id]:resolved.code?["code",resolved.code]:["name",resolved.name];
+      const key=JSON.stringify([...identity,unit]);
+      if(!map.has(key))map.set(key,{key,w,name:w?(w.nameAr||w.name||resolved.name):resolved.name,code:w?.code||resolved.code,unit,total:0,by:[],cat:w?pc70Category("req",w):"أخرى",out:w?pc90Unavailable(w):false,compatible:!!conversion.ok,unresolved:resolved.ambiguous});
+      const r=map.get(key);r.total=pc70R(r.total+q);kept=true;
+      r.by.push({sec:o.section||"قسم غير محدد",branchId:pcBranchOf(o),br:pcBranchName(pcBranchOf(o)),no:pc19OrderNo(o),q,id:o.id||"",orderKey,sourceQty:qty,sourceUnit:originalUnit||catalogUnit});
+    });
+    if(kept)orders.push(o);
+  });
+  const rows=[...map.values()];
+  rows.forEach(r=>{r.stock=r.w&&r.compatible?pc86Stock(r.w):null;r.short=r.stock===null?null:Math.max(0,pc70R(r.total-r.stock));});
+  return {orders,rows:rows.sort((a,b)=>String(a.cat).localeCompare(String(b.cat),"ar")||String(a.name).localeCompare(String(b.name),"ar")||String(a.unit).localeCompare(String(b.unit),"ar")),skipped};
+}
+function pc126Shown(rows){return pc126BuyOnly?rows.filter(r=>r.stock===null||r.short>0):rows;}
+function pc126BySec(r){
+  const groups=new Map();
+  r.by.forEach(x=>{
+    const key=JSON.stringify([x.branchId,x.sec]);
+    if(!groups.has(key))groups.set(key,{label:x.sec+(pc19Branch==="all"?" · "+x.br:""),q:0,nos:[],orders:[]});
+    const g=groups.get(key);g.q=pc70R(g.q+x.q);
+    const existing=g.orders.find(y=>y.key===x.orderKey);
+    if(existing)existing.q=pc70R(existing.q+x.q);else{g.orders.push({key:x.orderKey,id:x.id,no:x.no,q:x.q});g.nos.push(x.no);}
+  });return [...groups.values()];
 }
 function pc126Html(){
-  const {orders, rows} = pc126Rows();
-  const secs = {}; orders.forEach(o=>{ const k = (o.section||"قسم غير محدد") + (pcMulti() && pc19Branch==="all" ? " · "+pcBranchName(pcBranchOf(o)) : ""); secs[k] = (secs[k]||0)+1; });
-  const short = rows.filter(r=>r.short > 0).length, noStock = rows.filter(r=>r.stock === null).length;
-  const head = `
-    <div class="pc126-bar">
-      <div class="pc60-chips">
-        <button type="button" class="pc60-fchip ${pc126Scope==="open"?"active":""}" onclick="pc126Scope='open';drawWarehouseOrders()">الجديدة وقيد الصرف</button>
-        <button type="button" class="pc60-fchip ${pc126Scope==="new"?"active":""}" onclick="pc126Scope='new';drawWarehouseOrders()">الجديدة فقط</button>
-      </div>
-      <div class="pc126-acts">
-        <label class="pc123-allbr"><input type="checkbox" ${pc126BuyOnly?"checked":""} onchange="pc126BuyOnly=this.checked;drawWarehouseOrders()"> ما يجب شراؤه فقط</label>
-        <button type="button" class="btn btn-light" onclick="pc126Excel()" ${rows.length?"":"disabled"}><i class="fa-solid fa-file-excel"></i> Excel</button>
-      </div>
-    </div>
-    <div class="pc126-kpis"><span><b>${orders.length}</b> طلب</span><span><b>${Object.keys(secs).length}</b> قسم</span><span><b>${rows.length}</b> صنف</span>${short?`<span class="bad"><b>${short}</b> صنف يجب شراؤه</span>`:""}${noStock?`<span class="warn"><b>${noStock}</b> صنف بدون رصيد مسجل</span>`:""}</div>
-    ${Object.keys(secs).length ? `<p class="pc126-secs">${Object.keys(secs).map(k=>`<span>${escapeHtml(k)} <b>${secs[k]}</b></span>`).join("")}</p>` : ""}`;
-  if(!rows.length) return head + `<div class="pc19-empty">لا توجد طلبات مفتوحة لتجميعها</div>`;
-  const shown = pc126BuyOnly ? rows.filter(r=>r.short > 0) : rows;
-  if(!shown.length) return head + `<div class="pc19-empty">الرصيد الفعلي يغطي كل الكميات المطلوبة — لا يوجد ما يجب شراؤه</div>`;
-  let cat = "", body = "";
-  shown.forEach(r=>{
-    if(r.cat !== cat){ cat = r.cat; body += `<tr class="pc122-grp"><td colspan="5">${escapeHtml(cat)}</td></tr>`; }
-    body += `<tr class="${r.short>0?"pc126-low":""}">
-      <td class="pc122-name"><b>${escapeHtml(r.name)}</b>${r.code?`<small>${escapeHtml(r.code)}</small>`:""}${r.out?`<small><span class="pc90-tag">غير متوفر</span></small>`:""}
-        <div class="pc126-by">${pc126BySec(r).map(x=>`<span title="طلب ${x.nos.map(n=>"#"+n).join("، ")}">${escapeHtml(x.label)}${x.nos.length>1?` <small>(${x.nos.length} طلبات)</small>`:""} <b>${pc60Num(x.q)}</b></span>`).join("")}</div></td>
-      <td class="pc122-unit">${escapeHtml(r.unit||"")}</td>
-      <td class="pc122-bal ${r.stock===null?"na":""}">${r.stock===null ? `<small>غير مسجل</small>` : pc60Num(r.stock)}</td>
-      <td class="pc126-tot">${pc60Num(r.total)}</td>
-      <td class="pc126-short">${r.stock===null ? `<small class="pc126-q">؟</small>` : (r.short>0 ? pc60Num(r.short) : `<small class="pc126-ok">0</small>`)}</td>
-    </tr>`;
-  });
-  return head + `<div class="pc122-wrap"><table class="pc122-t pc126-t">
-    <thead><tr><th>الصنف وتوزيعه على الأقسام</th><th>الوحدة</th><th>الرصيد الفعلي</th><th>إجمالي المطلوب</th><th>يجب شراؤه</th></tr></thead>
-    <tbody>${body}</tbody></table></div>
-    <p class="pc85-hint">يجب شراؤه = إجمالي المطلوب − الرصيد الفعلي في المستودع (صفر إذا كان الرصيد يكفي). الصنف بدون رصيد مسجل يظهر «؟» حتى يُسجّل رصيده. الكميات محوّلة لوحدة الصنف في المستودع، وكل قسم يظل طلبه منفصلًا في تبويب «جديد» للصرف والتسليم.</p>`;
+  if(!pc126Can())return '<div class="pc19-empty">ليس لديك صلاحية عرض طلب المستودع المجمّع</div>';
+  const {orders,rows,skipped}=pc126Rows(),sections=new Set(orders.map(o=>JSON.stringify([pcBranchOf(o),o.section||""]))),shown=pc126Shown(rows);
+  const head=`<h3>الطلب المجمّع للأقسام</h3><p class="pc85-hint">تُجمع الأصناف تلقائيًا من الطلبات المفتوحة للتجهيز، ويظهر نصيب كل قسم وأرقام طلباته. الصرف والتسليم والاستلام على كل طلب أصلي.</p>
+    <div class="pc126-bar"><div class="pc60-chips"><button type="button" class="pc60-fchip ${pc126Scope==="open"?"active":""}" onclick="pc126Scope='open';drawWarehouseOrders()">الجديدة وقيد التجهيز</button><button type="button" class="pc60-fchip ${pc126Scope==="new"?"active":""}" onclick="pc126Scope='new';drawWarehouseOrders()">الجديدة فقط</button></div>
+    <div class="pc126-acts"><label class="pc123-allbr"><input type="checkbox" ${pc126BuyOnly?"checked":""} onchange="pc126BuyOnly=this.checked;drawWarehouseOrders()"> الناقص أو رصيده غير مسجل</label><button type="button" class="btn btn-light" onclick="pc126Print()" ${shown.length?"":"disabled"}><i class="fa-solid fa-print"></i> طباعة الطلب المجمّع</button><button type="button" class="btn btn-light" onclick="pc126Excel()" ${shown.length?"":"disabled"}><i class="fa-solid fa-file-excel"></i> Excel</button></div></div>
+    <div class="pc126-kpis"><span><b>${orders.length}</b> طلب أصلي</span><span><b>${sections.size}</b> قسم</span><span><b>${rows.length}</b> بند صنف/وحدة</span><span><b>${rows.filter(r=>pc126BySec(r).length>1).length}</b> صنف مشترك بين الأقسام</span></div>
+    ${skipped?`<p role="alert">${skipped} بند بكمية أو بيانات غير صحيحة لم يدخل التجميع؛ راجع الطلبات الأصلية.</p>`:""}`;
+  if(!rows.length)return head+'<div class="pc19-empty">لا توجد طلبات مفتوحة لتجميعها</div>';
+  if(!shown.length)return head+'<div class="pc19-empty">الرصيد المسجل يغطي الكميات المطلوبة</div>';
+  return head+pc126Table(shown,true)+'<p class="pc85-hint">العجز = إجمالي المطلوب − رصيد المستودع. الوحدات التي لا يمكن تحويلها تبقى في صفوف منفصلة برصيد «غير معروف». الطلبات المسلّمة أو الملغاة تخرج من التجميع تلقائيًا.</p>';
 }
-function pc126BySec(r){
-  const m = {};
-  r.by.forEach(x=>{ const k = x.sec + (pcMulti() && pc19Branch==="all" ? " · "+x.br : ""); const g = m[k] || (m[k] = {label:k, q:0, nos:[]}); g.q = pc70R(g.q + x.q); g.nos.push(x.no); });
-  return Object.values(m);
+function pc126Table(rows,links){
+  return `<div class="pc122-wrap"><table class="pc122-t pc126-t"><thead><tr><th>الصنف وتوزيعه على الأقسام</th><th>الوحدة</th><th>الرصيد الفعلي</th><th>إجمالي المطلوب</th><th>العجز</th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.short>0?"pc126-low":""}"><td class="pc122-name"><b>${escapeHtml(r.name||"صنف غير معروف")}</b>${r.code?`<small>${escapeHtml(r.code)}</small>`:""}${r.unresolved?'<small>الصنف ملتبس — راجع الطلب الأصلي</small>':""}<div class="pc126-by">${pc126BySec(r).map(g=>`<span><b>${escapeHtml(g.label)}: ${pc60Num(g.q)} ${escapeHtml(r.unit)}</b><br>${g.orders.map(o=>links&&o.id?`<button type="button" class="pc126-order-link" data-id="${escapeHtml(o.id)}" onclick="pc126OpenOriginal(this.dataset.id)">طلب #${escapeHtml(o.no)} (${pc60Num(o.q)})</button>`:`طلب #${escapeHtml(o.no)} (${pc60Num(o.q)})`).join("، ")}</span>`).join("")}</div></td><td>${escapeHtml(r.unit)}</td><td>${r.stock===null?"غير معروف":pc60Num(r.stock)}</td><td class="pc126-tot">${pc60Num(r.total)}</td><td>${r.stock===null?"راجع الرصيد":pc60Num(r.short)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function pc126OpenOriginal(id){
+  if(!pc126Can())return;
+  const o=pcOrdFind(id);if(!o)return showToast("الطلب لم يعد موجودًا","error");
+  pc19WarehouseTab="sum";renderOrder(id,"warehouse");
+}
+function pc126Print(){
+  if(!pc126Can())return;
+  const {orders,rows}=pc126Rows(),shown=pc126Shown(rows);if(!shown.length)return showToast("لا توجد أصناف ضمن الاختيار","warn");
+  const ids=new Set(shown.flatMap(r=>r.by.map(x=>x.orderKey))),selected=orders.filter(o=>ids.has(o.id));
+  const header=`<p>التاريخ: ${escapeHtml(pcHrToday())} — ${pc19Branch==="all"?"كل الفروع":escapeHtml(pcBranchName(pc19Branch))} — ${pc126Scope==="new"?"الجديدة فقط":"الجديدة وقيد التجهيز"}${pc126BuyOnly?" — الناقص أو غير مسجل الرصيد":""}</p>`;
+  const original=`<h3>طلبات الأقسام الأصلية</h3><table><thead><tr><th>رقم الطلب</th><th>الفرع</th><th>القسم</th><th>صاحب الطلب</th></tr></thead><tbody>${selected.map(o=>`<tr><td>${escapeHtml(pc19OrderNo(o))}</td><td>${escapeHtml(pcBranchName(pcBranchOf(o)))}</td><td>${escapeHtml(o.section||"قسم غير محدد")}</td><td>${escapeHtml(o.chefName||"")}</td></tr>`).join("")}</tbody></table>`;
+  openPrintReport("الطلب المجمّع للمستودع",header+pc126Table(shown,false)+original+'<p>الكميات للتجهيز، وتسجيل الصرف والتسليم يتم لكل طلب أصلي على حدة. هذه القائمة تعكس حالة الطلبات وقت الطباعة.</p>');
 }
 function pc126Excel(){
-  if(typeof XLSX === "undefined"){ showToast("مكتبة Excel غير متاحة الآن","error"); return; }
-  const {orders, rows} = pc126Rows();
-  if(!rows.length){ showToast("لا توجد بيانات","warn"); return; }
-  const secs = [...new Set(orders.map(o=>(o.section||"قسم غير محدد") + (pcMulti() && pc19Branch==="all" ? " · "+pcBranchName(pcBranchOf(o)) : "")))];
-  const sumRows = rows.map(r=>{
-    const o = {"التصنيف":r.cat, "الصنف":r.name, "الكود":r.code, "الوحدة":r.unit, "الرصيد الفعلي":r.stock===null ? "غير مسجل" : r.stock, "إجمالي المطلوب":r.total, "يجب شراؤه":r.stock===null ? "غير معروف" : (r.short || 0)};
-    secs.forEach(k=>{ o[k] = r.by.filter(x=>(x.sec + (pcMulti() && pc19Branch==="all" ? " · "+x.br : ""))===k).reduce((a,x)=>a+x.q,0) || ""; });
-    return o;
-  });
-  const det = [];
-  rows.forEach(r=>r.by.forEach(x=>det.push({"الصنف":r.name, "الوحدة":r.unit, "القسم":x.sec, "الفرع":x.br, "رقم الطلب":x.no, "الكمية":x.q})));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sumRows), "المجمّع");
-  const buy = rows.filter(r=>r.short > 0 || r.stock === null).map(r=>({"التصنيف":r.cat, "الصنف":r.name, "الكود":r.code, "الوحدة":r.unit,
-    "الرصيد الفعلي":r.stock===null ? "غير مسجل" : r.stock, "إجمالي المطلوب":r.total, "يجب شراؤه":r.stock===null ? "راجع الرصيد" : r.short}));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(buy.length ? buy : [{"ملاحظة":"لا يوجد ما يجب شراؤه"}]), "قائمة الشراء");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(det), "حسب القسم");
-  XLSX.writeFile(wb, `warehouse-pick-${pc19Branch==="all"?"all":pcBranchName(pc19Branch)}-${pcHrToday()}.xlsx`);
+  if(!pc126Can())return;
+  if(typeof XLSX==="undefined")return showToast("مكتبة Excel غير متاحة الآن","error");
+  const rows=pc126Shown(pc126Rows().rows);if(!rows.length)return showToast("لا توجد أصناف ضمن الاختيار","warn");
+  const sum=rows.map(r=>({"التصنيف":r.cat,"الصنف":r.name,"الكود":r.code,"الوحدة":r.unit,"الرصيد الفعلي":r.stock??"غير معروف","إجمالي المطلوب":r.total,"العجز":r.short??"غير معروف","توزيع الأقسام":pc126BySec(r).map(g=>`${g.label}: ${pc60Num(g.q)}`).join("؛ ")}));
+  const det=rows.flatMap(r=>r.by.map(x=>({"الصنف":r.name,"الوحدة المجمعة":r.unit,"القسم":x.sec,"الفرع":x.br,"رقم الطلب":x.no,"معرف الطلب الأصلي":x.id,"الكمية بوحدة المستودع":x.q,"الكمية الأصلية":x.sourceQty,"الوحدة الأصلية":x.sourceUnit})));
+  const buy=sum.filter((_,i)=>rows[i].stock===null||rows[i].short>0),wb=XLSX.utils.book_new();
+  for(const [name,data] of [["الطلب المجمع",sum],["حسب القسم والطلب",det],["قائمة الشراء",buy.length?buy:[{"ملاحظة":"الرصيد المسجل يغطي المطلوب"}]]]){const sheet=XLSX.utils.json_to_sheet(data);sheet["!views"]=[{RTL:true}];XLSX.utils.book_append_sheet(wb,sheet,name);}
+  XLSX.writeFile(wb,`warehouse-consolidated-${pcHrToday()}.xlsx`);
 }
 
 /* ===== Start (must stay last: all state above is initialised first) ===== */
