@@ -457,7 +457,7 @@ async function addChef(){
 
 function drawChefs(){const box=document.getElementById("chefsContainer"); if(!box)return; const q=(document.getElementById("chefSettingsSearch")?.value||"").trim().toLowerCase(); const list=chefs.filter(c=>String(c.name||"").toLowerCase().includes(q)||String(c.section||"").toLowerCase().includes(q)); box.innerHTML=list.length?`<table class="premium-table"><thead><tr><th>الشيف</th><th>الفرع</th><th>القسم</th><th>الرقم الوظيفي</th><th>الدوام</th><th>الجوال</th><th>إجراء</th></tr></thead><tbody>${list.map(c=>{const e=(typeof pcHrEmp==="function"&&c.employeeId)?pcHrEmp(c.employeeId):null; const x=e||{}; return `<tr><td><b>${escapeHtml(c.name||"")}</b>${c.inactive?` <small>(غير نشط)</small>`:""}${x.email?`<br><small dir="ltr">${escapeHtml(x.email)}</small>`:""}</td><td>${escapeHtml(pcBranchName(pcBranchOf(c)))}</td><td>${escapeHtml(c.section||"")}</td><td>${escapeHtml(x.odooEmployeeId||"—")}</td><td>${e?pcChefShiftText(x):"—"}</td><td dir="ltr">${escapeHtml(x.phone||"—")}</td><td><button class="mini-btn" data-id="${escapeHtml(c.id)}" data-emp="${escapeHtml(c.employeeId||"")}" onclick="this.dataset.emp?pcHrEditEmployee(this.dataset.emp):pcEditChef(this.dataset.id)">تعديل</button> <button class="mini-danger" onclick="deleteDocByPath('chefs','${c.id}')">حذف</button></td></tr>`;}).join("")}</tbody></table>`:`<div class="placeholder">لا يوجد شيفات</div>`;}
 
-function renderSettingsWarehouseItems(){settingsShell("warehouse","أصناف المستودع",`<div class="premium-toolbar"><input id="warehouseSearch" placeholder="بحث بالكود أو العربي أو English" oninput="drawWarehouseItems()"><button class="btn btn-main" onclick="document.getElementById('warehouseItemForm').classList.toggle('hide')">إضافة صنف</button><button class="btn btn-light" onclick="openSettingsTab('excel')">استيراد Excel</button><button class="btn btn-light" onclick="exportWarehouseCSV()">تصدير Excel</button></div><div id="pc117BarWh"></div><div id="warehouseItemForm" class="premium-form hide"><label>الكود اختياري</label><input id="warehouseItemCode" placeholder="مثال: 4016"><label>اسم الصنف عربي / English</label><input id="warehouseItemName" placeholder="مثال: بصل برياني / Onion Biryani"><label>الاسم بالأوردو (اختياري)</label><input id="warehouseItemUr" lang="ur"><label>الاسم بالبنغالي (اختياري)</label><input id="warehouseItemBn" lang="bn" dir="ltr"><label>الوحدة</label><select id="warehouseItemUnit"><option>كجم</option><option>جرام</option><option>لتر</option><option>مل</option><option>حبة</option><option>علبة</option><option>كيس</option><option>كرتون</option><option>صندوق</option><option>ربطة</option></select><label>التصنيف (اختياري، يُخمَّن تلقائياً إن تُرك فارغاً)</label>${pcCatSelect("warehouseItemCategory","")}<label>الكمية المتاحة (اختياري، يظهر للمستودع ويُخصم عند الصرف)</label><input id="warehouseItemStock" type="number" min="0" step="any" inputmode="decimal" placeholder="اتركها فارغة إن لم تريد التتبع"><label>الأقسام التي يظهر فيها</label>${pcItemSecChecks("pcNewWhSec", pc117.wh.link ? [pc117.wh.link] : [])}<button class="btn btn-main" onclick="addWarehouseItem()">حفظ الصنف</button></div><div id="warehouseItemsContainer" class="premium-table-wrap"></div>`);drawWarehouseItems();}
+function renderSettingsWarehouseItems(){settingsShell("warehouse","أصناف المستودع",`<div class="premium-toolbar"><input id="warehouseSearch" placeholder="بحث بالكود أو العربي أو English" oninput="drawWarehouseItems()"><button class="btn btn-main" onclick="document.getElementById('warehouseItemForm').classList.toggle('hide')">إضافة صنف</button><button class="btn btn-light" onclick="openSettingsTab('excel')">استيراد Excel</button><button class="btn btn-light" onclick="exportWarehouseCSV()">تصدير Excel</button><button class="btn btn-light" onclick="pc132Open()"><i class="fa-solid fa-tags"></i> إدارة التصنيفات</button></div><div id="pc117BarWh"></div><div id="warehouseItemForm" class="premium-form hide"><label>الكود اختياري</label><input id="warehouseItemCode" placeholder="مثال: 4016"><label>اسم الصنف عربي / English</label><input id="warehouseItemName" placeholder="مثال: بصل برياني / Onion Biryani"><label>الاسم بالأوردو (اختياري)</label><input id="warehouseItemUr" lang="ur"><label>الاسم بالبنغالي (اختياري)</label><input id="warehouseItemBn" lang="bn" dir="ltr"><label>الوحدة</label><select id="warehouseItemUnit"><option>كجم</option><option>جرام</option><option>لتر</option><option>مل</option><option>حبة</option><option>علبة</option><option>كيس</option><option>كرتون</option><option>صندوق</option><option>ربطة</option></select><label>التصنيف (اختياري، يُخمَّن تلقائياً إن تُرك فارغاً)</label>${pcCatSelect("warehouseItemCategory","")}<label>الكمية المتاحة (اختياري، يظهر للمستودع ويُخصم عند الصرف)</label><input id="warehouseItemStock" type="number" min="0" step="any" inputmode="decimal" placeholder="اتركها فارغة إن لم تريد التتبع"><label>الأقسام التي يظهر فيها</label>${pcItemSecChecks("pcNewWhSec", pc117.wh.link ? [pc117.wh.link] : [])}<button class="btn btn-main" onclick="addWarehouseItem()">حفظ الصنف</button></div><div id="warehouseItemsContainer" class="premium-table-wrap"></div>`);drawWarehouseItems();}
 
 async function addWarehouseItem(){const rawName=document.getElementById("warehouseItemName").value.trim(); const code=document.getElementById("warehouseItemCode").value.trim(); const unit=document.getElementById("warehouseItemUnit").value; const category=pcCatRead("warehouseItemCategory"); const stockRaw=(document.getElementById("warehouseItemStock")?.value||"").trim(); const stockQty=stockRaw!==""&&isFinite(Number(stockRaw))?Number(stockRaw):null; const names=splitArEn(rawName); const nameAr=names.ar,nameEn=names.en; if(!nameAr&&!nameEn)return; if(code&&warehouseItems.some(i=>String(i.code||"")===code)){showToast("كود الصنف مستخدم","error");return;} const {db,addDoc,collection,serverTimestamp}=window.firebaseDB; const nameUr=(document.getElementById("warehouseItemUr")?.value||"").trim(), nameBn=(document.getElementById("warehouseItemBn")?.value||"").trim(); const ref=await addDoc(collection(db,"warehouse_items"),{name:nameAr||nameEn,nameAr:nameAr||nameEn,nameEn,nameUr,nameBn,code,unit,category,...(stockQty!==null?{stockQty}:{}),createdAt:serverTimestamp()}); const secs=pcItemSecRead("pcNewWhSec"); if(secs.size){ try{ await pcItemSecWrite("wh", ref.id, secs); }catch(e){ console.error(e); showToast("أضيف الصنف لكن تعذر ربطه بالأقسام","error"); } } document.getElementById("warehouseItemName").value=""; document.getElementById("warehouseItemCode").value=""; showToast("تم إضافة الصنف");}
 
@@ -4708,7 +4708,8 @@ function pc70Category(kind,item){
   if(own) return own;
   if(kind === "prod") return "";
   const n = [item.nameAr,item.name,item.nameEn].filter(Boolean).join(" ").toLowerCase();
-  for(const c of PC70_CATS){ if(c[2].some(k=>n.includes(k))) return c[0]; }
+  const hid = pcCatHidden();
+  for(const c of PC70_CATS){ if(!hid.has(c[0]) && c[2].some(k=>n.includes(k))) return c[0]; }
   return "أخرى";
 }
 
@@ -7825,11 +7826,93 @@ async function pcStoreSave(rec, okMsg){
 }
 
 /* ===== Warehouse category picker: a real list (works on every phone), standard categories + any used ones ===== */
+function pcCatHidden(){ return new Set(Array.isArray(systemSettings?.catHidden) ? systemSettings.catHidden : []); }
 function pcCatNames(){
-  const set = new Set(PC70_CATS.map(c=>c[0]));
+  const hid = pcCatHidden();
+  const set = new Set(PC70_CATS.map(c=>c[0]).filter(c=>!hid.has(c)));
   (pcRaw.warehouseItems||warehouseItems||[]).forEach(w=>{ const c = String(w.category||"").trim(); if(c) set.add(c); });
   return [...set];
 }
+/* ===== Category manager: rename or delete a warehouse category =====
+ * Categories are text on each item. Rename = rewrite it on every item that has it. Delete = move its
+ * items to another category (or none). A built-in category name is also hidden from lists and from
+ * the automatic name-based guess, so it does not come back. */
+function pc132Counts(){
+  const c = {};
+  (pcRaw.warehouseItems||warehouseItems||[]).forEach(w=>{ const k = String(w.category||"").trim(); if(k) c[k] = (c[k]||0)+1; });
+  return c;
+}
+function pc132Html(){
+  const cnt = pc132Counts(), names = pcCatNames().sort((a,b)=>(cnt[b]||0)-(cnt[a]||0) || a.localeCompare(b,"ar"));
+  const none = (pcRaw.warehouseItems||warehouseItems||[]).filter(w=>!String(w.category||"").trim()).length;
+  return `<div class="pc132-list">${names.map(n=>`<div class="pc132-row">
+      <span><b>${escapeHtml(n)}</b><small>${cnt[n]||0} صنف</small></span>
+      <button type="button" class="mini-btn" data-n="${escapeHtml(n)}" onclick="pc132Rename(this.dataset.n)"><i class="fa-solid fa-pen"></i> تعديل الاسم</button>
+      <button type="button" class="mini-danger" data-n="${escapeHtml(n)}" onclick="pc132Delete(this.dataset.n)"><i class="fa-solid fa-trash"></i> حذف</button>
+    </div>`).join("")}</div>
+    ${none ? `<p class="pc85-hint">${none} صنف بدون تصنيف (يُخمَّن تصنيفهم من الاسم).</p>` : ""}`;
+}
+function pc132Open(){
+  pcSheet({title:"إدارة التصنيفات", icon:"fa-tags", body:`<div id="pc132Box">${pc132Html()}</div>`, actions:[{label:"إغلاق", kind:"btn-light", value:null}]});
+}
+function pc132Refresh(){ const b = document.getElementById("pc132Box"); if(b) b.innerHTML = pc132Html(); if(document.getElementById("warehouseItemsContainer")) drawWarehouseItems(); }
+async function pc132Write(from, to){
+  const items = (pcRaw.warehouseItems||warehouseItems||[]).filter(w=>String(w.category||"").trim() === from);
+  const {db,doc,writeBatch,setDoc} = window.firebaseDB;
+  for(let i = 0; i < items.length; i += 400){
+    const b = writeBatch(db);
+    items.slice(i, i+400).forEach(w=>b.update(doc(db,"warehouse_items",w.id), {category:to}));
+    await b.commit();
+  }
+  items.forEach(w=>{ w.category = to; });
+  if(PC70_CATS.some(c=>c[0]===from)){
+    const hid = [...new Set([...pcCatHidden(), from])].filter(x=>x !== to);
+    await setDoc(doc(db,"settings","system"), {catHidden:hid}, {merge:true});
+    systemSettings.catHidden = hid;
+  }else if(to && pcCatHidden().has(to)){
+    const hid = [...pcCatHidden()].filter(x=>x !== to);
+    await setDoc(doc(db,"settings","system"), {catHidden:hid}, {merge:true});
+    systemSettings.catHidden = hid;
+  }
+  return items.length;
+}
+/* small sheet on top of the manager: resolves with the typed / chosen value */
+function pc132Ask(title, body, okLabel, read, danger){
+  return new Promise(res=>{
+    const host = document.createElement("div");
+    host.className = "pc132-ask";
+    host.innerHTML = `<div class="pc132-card"><h3>${title}</h3>${body}<div class="pc132-acts"><button type="button" class="btn ${danger?"btn-danger":"btn-main"}" data-a="ok">${okLabel}</button><button type="button" class="btn btn-light" data-a="no">إلغاء</button></div></div>`;
+    document.body.appendChild(host);
+    host.addEventListener("click", e=>{ const a = e.target.closest("[data-a]")?.dataset.a; if(!a && e.target !== host) return; const v = a === "ok" ? read(host) : null; if(a === "ok" && v === undefined) return; host.remove(); res(a === "ok" ? v : null); });
+    setTimeout(()=>host.querySelector("input,select")?.focus(), 50);
+  });
+}
+async function pc132Rename(name){
+  const v = await pc132Ask(`تعديل اسم التصنيف «${escapeHtml(name)}»`, `<label class="pc94-lb">الاسم الجديد</label><input id="pc132N" class="pc93-name" maxlength="40" value="${escapeHtml(name)}">`, "حفظ",
+    h=>{ const t = h.querySelector("#pc132N").value.trim(); if(!t){ showToast("اكتب الاسم","error"); return undefined; } return t; });
+  if(!v || v === name) return;
+  const exists = pcCatNames().includes(v);
+  if(exists && !(await pc132Ask("دمج تصنيفين", `<p class="pc85-hint">يوجد تصنيف باسم «${escapeHtml(v)}». دمج «${escapeHtml(name)}» فيه؟</p>`, "دمج", ()=>true))) return;
+  try{ const n = await pc132Write(name, v); showToast(`تم تغيير الاسم — ${n} صنف`); pc132Refresh(); }
+  catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+}
+async function pc132Delete(name){
+  const n = pc132Counts()[name] || 0;
+  const others = pcCatNames().filter(x=>x !== name);
+  const v = await pc132Ask(`حذف التصنيف «${escapeHtml(name)}»`, `
+    ${n ? `<p class="pc85-hint">عليه ${n} صنف. اختر أين تنتقل هذه الأصناف (الأصناف نفسها لا تُحذف):</p>
+      <select id="pc132To" class="pc93-name"><option value="">بدون تصنيف</option>${others.map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("")}</select>`
+        : `<p class="pc85-hint">لا توجد أصناف على هذا التصنيف.</p>`}`, "حذف التصنيف",
+    h=>({to:h.querySelector("#pc132To")?.value || ""}), true);
+  if(!v) return;
+  try{
+    const c = await pc132Write(name, v.to);
+    if(!PC70_CATS.some(x=>x[0]===name) && !c){ /* custom with no items: nothing stored, disappears by itself */ }
+    showToast(c ? `تم حذف التصنيف ونقل ${c} صنف إلى ${v.to || "بدون تصنيف"}` : "تم حذف التصنيف");
+    pc132Refresh();
+  }catch(err){ console.error(err); showToast("تعذر الحفظ، تحقق من الاتصال","error"); }
+}
+
 function pcCatSelect(id, cur, guess){
   cur = String(cur||"").trim();
   const names = pcCatNames(); if(cur && !names.includes(cur)) names.push(cur);

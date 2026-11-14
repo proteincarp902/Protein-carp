@@ -5023,3 +5023,16 @@ div.pc112-line{cursor:default}
 .pc131-chk span{display:grid;gap:2px}
 .pc131-chk small{color:var(--app-muted);font-size:12px;font-weight:500;line-height:1.5}
 .pc131-semi{font-style:normal;font-size:10.5px;font-weight:800;color:#1D4ED8;background:#E8EFFE;border-radius:6px;padding:1px 5px}
+
+/* pc132 — category manager */
+.pc132-list{display:grid;gap:6px;max-height:60vh;overflow:auto}
+.pc132-row{display:flex;align-items:center;gap:8px;border:1px solid var(--app-line);border-radius:12px;padding:8px 10px;background:var(--app-surface)}
+.pc132-row span{flex:1;min-width:0;display:grid}
+.pc132-row b{font-size:14px;overflow-wrap:anywhere}
+.pc132-row small{color:var(--app-muted);font-size:12px}
+.pc132-row button{white-space:nowrap}
+.pc132-ask{position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:16px}
+.pc132-card{background:var(--app-surface);border-radius:18px;padding:18px;width:min(420px,100%);display:grid;gap:10px;box-shadow:0 20px 50px rgba(0,0,0,.2)}
+.pc132-card h3{margin:0;font-size:16px}
+.pc132-acts{display:flex;gap:8px}
+.pc132-acts .btn{flex:1}
