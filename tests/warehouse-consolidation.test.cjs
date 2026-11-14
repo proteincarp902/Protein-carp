@@ -10,7 +10,7 @@ function setup(){
  const e=environment(),c=e.c;
  Object.assign(c,{pcEmpSessionRaw:()=>false,pcEmpIsAdmin:()=>false,pcCan:()=>true,pc19Branch:'all',pc126Scope:'open',pc126BuyOnly:false,pc19WarehouseTab:'sum',pcBranchName:id=>id==='b1'?'فرع 1':'فرع 2',pc70Category:()=> 'غذائية',pc90Unavailable:w=>!!w.unavailable,pc19OrderNo:o=>String(o.orderId||o.id),pcOrdFind:id=>c.pcRaw.warehouseOrders.find(o=>o.id===id),showToast:()=>{}});
  const a=app.indexOf('var PC70_UNITS ='),b=app.indexOf('function pc70Step(',a);vm.runInContext(app.slice(a,b),c);
- for(const name of ['pcStoreConv','pc86Stock','pc126Can','pc126Open','pc126Item','pc126Rows','pc126Shown','pc126BySec','pc126Html','pc126Table','pc126OpenOriginal','pc126Print','pc126Excel'])vm.runInContext(source(name),c);
+ for(const name of ['pcStoreConv','pc86Stock','pc126Can','pc126SyncNote','pc126Open','pc126Item','pc126Rows','pc126Shown','pc126BySec','pc126Html','pc126Table','pc126OpenOriginal','pc126Print','pc126Excel'])vm.runInContext(source(name),c);
  c.warehouseItems=[{id:'rice',code:'101',name:'أرز',unit:'كجم',stockQty:20},{id:'milk',code:'102',name:'حليب',unit:'لتر',stockQty:3},{id:'box',code:'103',name:'علب',unit:'حبة',stockQty:100}];
  c.pcRaw.warehouseOrders=[
  {id:'o1',orderId:101,branchId:'b1',section:'الحلا',chefName:'شيف 1',status:'جديد',items:[{itemId:'rice',name:'أرز',qty:2,unit:'كجم'},{itemId:'milk',name:'حليب',qty:500,unit:'مل'},{itemId:'box',name:'علب',qty:2,unit:'حبة'}]},
@@ -54,4 +54,7 @@ test('original request links keep section delivery separate and escape user-cont
 });
 test('authenticated users without warehouse permission cannot read, export or open the consolidated request',()=>{
  const {c}=setup();c.pcEmpSessionRaw=()=>true;c.pcCan=()=>false;assert.equal(c.pc126Rows().rows.length,0);assert.match(c.pc126Html(),/ليس لديك صلاحية/);c.renderOrder=()=>assert.fail('must not open');c.openPrintReport=()=>assert.fail('must not print');c.XLSX={utils:{book_new:()=>assert.fail('must not export')}};c.pc126OpenOriginal('o1');c.pc126Print();c.pc126Excel();
+});
+test('incomplete loading is marked provisional in live, printed and exported totals',()=>{
+ const {c}=setup();c.pcLoaded=new Set(['warehouse_items']);assert.match(c.pc126Html(),/بيانات مبدئية/);let printed;c.openPrintReport=(_,html)=>printed=html;c.pc126Print();assert.match(printed,/بيانات مبدئية/);let exported;c.XLSX={utils:{book_new:()=>({}),json_to_sheet:data=>data,book_append_sheet:(_,rows,name)=>{if(name==='الطلب المجمع')exported=rows;}},writeFile:()=>{}};c.pc126Excel();assert.match(exported[0]['حالة البيانات'],/بيانات مبدئية/);c.pcLoaded.add('warehouse_orders');assert.equal(c.pc126SyncNote(),'');c.pc126Excel();assert.equal(exported[0]['حالة البيانات'],'مكتملة المزامنة وقت الاستخراج');
 });

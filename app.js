@@ -6754,6 +6754,7 @@ function pc90OutSummary(orders){
  * breakdown per section and order. Lines whose unit cannot be converted stay on their own row. */
 var pc126Scope = "open", pc126BuyOnly = false;
 function pc126Can(){return !pcEmpSessionRaw()||pcEmpIsAdmin()||pcCan("wh.open");}
+function pc126SyncNote(){return typeof pcLoaded!=="undefined"&&(!pcLoaded.has("warehouse_orders")||!pcLoaded.has("warehouse_items"))?"بيانات مبدئية: لم يكتمل تحميل الطلبات أو أرصدة المستودع؛ قد تتغير الإجماليات.":"";}
 function pc126Open(o){
   const status=String(o.status||"").trim(),issue=String(o.issueStatus||"").trim();
   if(["محذوف","ملغي","ملغى","مرفوض","تم الإلغاء","تم الاستلام","تم الصرف","تم التسليم","جاهز","مكتمل"].includes(status)||["تم الصرف","صرف جزئي","لم يصرف","تم التسليم"].includes(issue)||Number(o.issuedAtMs||0)>0)return false;
@@ -6805,7 +6806,7 @@ function pc126BySec(r){
 function pc126Html(){
   if(!pc126Can())return '<div class="pc19-empty">ليس لديك صلاحية عرض طلب المستودع المجمّع</div>';
   const {orders,rows,skipped}=pc126Rows(),sections=new Set(orders.map(o=>JSON.stringify([pcBranchOf(o),o.section||""]))),shown=pc126Shown(rows);
-  const head=`<h3>الطلب المجمّع للأقسام</h3><p class="pc85-hint">تُجمع الأصناف تلقائيًا من الطلبات المفتوحة للتجهيز، ويظهر نصيب كل قسم وأرقام طلباته. الصرف والتسليم والاستلام على كل طلب أصلي.</p>
+  const head=`<h3>الطلب المجمّع للأقسام</h3>${pc126SyncNote()?`<p role="status">${pc126SyncNote()}</p>`:""}<p class="pc85-hint">تُجمع الأصناف تلقائيًا من الطلبات المفتوحة للتجهيز، ويظهر نصيب كل قسم وأرقام طلباته. الصرف والتسليم والاستلام على كل طلب أصلي.</p>
     <div class="pc126-bar"><div class="pc60-chips"><button type="button" class="pc60-fchip ${pc126Scope==="open"?"active":""}" onclick="pc126Scope='open';drawWarehouseOrders()">الجديدة وقيد التجهيز</button><button type="button" class="pc60-fchip ${pc126Scope==="new"?"active":""}" onclick="pc126Scope='new';drawWarehouseOrders()">الجديدة فقط</button></div>
     <div class="pc126-acts"><label class="pc123-allbr"><input type="checkbox" ${pc126BuyOnly?"checked":""} onchange="pc126BuyOnly=this.checked;drawWarehouseOrders()"> الناقص أو رصيده غير مسجل</label><button type="button" class="btn btn-light" onclick="pc126Print()" ${shown.length?"":"disabled"}><i class="fa-solid fa-print"></i> طباعة الطلب المجمّع</button><button type="button" class="btn btn-light" onclick="pc126Excel()" ${shown.length?"":"disabled"}><i class="fa-solid fa-file-excel"></i> Excel</button></div></div>
     <div class="pc126-kpis"><span><b>${orders.length}</b> طلب أصلي</span><span><b>${sections.size}</b> قسم</span><span><b>${rows.length}</b> بند صنف/وحدة</span><span><b>${rows.filter(r=>pc126BySec(r).length>1).length}</b> صنف مشترك بين الأقسام</span></div>
@@ -6826,7 +6827,7 @@ function pc126Print(){
   if(!pc126Can())return;
   const {orders,rows}=pc126Rows(),shown=pc126Shown(rows);if(!shown.length)return showToast("لا توجد أصناف ضمن الاختيار","warn");
   const ids=new Set(shown.flatMap(r=>r.by.map(x=>x.orderKey))),selected=orders.filter(o=>ids.has(o.id));
-  const header=`<p>التاريخ: ${escapeHtml(pcHrToday())} — ${pc19Branch==="all"?"كل الفروع":escapeHtml(pcBranchName(pc19Branch))} — ${pc126Scope==="new"?"الجديدة فقط":"الجديدة وقيد التجهيز"}${pc126BuyOnly?" — الناقص أو غير مسجل الرصيد":""}</p>`;
+  const header=`${pc126SyncNote()?`<p><b>${pc126SyncNote()}</b></p>`:""}<p>التاريخ: ${escapeHtml(pcHrToday())} — ${pc19Branch==="all"?"كل الفروع":escapeHtml(pcBranchName(pc19Branch))} — ${pc126Scope==="new"?"الجديدة فقط":"الجديدة وقيد التجهيز"}${pc126BuyOnly?" — الناقص أو غير مسجل الرصيد":""}</p>`;
   const original=`<h3>طلبات الأقسام الأصلية</h3><table><thead><tr><th>رقم الطلب</th><th>الفرع</th><th>القسم</th><th>صاحب الطلب</th></tr></thead><tbody>${selected.map(o=>`<tr><td>${escapeHtml(pc19OrderNo(o))}</td><td>${escapeHtml(pcBranchName(pcBranchOf(o)))}</td><td>${escapeHtml(o.section||"قسم غير محدد")}</td><td>${escapeHtml(o.chefName||"")}</td></tr>`).join("")}</tbody></table>`;
   openPrintReport("الطلب المجمّع للمستودع",header+pc126Table(shown,false)+original+'<p>الكميات للتجهيز، وتسجيل الصرف والتسليم يتم لكل طلب أصلي على حدة. هذه القائمة تعكس حالة الطلبات وقت الطباعة.</p>');
 }
@@ -6834,7 +6835,7 @@ function pc126Excel(){
   if(!pc126Can())return;
   if(typeof XLSX==="undefined")return showToast("مكتبة Excel غير متاحة الآن","error");
   const rows=pc126Shown(pc126Rows().rows);if(!rows.length)return showToast("لا توجد أصناف ضمن الاختيار","warn");
-  const sum=rows.map(r=>({"التصنيف":r.cat,"الصنف":r.name,"الكود":r.code,"الوحدة":r.unit,"الرصيد الفعلي":r.stock??"غير معروف","إجمالي المطلوب":r.total,"العجز":r.short??"غير معروف","توزيع الأقسام":pc126BySec(r).map(g=>`${g.label}: ${pc60Num(g.q)}`).join("؛ ")}));
+  const sum=rows.map(r=>({"حالة البيانات":pc126SyncNote()||"مكتملة المزامنة وقت الاستخراج","التصنيف":r.cat,"الصنف":r.name,"الكود":r.code,"الوحدة":r.unit,"الرصيد الفعلي":r.stock??"غير معروف","إجمالي المطلوب":r.total,"العجز":r.short??"غير معروف","توزيع الأقسام":pc126BySec(r).map(g=>`${g.label}: ${pc60Num(g.q)}`).join("؛ ")}));
   const det=rows.flatMap(r=>r.by.map(x=>({"الصنف":r.name,"الوحدة المجمعة":r.unit,"القسم":x.sec,"الفرع":x.br,"رقم الطلب":x.no,"معرف الطلب الأصلي":x.id,"الكمية بوحدة المستودع":x.q,"الكمية الأصلية":x.sourceQty,"الوحدة الأصلية":x.sourceUnit})));
   const buy=sum.filter((_,i)=>rows[i].stock===null||rows[i].short>0),wb=XLSX.utils.book_new();
   for(const [name,data] of [["الطلب المجمع",sum],["حسب القسم والطلب",det],["قائمة الشراء",buy.length?buy:[{"ملاحظة":"الرصيد المسجل يغطي المطلوب"}]]]){const sheet=XLSX.utils.json_to_sheet(data);sheet["!views"]=[{RTL:true}];XLSX.utils.book_append_sheet(wb,sheet,name);}
