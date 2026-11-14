@@ -11,6 +11,7 @@ import {
   onSnapshot,
   updateDoc,
   writeBatch,
+  runTransaction,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
@@ -38,6 +39,7 @@ window.firebaseDB = {
   onSnapshot,
   updateDoc,
   writeBatch,
+  runTransaction,
   serverTimestamp
 };
 

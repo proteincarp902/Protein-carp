@@ -5036,3 +5036,7 @@ div.pc112-line{cursor:default}
 .pc132-card h3{margin:0;font-size:16px}
 .pc132-acts{display:flex;gap:8px}
 .pc132-acts .btn{flex:1}
+
+/* Accounting navigation stays readable on narrow screens as modules are added. */
+.pc112-tabs{grid-template-columns:none!important;grid-auto-flow:column;grid-auto-columns:minmax(108px,1fr);overflow-x:auto}
+.pc112-tabs[hidden]{display:none}

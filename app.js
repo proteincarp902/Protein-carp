@@ -369,6 +369,8 @@ async function initCloud(){
   listen("acc_suppliers", plain("accSuppliers", v=>accSuppliers=v));
   listen("acc_supplier_tx", plain("accSupplierTx", v=>accSupplierTx=v));
   listen("acc_sales", plain("accSales", v=>accSales=v));
+  listen("acc_expenses", plain("accExpenses", v=>accExpenses=v));
+  listen("acc_accounts", plain("accAccounts", v=>accAccounts=v));
 }
 
 function pcBaseRefreshViews(){
@@ -6703,16 +6705,21 @@ function pc86StockLine(orderItem){
 }
 async function pc86Deduct(items){
   try{
-    const {db,doc,updateDoc} = window.firebaseDB;
-    const sums = {};
+    const {db,doc,runTransaction} = window.firebaseDB;
+    const sums = new Map();
     (items||[]).forEach(oi=>{
-      const w = pc86Find(oi); if(!w || pc86Stock(w) === null) return;
-      sums[w.id] = (sums[w.id]||0) + pc86Issued(oi,w);
+      const w=pc86Find(oi); if(!w) return;
+      sums.set(w.id,(sums.get(w.id)||0)+pc86Issued(oi,w));
     });
-    for(const id of Object.keys(sums)){
-      const w = warehouseItems.find(x=>x.id===id);
-      await updateDoc(doc(db,"warehouse_items",id),{stockQty:Math.max(0, pc70R(pc86Stock(w)-sums[id]))});
-    }
+    await runTransaction(db,async tx=>{
+      const refs=[...sums.keys()].map(id=>doc(db,"warehouse_items",id));
+      const snapshots=await Promise.all(refs.map(ref=>tx.get(ref)));
+      snapshots.forEach((snap,i)=>{
+        if(!snap.exists()) return;
+        const stock=pc86Stock(snap.data()); if(stock===null) return;
+        tx.update(refs[i],{stockQty:Math.max(0,pc70R(stock-sums.get(snap.id)))});
+      });
+    });
   }catch(e){ console.error(e); showToast("تم الصرف لكن تعذر تحديث الكمية المتاحة","warn"); }
 }
 
@@ -7526,7 +7533,9 @@ function pcStoreMoves(store, sec){
     const ms = pcStoreMs(m);
     if(!keep(ms, m)) return;
     const lines = (m.lines||[]).map(x=>({...x, qty:Number(x.qty||0)}));
-    if(m.type === "count") out.push({ms, sign:1, type:"count", icon:"fa-clipboard-list", tone:"info", section:pcStoreSecOf(m),
+    if(m.type === "purchase") out.push({ms, sign:1, type:"purchase", icon:"fa-file-invoice", tone:"ok", section:pcStoreSecOf(m),
+      title:`فاتورة مشتريات #${m.invoiceRef||""}`, by:m.by||"", note:m.note||"", lines});
+    else if(m.type === "count") out.push({ms, sign:1, type:"count", icon:"fa-clipboard-list", tone:"info", section:pcStoreSecOf(m),
       title:"جرد فعلي", by:m.by||"", note:m.note||"", lines, geo:m.geo});
     else out.push({ms, sign:-1, type:"issue", icon:"fa-right-from-bracket", tone:"info", section:pcStoreSecOf(m),
       title:m.reason || "صرف", by:m.by||"", note:m.note||"", lines, geo:m.geo});
@@ -10607,6 +10616,10 @@ var PC_PERMS = [
     ["acc.supEdit","إضافة الموردين وتعديل بياناتهم"],
     ["acc.bill","تسجيل فواتير المشتريات"],
     ["acc.pay","تسجيل السداد للموردين"],
+    ["acc.vouchers","سندات الصرف: عرض وطباعة"],
+    ["acc.expense","تسجيل المصروفات العامة"],
+    ["acc.accounts","شجرة الحسابات: عرض الأرصدة"],
+    ["acc.accountsEdit","إضافة حسابات وتعديلها"],
     ["acc.credit","تسجيل المرتجعات والإشعارات الدائنة"],
     ["acc.sales","المبيعات: عرض"],
     ["acc.salesAdd","تسجيل المبيعات اليومية"],
@@ -10764,7 +10777,7 @@ function pcSetCan(tab){
  * Supplier balance (payable) = opening + bills − payments − credit notes. Aging allocates payments
  * and credit notes to the oldest open amounts first (FIFO) and ages what is left by due date.
  * Access: system admin, employees with the accounting permission, or the admin password. */
-var accSuppliers = [], accSupplierTx = [], accSales = [];
+var accSuppliers = [], accSupplierTx = [], accSales = [], accExpenses = [];
 var pcAcc = {tab:"", q:"", sup:null, month:"", branch:""};
 var PC_ACC_CHANNELS = ["نقاط البيع","تطبيقات التوصيل","الاشتراكات","الطلبات أونلاين","أخرى"];
 var PC_ACC_METHODS = ["نقدي","تحويل بنكي","شيك","أخرى"];
@@ -10775,9 +10788,9 @@ function accR(n){ return Math.round((Number(n)||0)*100)/100; }
 function accTxt(n){ return accR(n).toLocaleString("en-US",{minimumFractionDigits:2, maximumFractionDigits:2}); }
 function accFmt(n){ return `<span class="pc112-n">${accTxt(n)}</span>`; }
 function accNum(v){ const s = String(v ?? "").replace(/,/g,"").trim(); if(s === "") return NaN; const n = Number(s); return isFinite(n) ? n : NaN; }
-function accCan(k){ return pcCan("acc."+k); }
+function accCan(k){ return pcCan("acc."+k) || (k === "vouchers" && (pcCan("acc.pay") || pcCan("acc.expense"))); }
 function accCanOpen(){ return pcCanAny("acc."); }
-var PC_ACC_TABS = [["sum","الملخص","fa-chart-pie"],["sup","الموردين","fa-truck-field"],["sales","المبيعات","fa-cash-register"]];
+var PC_ACC_TABS = [["sum","الملخص","fa-chart-pie"],["sup","الموردين","fa-truck-field"],["sales","المبيعات","fa-cash-register"],["vouchers","سندات الصرف","fa-money-bill-transfer"],["accounts","شجرة الحسابات","fa-sitemap"]];
 function accBranchOptions(sel, withGeneral){
   return `${withGeneral ? `<option value="" ${!sel?"selected":""}>عام / الإدارة</option>` : ""}${pcActiveBranches().map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===sel?"selected":""}>${escapeHtml(b.name||"")}</option>`).join("")}`;
 }
@@ -10823,7 +10836,7 @@ function pcAccDraw(force){
   if(!force && a && box.contains(a) && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) return;   /* never wipe what the user is typing */
   const y = window.scrollY;
   if(!accCanOpen()){ box.innerHTML = ""; return renderAccountingGate(); }
-  box.innerHTML = pcAcc.tab === "sup" ? (pcAcc.sup ? accSupPageHtml(pcAcc.sup) : accSupListHtml())
+  box.innerHTML = pcAcc.tab === "accounts" ? accChartHtml() : pcAcc.tab === "vouchers" ? accVoucherHtml() : pcAcc.tab === "sup" ? (pcAcc.sup ? accSupPageHtml(pcAcc.sup) : accSupListHtml())
                 : pcAcc.tab === "sales" ? accSalesHtml() : pcAcc.tab === "sum" ? accSumHtml() : "";
   if(!force) window.scrollTo(0, y);
 }
@@ -10860,10 +10873,11 @@ function accSumHtml(){
   const over = accR(st.reduce((a,x)=>a + x.overdue, 0));
   const m = pcAcc.month;
   const sales = accList("accSales", accSales).filter(x=>!x.voided && String(x.date).startsWith(m));
+  const expenses = accList("accExpenses", accExpenses).filter(x=>!x.voided && String(x.date).startsWith(m));
   const tot = accR(sales.reduce((a,x)=>a + accR(x.total), 0)), net = accR(sales.reduce((a,x)=>a + accR(x.net), 0));
   const byB = {}; sales.forEach(x=>{ const k = accBranchLabel(x.branchId); byB[k] = accR((byB[k]||0) + accR(x.total)); });
   const top = st.filter(x=>x.balance > 0).sort((a,b)=>b.balance - a.balance).slice(0,6);
-  if(!sups.length && !accList("accSales", accSales).length) return `
+  if(!sups.length && !accList("accSales", accSales).length && !expenses.length) return `
     <div class="pc100-intro">
       <span class="pc100-intro-ic"><i class="fa-solid fa-calculator"></i></span>
       <b>قسم المحاسبة جاهز ولا توجد بيانات بعد</b>
@@ -10876,6 +10890,7 @@ function accSumHtml(){
       <div><span>مستحق للموردين</span><b>${accFmt(pay)}</b><small>${st.filter(x=>x.balance>0).length} مورد برصيد</small></div>
       <div class="${over>0?"bad":""}"><span>متأخر عن الاستحقاق</span><b>${accFmt(over)}</b><small>${st.filter(x=>x.overdue>0).length} مورد</small></div>
       <div><span>مبيعات ${escapeHtml(m)} (شامل الضريبة)</span><b>${accFmt(tot)}</b><small>قبل الضريبة ${accTxt(net)}</small></div>
+      <div><span>المصروفات العامة ${escapeHtml(m)}</span><b>${accFmt(expenses.reduce((n,x)=>n+Number(x.amount||0),0))}</b><small>${expenses.length} سند صرف</small></div>
     </div>
     <label class="pc112-month">الشهر <input type="month" value="${escapeHtml(m)}" onchange="pcAcc.month=this.value||pcAcc.month;pcAccDraw(true)"></label>
     <div class="pc112-two">
@@ -10931,7 +10946,7 @@ function accSupPageHtml(id){
       ${rows.map(r=>`<tr class="${r.voided?"void":""}">
         <td>${escapeHtml(r.date||"")}</td>
         <td>${escapeHtml(r.label)}${r.branch?`<br><small>${escapeHtml(r.branch)}</small>`:""}${r.voided?`<br><small class="pc112-vr">ملغي: ${pcNoteHtml(r.voidReason||"")} — ${escapeHtml(r.voidBy||"")}</small>`:""}${r.by?`<br><small>${escapeHtml(r.by)}</small>`:""}</td>
-        <td>${escapeHtml(r.ref||"")}</td>
+        <td>${escapeHtml(r.ref||"")}${r.itemized ? `<br><button type="button" class="mini-btn" data-id="${escapeHtml(r.id)}" onclick="accPurchaseView(this.dataset.id)">عرض الفاتورة</button>` : ""}${r.voucherNo ? `<br><button type="button" class="mini-btn" data-id="${escapeHtml(r.id)}" onclick="accVoucherPrint('supplier',this.dataset.id)">${escapeHtml(r.voucherNo)}</button>` : ""}</td>
         <td>${r.debit ? accFmt(r.debit) : ""}</td><td>${r.credit ? accFmt(r.credit) : ""}</td>
         <td>${r.voided ? "" : accFmt(r.bal)}</td>
         <td>${r.id && !r.voided && accCan("void") ? `<button class="mini-danger" data-id="${escapeHtml(r.id)}" onclick="accVoid('acc_supplier_tx',this.dataset.id)">إلغاء</button>` : ""}</td>
@@ -10950,7 +10965,7 @@ function accStatement(s){
     if(!t.voided) bal = accR(bal + (isCr ? amt : -amt));
     out.push({id:t.id, date:t.date, label:`${T[t.type]||t.type}${t.type==="payment"&&t.method?` — ${t.method}`:""}${t.type!=="payment"&&t.vat?` (ضريبة ${accTxt(t.vat)})`:""}`,
       ref:t.ref||"", debit:isCr ? 0 : amt, credit:isCr ? amt : 0, bal, voided:!!t.voided, voidReason:t.voidReason, voidBy:t.voidBy,
-      branch:accBranchLabel(t.branchId), by:t.by||""});
+      branch:t.inventoryTarget?.label || accBranchLabel(t.branchId), by:t.by||"", itemized:!!t.inventoryVersion, voucherNo:t.voucherNo||""});
   });
   return out;
 }
@@ -11014,6 +11029,8 @@ function accTxCalc(){
   if(tot) tot.textContent = isFinite(base) ? accTxt(base + (isFinite(vat) ? vat : 0)) : "—";
 }
 async function accTxEdit(type, supId){
+  if(type === "bill") return accPurchaseEdit(supId);
+  if(type === "payment") return accVoucherEdit("supplier", supId);
   if(!accCan({bill:"bill", payment:"pay", credit:"credit"}[type])){ showToast("ليس لديك صلاحية لهذا القيد","error"); return; }
   const s = accList("accSuppliers", accSuppliers).find(x=>x.id===supId);
   if(!s) return;
@@ -11086,11 +11103,10 @@ async function accVoid(col, id){
   if(!v) return;
   if(!v.why || !v.by){ showToast("السبب واسم المسؤول مطلوبان","error"); return; }
   try{
-    const {db,doc,updateDoc} = window.firebaseDB;
-    await updateDoc(doc(db,col,id), {voided:true, voidReason:v.why, voidBy:v.by, voidAtMs:Date.now()});
+    await accPurchaseVoid(col, id, v);
     showToast("تم إلغاء القيد");
     pcAccDraw(true);
-  }catch(err){ console.error(err); showToast("تعذر الإلغاء","error"); }
+  }catch(err){ console.error(err); showToast(err.message || "تعذر الإلغاء","error"); }
 }
 
 /* ----- sales ----- */
