@@ -5040,3 +5040,5 @@ div.pc112-line{cursor:default}
 /* Accounting navigation stays readable on narrow screens as modules are added. */
 .pc112-tabs{grid-template-columns:none!important;grid-auto-flow:column;grid-auto-columns:minmax(108px,1fr);overflow-x:auto}
 .pc112-tabs[hidden]{display:none}
+
+.pc126-order-link{border:0;background:transparent;color:var(--app-brand-dark);font:inherit;text-decoration:underline;cursor:pointer;padding:3px 4px;min-height:32px}
