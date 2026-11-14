@@ -32,7 +32,7 @@ function accVoucherValidate(v){
   if(!v.by) return "اكتب اسم المسجِّل";
   if(!PC_ACC_METHODS.includes(v.method)) return "اختر طريقة السداد";
   const bank=accAccount(v.paymentAccount);
-  if(!bank||!bank.posting||!bank.active||!bank.code.startsWith("111")) return "اختر حساب الصندوق أو البنك";
+  if(!bank||!bank.posting||!bank.active||!bank.code.startsWith("121")) return "اختر حساب الصندوق أو البنك";
   if(v.branchId&&!pcActiveBranches().some(b=>b.id===v.branchId)) return "الفرع غير متاح";
   if(v.kind==="supplier"){
     const s=accList("accSuppliers",accSuppliers).find(s=>s.id===v.supplierId&&!s.inactive);
@@ -50,10 +50,10 @@ async function accVoucherEdit(kind,supplierId){
   const suppliers=accList("accSuppliers",accSuppliers).filter(s=>!s.inactive), today=pcHrToday();
   const v=await pcSheet({title:kind==="supplier"?"سند صرف — دفعة مورد":"سند صرف — مصروف عام",icon:"fa-money-bill-transfer",body:`
     <label class="pc94-lb" for="pvDate">التاريخ</label><input id="pvDate" class="pc93-name" type="date" max="${today}" value="${today}">
-    ${kind==="supplier"?`<label class="pc94-lb" for="pvSupplier">المورد</label><select id="pvSupplier" class="pc93-name"><option value="">اختر المورد</option>${suppliers.map(s=>`<option value="${escapeHtml(s.id)}" ${s.id===supplierId?"selected":""}>${escapeHtml(s.name)}</option>`).join("")}</select>`:`<label class="pc94-lb" for="pvPayee">الجهة المستفيدة</label><input id="pvPayee" class="pc93-name" maxlength="100"><label class="pc94-lb" for="pvExpense">حساب المصروف / التصنيف</label><select id="pvExpense" class="pc93-name">${accAccountOptions("5245",a=>a.type==="expense")}</select>`}
+    ${kind==="supplier"?`<label class="pc94-lb" for="pvSupplier">المورد</label><select id="pvSupplier" class="pc93-name"><option value="">اختر المورد</option>${suppliers.map(s=>`<option value="${escapeHtml(s.id)}" ${s.id===supplierId?"selected":""}>${escapeHtml(s.name)}</option>`).join("")}</select>`:`<label class="pc94-lb" for="pvPayee">الجهة المستفيدة</label><input id="pvPayee" class="pc93-name" maxlength="100"><label class="pc94-lb" for="pvExpense">حساب المصروف / التصنيف</label><select id="pvExpense" class="pc93-name">${accAccountOptions("7145",a=>a.type==="expense")}</select>`}
     <label class="pc94-lb" for="pvAmount">المبلغ</label><input id="pvAmount" class="pc93-name" inputmode="decimal" dir="ltr">
     <label class="pc94-lb" for="pvMethod">طريقة السداد</label><select id="pvMethod" class="pc93-name">${PC_ACC_METHODS.map(m=>`<option>${escapeHtml(m)}</option>`).join("")}</select>
-    <label class="pc94-lb" for="pvAccount">حساب الصندوق / البنك الدائن</label><select id="pvAccount" class="pc93-name">${accAccountOptions("1111",a=>a.code.startsWith("111"))}</select>
+    <label class="pc94-lb" for="pvAccount">حساب الصندوق / البنك الدائن</label><select id="pvAccount" class="pc93-name">${accAccountOptions("1211",a=>a.code.startsWith("121"))}</select>
     <label class="pc94-lb" for="pvBranch">الفرع / مركز التكلفة</label><select id="pvBranch" class="pc93-name">${accBranchOptions(pcAcc.branch||"",true)}</select>
     <label class="pc94-lb" for="pvRef">مرجع التحويل / الشيك / المستند</label><input id="pvRef" class="pc93-name" maxlength="80">
     <label class="pc94-lb" for="pvNote">البيان / سبب الصرف</label><input id="pvNote" class="pc93-name" maxlength="200">${pcByField("pvBy","اسم المسجِّل")}
@@ -75,7 +75,7 @@ async function accVoucherEdit(kind,supplierId){
   }finally{pcVoucherSaving=false;}
 }
 function accVoucherJournal(v){
-  return [{account:v.kind==="supplier"?"2111":v.expenseAccount,debit:v.amount,credit:0},{account:v.paymentAccount,debit:0,credit:v.amount}];
+  return [{account:v.kind==="supplier"?"2211":v.expenseAccount,debit:v.amount,credit:0},{account:v.paymentAccount,debit:0,credit:v.amount}];
 }
 async function accVoucherSave(v,ref){
   const error=accVoucherValidate(v);if(error) throw new Error(error);
@@ -89,7 +89,7 @@ async function accVoucherSave(v,ref){
     }
     await accJournalCheck(tx,journalLines);
     const voucherNo=`PV-${v.date.replaceAll("-","")}-${ref.id}`;
-    const base={date:v.date,amount:v.amount,method:v.method,paymentAccount:v.paymentAccount,ref:v.ref,note:v.note,by:v.by,branchId:v.branchId,createdAtMs:Date.now(),voucherNo,journalLines};
+    const base={date:v.date,amount:v.amount,method:v.method,paymentAccount:v.paymentAccount,ref:v.ref,note:v.note,by:v.by,branchId:v.branchId,createdAtMs:Date.now(),voucherNo,journalLines,chartVersion:PC_CHART_VERSION};
     tx.set(ref,v.kind==="supplier"?{...base,type:"payment",supplierId:v.supplierId,supplierName:supplier.name,due:"",base:0,vat:0}:{...base,type:"expense",payee:v.payee,category:v.category,expenseAccount:v.expenseAccount});
   });
 }
@@ -99,7 +99,7 @@ function accVoucherFind(kind,id){
 }
 function accVoucherPrint(kind,id){
   const x=accVoucherFind(kind,id);if(!x) return;
-  const pairs=[["رقم السند",x.voucherNo||x.id],["التاريخ",x.date],["نوع الصرف",kind==="supplier"?"دفعة مورد":"مصروف عام"],["المستفيد",x.supplierName||x.payee],["المبلغ",accTxt(x.amount)],["طريقة السداد",x.method],["الفرع",accBranchLabel(x.branchId)],["حساب الصرف",x.paymentAccount?x.paymentAccount+" — "+(accAccount(x.paymentAccount)?.name||""):"غير مسجل"],["التصنيف",x.category||"دفعة مورد"],["المرجع",x.ref],["البيان",x.note],["المسجِّل",x.by],["الحالة",x.voided?"ملغي — "+(x.voidReason||""):"مسجل"]];
+  const pairs=[["رقم السند",x.voucherNo||x.id],["التاريخ",x.date],["نوع الصرف",kind==="supplier"?"دفعة مورد":"مصروف عام"],["المستفيد",x.supplierName||x.payee],["المبلغ",accTxt(x.amount)],["طريقة السداد",x.method],["الفرع",accBranchLabel(x.branchId)],["حساب الصرف",x.paymentAccount?accAccountCode(x.paymentAccount,x.chartVersion)+" — "+(accAccount(accAccountCode(x.paymentAccount,x.chartVersion))?.name||""):"غير مسجل"],["التصنيف",x.category||"دفعة مورد"],["المرجع",x.ref],["البيان",x.note],["المسجِّل",x.by],["الحالة",x.voided?"ملغي — "+(x.voidReason||""):"مسجل"]];
   openPrintReport("سند صرف",`<table>${pairs.map(([k,v])=>`<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v||"—")}</td></tr>`).join("")}</table><p>توقيع المستلم: ____________________</p><p>توقيع المحاسب: ____________________</p><p>اعتماد المسؤول: ____________________</p>`);
 }
 function accVoucherExport(){

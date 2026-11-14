@@ -144,12 +144,12 @@ async function accPurchaseSave(s,v){
       const branch=await tx.get(doc(db,"branches",target.branchId));
       if(!branch.exists()||branch.data().active===false||!Number(branch.data().stockStartMs)||Number(branch.data().stockStartMs)>Date.now()) throw new Error("مستودعات هذا الفرع غير مفعلة");
     }
-    const inventoryAccount=target.kind==="central"?"1131":target.store==="raw"?"1132":"1133";
-    const journalLines=[{account:inventoryAccount,debit:v.base,credit:0},...(v.vat?[{account:"1141",debit:v.vat,credit:0}]:[]),{account:"2111",debit:0,credit:v.amount}];
+    const inventoryAccount=target.kind==="central"?"1231":target.store==="raw"?"1232":"1233";
+    const journalLines=[{account:inventoryAccount,debit:v.base,credit:0},...(v.vat?[{account:"1241",debit:v.vat,credit:0}]:[]),{account:"2211",debit:0,credit:v.amount}];
     await accJournalCheck(tx,journalLines);
     const now=Date.now();
     tx.set(billRef,{supplierId:s.id,supplierName:s.name,type:"bill",date:v.date,due:v.due||v.date,ref:v.ref,base:v.base,vat:v.vat,amount:v.amount,method:"",branchId:target.branchId,note:v.note,by:v.by,createdAtMs:now,
-      inventoryVersion:1,inventoryTarget:{...target},items:v.lines,stockMoveId:target.kind==="central"?"":id,journalLines});
+      inventoryVersion:1,inventoryTarget:{...target},items:v.lines,stockMoveId:target.kind==="central"?"":id,journalLines,chartVersion:PC_CHART_VERSION});
     if(target.kind==="central"){
       snapshots.forEach((snap,i)=>{
         const current=pc86Stock(snap.data());
@@ -197,5 +197,5 @@ function accPurchaseView(id){
     <div class="premium-table-wrap"><table class="premium-table"><thead><tr><th>الصنف</th><th>الكمية</th><th>الوحدة</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead><tbody>${(bill.items||[]).map(l=>`<tr><td>${escapeHtml(l.name)}</td><td>${pc60Num(l.qty)}</td><td>${escapeHtml(l.unit)}</td><td>${accTxt(l.price)}</td><td>${accTxt(l.total)}</td></tr>`).join("")}</tbody></table></div>
     <p>قبل الضريبة: ${accTxt(bill.base)} · الضريبة: ${accTxt(bill.vat)} · الإجمالي: ${accTxt(bill.amount)}</p>
     <p>${pcNoteHtml(bill.note||"")}</p>
-    <h4>القيد المحاسبي</h4><div class="premium-table-wrap"><table class="premium-table"><thead><tr><th>الحساب</th><th>مدين</th><th>دائن</th></tr></thead><tbody>${(bill.journalLines||[]).map(l=>`<tr><td>${escapeHtml(l.account+" — "+(accAccount(l.account)?.name||""))}</td><td>${accTxt(l.debit)}</td><td>${accTxt(l.credit)}</td></tr>`).join("")}</tbody></table></div>`,actions:[{label:"إغلاق",kind:"btn-light",value:null}]});
+    <h4>القيد المحاسبي</h4><div class="premium-table-wrap"><table class="premium-table"><thead><tr><th>الحساب</th><th>مدين</th><th>دائن</th></tr></thead><tbody>${(bill.journalLines||[]).map(l=>`<tr><td>${escapeHtml(accAccountCode(l.account,bill.chartVersion)+" — "+(accAccount(accAccountCode(l.account,bill.chartVersion))?.name||""))}</td><td>${accTxt(l.debit)}</td><td>${accTxt(l.credit)}</td></tr>`).join("")}</tbody></table></div>`,actions:[{label:"إغلاق",kind:"btn-light",value:null}]});
 }

@@ -371,6 +371,7 @@ async function initCloud(){
   listen("acc_sales", plain("accSales", v=>accSales=v));
   listen("acc_expenses", plain("accExpenses", v=>accExpenses=v));
   listen("acc_accounts", plain("accAccounts", v=>accAccounts=v));
+  listen("acc_accounts_v2", plain("accAccountsV2", v=>accAccountsV2=v));
 }
 
 function pcBaseRefreshViews(){
