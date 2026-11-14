@@ -393,6 +393,7 @@ function pcBaseRefreshViews(){
   if(document.getElementById("wasteAdminBox")) drawWasteAdmin();
   if(document.getElementById("pcStoreSecBox")) pcDrawStoreSections();
   if(document.getElementById("pcHrEmpBox") && document.activeElement?.id !== "pcHrSearch") pcHrDrawEmployees();
+  if(document.getElementById("pcHrReportBox")) pcHrDrawReport();
   { const hb = document.getElementById("pcHrAttBox"); if(hb){ if(document.getElementById("pcHrScopeBox")) hb.innerHTML = pcHrBodyHtml(); else pcHrDrawAttendance(); } }
   if(document.getElementById("pcHrLeaveBox")) pcHrDrawLeaves();
   if(document.getElementById("pcRqBox") && !document.getElementById("pcSheetHost")?.children.length) pcRqDraw();
@@ -6466,7 +6467,7 @@ function openSettingsTab(tab){
   if(!pcSetCan(tab)){ showToast("ليس لديك صلاحية لهذا الجزء","error"); tab = "overview"; }
   setSettingsTab(tab);
   const map = {branches:renderSettingsBranches, overview:renderSettingsOverview, chefs:renderSettingsChefs, sections:renderSettingsSections, warehouse:renderSettingsWarehouseItems, menu:renderSettingsMenuItems, excel:renderSettingsExcel, cleaning:renderSettingsCleaning, operations:renderSettingsOperations, internal:renderSettingsInternalIssue, home:renderSettingsHome, passwords:renderSettingsPasswords, about:renderSettingsAbout,
-    secItems:renderSettingsSecItems, hrEmp:renderSettingsHrEmployees, chefs:()=>{ pcHrRole = "شيف"; renderSettingsHrEmployees(); }, hrAtt:renderSettingsHrAttendance, hrLeave:renderSettingsHrLeaves, hrDocs:renderSettingsHrDocs};
+    secItems:renderSettingsSecItems, hrEmp:renderSettingsHrEmployees, chefs:()=>{ pcHrRole = "شيف"; renderSettingsHrEmployees(); }, hrAtt:renderSettingsHrAttendance, hrReport:renderSettingsHrReport, hrLeave:renderSettingsHrLeaves, hrDocs:renderSettingsHrDocs};
   (map[tab] || renderSettingsOverview)();
 }
 
@@ -6571,7 +6572,7 @@ var PC84_GROUPS = [
   {title:"الفريق والتشغيل", rows:[
     {key:"branches", ico:"fa-building",   color:"#0A84FF", name:"الفروع",          sub:"إضافة الفروع وتعطيلها",          tabs:["branches"]},
     {key:"team",  ico:"fa-layer-group", color:"#4C920E", name:"الأقسام", sub:"الأقسام، أصناف كل قسم، الصرف الداخلي", tabs:["sections","secItems","internal"]},
-    {key:"hr",    ico:"fa-id-card",     color:"#E5484D", name:"الموارد البشرية", sub:"الموظفون والشيفات، الحضور، الإجازات، المستندات", tabs:["hrEmp","hrAtt","hrLeave","hrDocs"]},
+    {key:"hr",    ico:"fa-id-card",     color:"#E5484D", name:"الموارد البشرية", sub:"الموظفون والشيفات، الحضور، الإجازات، المستندات", tabs:["hrEmp","hrAtt","hrReport","hrLeave","hrDocs"]},
     {key:"tasks", ico:"fa-clipboard-check", color:"#AF52DE", name:"المهام",       sub:"النظافة والتشغيل",              tabs:["cleaning","operations"]}]},
   {title:"المحتوى", rows:[
     {key:"items", ico:"fa-box",         color:"#FF9500", name:"الأصناف",         sub:"المستودع، المنيو، Excel",        tabs:["warehouse","menu","excel"]},
@@ -6580,7 +6581,7 @@ var PC84_GROUPS = [
     {key:"sys",   ico:"fa-shield-halved", color:"#8E8E93", name:"النظام",        sub:"كلمات المرور، حول البرنامج",     tabs:["passwords","about"]}]}
 ];
 var PC84_TAB_NAMES = {branches:"الفروع", sections:"الأقسام", chefs:"الشيفات", internal:"الصرف الداخلي", cleaning:"النظافة", operations:"التشغيل",
-  secItems:"أصناف الأقسام", hrEmp:"الموظفون", hrAtt:"الحضور", hrLeave:"الطلبات والإجازات", hrDocs:"المستندات",
+  secItems:"أصناف الأقسام", hrEmp:"الموظفون", hrAtt:"الحضور", hrReport:"تقرير الحضور والجزاءات", hrLeave:"الطلبات والإجازات", hrDocs:"المستندات",
   warehouse:"المستودع", menu:"المنيو والإنتاج", excel:"Excel", home:"الرسالة والسلايدر", passwords:"كلمات المرور", about:"حول البرنامج"};
 
 function pc84GroupOf(tab){
@@ -8479,7 +8480,7 @@ function pcHrShell(tab, body){
   pcSettingsEnter();
   settingsShell(tab, "الموارد البشرية", `${pcSettingsBar(PC_HR_TAB_FN[tab])}${body}`);
 }
-var PC_HR_TAB_FN = {hrEmp:"renderSettingsHrEmployees", hrAtt:"renderSettingsHrAttendance", hrLeave:"renderSettingsHrLeaves", hrDocs:"renderSettingsHrDocs"};
+var PC_HR_TAB_FN = {hrEmp:"renderSettingsHrEmployees", hrAtt:"renderSettingsHrAttendance", hrReport:"renderSettingsHrReport", hrLeave:"renderSettingsHrLeaves", hrDocs:"renderSettingsHrDocs"};
 
 /* ----- Employees ----- */
 function renderSettingsHrEmployees(){
@@ -8541,6 +8542,7 @@ async function pcHrImportChefs(){
 }
 
 async function pcHrEditEmployee(id, preset){
+  if(!pcSetCan("hrEmp")){ showToast("ليس لديك صلاحية تعديل ملفات الموظفين","error"); return; }
   const e = id ? pcHrEmp(id) : {role:(preset&&preset.role)||"شيف", branchId:(preset&&preset.branchId)||settingsBranch, status:"نشط", workDays:[0,1,2,3,4,6], annualLeaveDays:21};
   if(!e) return;
   const curB = pcBranchOf(e);
@@ -8559,6 +8561,8 @@ async function pcHrEditEmployee(id, preset){
     <select id="hrManager" class="pc93-name"><option value="">بدون — الطلبات تذهب للموارد البشرية مباشرة</option>
       ${pcHrEmps().filter(x=>x.id!==id && pcHrActive(x)).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ar")).map(x=>`<option value="${escapeHtml(x.id)}" ${x.id===e.managerId?"selected":""}>${escapeHtml(x.name)}${x.role?` — ${escapeHtml(x.role)}`:""} · ${escapeHtml(pcBranchName(pcBranchOf(x)))}</option>`).join("")}</select>
     ${pcChefExtraFields("hr", e, true)}
+    <label class="pc94-lb" for="hrSalary">المرتب الشهري (ر.س)</label>
+    <input id="hrSalary" class="pc93-name" type="number" inputmode="decimal" min="0" max="1000000000" step="0.01" dir="ltr" value="${escapeHtml(String(e.monthlySalary ?? ""))}" placeholder="اختياري — اتركه فارغًا إن لم يُحدد">
     <label class="pc94-lb">أيام العمل</label>
     <div class="pc103-days">${PC_HR_DAYS.map((d,i)=>`<label><input type="checkbox" class="hrDay" value="${i}" ${days.includes(i)?"checked":""}><span>${d}</span></label>`).join("")}</div>
     <div class="pc102-shift">
@@ -8571,12 +8575,13 @@ async function pcHrEditEmployee(id, preset){
     ${id ? `<p class="pc113-sum"><i class="fa-solid fa-key"></i> <b>الصلاحيات:</b> ${escapeHtml(pcPermSummary(e))}</p>` : ""}
     ${id ? `<p class="pc85-hint">${pcHrEmpSummary(e)}</p>` : ""}`,
     actions:[
-      {label:"حفظ", kind:"btn-main", value:h=>({
+      {label:"حفظ", kind:"btn-main", check:h=>pcHrSalaryParse(h.querySelector("#hrSalary").value).error, value:h=>({
         name:h.querySelector("#hrName").value.trim(), role:h.querySelector("#hrRole").value, status:h.querySelector("#hrStatus").value,
         branchId:h.querySelector("#hrBranch").value, section:h.querySelector("#hrSection").value,
         hireDate:h.querySelector("#hrHire").value, endDate:h.querySelector("#hrEnd").value, annualLeaveDays:Number(h.querySelector("#hrAnnual").value||0),
         workDays:[...h.querySelectorAll(".hrDay:checked")].map(x=>Number(x.value)), pin:h.querySelector("#hrPin").value.trim(),
         managerId:h.querySelector("#hrManager").value,
+        monthlySalary:pcHrSalaryParse(h.querySelector("#hrSalary").value).value,
         extra:pcChefExtraRead("hr")})},
       ...(id && pcPermEditor() ? [{label:"الصلاحيات", kind:"btn-light", value:"perms"}] : []),
       ...(id ? [{label:"المستندات والإجازات", kind:"btn-light", value:"docs"}] : []),
@@ -8607,6 +8612,7 @@ async function pcHrEditEmployee(id, preset){
     showToast("الرقم الوظيفي مستخدم لموظف آخر","error"); return;
   }
   const data = {name:v.name, role:v.role, status:v.status, branchId:v.branchId, section:isChef ? v.section : (v.section||""),
+    monthlySalary:v.monthlySalary,
     hireDate:v.hireDate, endDate:v.endDate||"", annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, managerId:v.managerId||"", ...v.extra.data, updatedAtMs:Date.now()};
   try{
     const {db,addDoc,collection,doc,updateDoc} = window.firebaseDB;
@@ -8746,6 +8752,7 @@ function renderSettingsHrAttendance(){
         <button type="button" class="pc60-fchip ${m==="range"?"active":""}" onclick="pcHrAttMode='range';renderSettingsHrAttendance()">تفصيلي لفترة</button>
       </div>
       ${dateIn}
+      <button type="button" class="btn btn-light" onclick="openSettingsTab('hrReport')"><i class="fa-solid fa-file-lines"></i> تقرير الحضور والجزاءات</button>
       ${m==="day" ? `<button type="button" class="btn btn-light" onclick="pcHrExportDay()"><i class="fa-solid fa-file-excel"></i> Excel</button><button type="button" class="btn btn-light" onclick="pcHrManualAtt()">تسجيل يدوي</button>` : `<button type="button" class="btn btn-light" onclick="${m==="month"?"pcHrExportMonth()":"pcHrExportRange()"}"><i class="fa-solid fa-file-excel"></i> Excel</button>`}
     </div>
     <div id="pcHrScopeBox"></div>
@@ -10766,6 +10773,7 @@ function pcEmpBranches(){
 function pcStoreCan(a){ return !pcEmpSessionRaw() || pcEmpIsAdmin() || !!pcEmpLocked() || pcCan("br."+a); }
 function pcSetCan(tab){
   if(tab === "chefs") tab = "hrEmp";
+  if(tab === "hrReport") tab = "hrAtt";
   if(tab === "overview") return true;
   if(!pcEmpSessionRaw() || pcEmpIsAdmin()) return true;
   if(tab === "passwords") return false;
