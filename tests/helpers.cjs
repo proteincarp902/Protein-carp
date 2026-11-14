@@ -34,7 +34,7 @@ function environment(){
   records.set('branches/b1',{name:'فرع 1',stockStartMs:1,active:true});
   records.set('acc_suppliers/supplier1',supplier);
   const invoice=(kind='central',store='raw')=>({date:'2026-11-14',due:'2026-12-14',ref:'INV-001',by:'مسؤول',note:'',target:c.accPurchaseTargets().find(t=>t.kind===kind&&t.store===store),lines:[{itemId:store==='prod'?'meal':'food',code:'',name:'صنف',unit:store==='prod'?'حبة':'كجم',qty:2,price:50,total:100}],base:100,vat:15,amount:115});
-  const voucher=(kind='supplier')=>({kind,supplierId:supplier.id,date:'2026-11-14',amount:50,by:'مسؤول',paymentAccount:'1111',expenseAccount:'5221',method:'نقدي',branchId:'b1',payee:'مؤجر',category:'إيجارات',ref:'',note:''});
+  const voucher=(kind='supplier')=>({kind,supplierId:supplier.id,date:'2026-11-14',amount:50,by:'مسؤول',paymentAccount:'1211',expenseAccount:'7121',method:'نقدي',branchId:'b1',payee:'مؤجر',category:'إيجارات',ref:'',note:''});
   return {c,records,firebase,supplier,invoice,voucher,permissions,get writes(){return writes;}};
 }
 

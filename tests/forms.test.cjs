@@ -25,13 +25,13 @@ test('purchase form preserves invalid input, calculates item total and selects d
 });
 test('expense form shows real posting accounts and keeps invalid values for correction',async()=>{
  const e=formEnvironment();const pending=e.c.accVoucherEdit('expense');await ready();const d=e.c.document;
- assert.equal(d.getElementById('pvExpense').value,'5245');assert.equal(d.getElementById('pvAccount').value,'1111');
+ assert.equal(d.getElementById('pvExpense').value,'7145');assert.equal(d.getElementById('pvAccount').value,'1211');
  assert.ok([...d.getElementById('pvExpense').options].every(o=>e.c.accAccount(o.value).posting));
  d.getElementById('pvAmount').value='-20';d.querySelector('[data-act="0"]').click();assert.match(d.getElementById('pvError').textContent,/أكبر من صفر/);assert.equal(d.getElementById('pvAmount').value,'-20');
  d.querySelector('[data-act="1"]').click();await pending;
 });
 test('chart and voucher history escape names and render grouped accounts',()=>{
- const e=formEnvironment();e.c.pcRaw.accAccounts=[{code:'5227',name:'<img src=x onerror=alert(1)>',parent:'522',type:'expense',posting:true,active:true}];
+ const e=formEnvironment();e.c.pcRaw.accAccountsV2=[{code:'7127',name:'<img src=x onerror=alert(1)>',parent:'712',type:'expense',posting:true,active:true}];
  e.c.document.body.innerHTML=e.c.accChartHtml();assert.equal(e.c.document.querySelectorAll('img').length,0);assert.ok(e.c.document.querySelectorAll('tbody tr').length>=100);
  e.c.pcRaw.accExpenses=[{id:'x',date:'2026-11-14',payee:'<script>bad</script>',amount:10,branchId:'b1',category:'إيجار',method:'نقدي'}];e.c.document.body.innerHTML=e.c.accVoucherHtml();assert.equal(e.c.document.querySelectorAll('script').length,0);assert.match(e.c.document.body.textContent,/<script>bad<\/script>/);
 });
