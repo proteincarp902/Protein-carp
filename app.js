@@ -321,6 +321,9 @@ function pcQueueRefresh(){
 async function initCloud(){
   const { db, doc, getDoc, setDoc, collection, onSnapshot } = await waitForFirebase();
 
+  onSnapshot(doc(db,"settings","payrollEmployeeMetadata"),snap=>{
+    pcHrPayrollMetadata=snap.exists()?snap.data():{rows:[],importedAtMs:0}; pcQueueRefresh();
+  },err=>console.warn("Payroll metadata could not load",err.code));
   const settingsRef = doc(db,"settings","system");
   getDoc(settingsRef).then(snap=>{ if(!snap.exists()) return setDoc(settingsRef,systemSettings); }).catch(()=>{});
   onSnapshot(settingsRef,s=>{
@@ -394,6 +397,7 @@ function pcBaseRefreshViews(){
   if(document.getElementById("pcStoreSecBox")) pcDrawStoreSections();
   if(document.getElementById("pcHrEmpBox") && document.activeElement?.id !== "pcHrSearch") pcHrDrawEmployees();
   if(document.getElementById("pcHrReportBox")) pcHrDrawReport();
+  if(document.getElementById("pcPayrollBox")) pcPayrollDraw();
   { const hb = document.getElementById("pcHrAttBox"); if(hb){ if(document.getElementById("pcHrScopeBox")) hb.innerHTML = pcHrBodyHtml(); else pcHrDrawAttendance(); } }
   if(document.getElementById("pcHrLeaveBox")) pcHrDrawLeaves();
   if(document.getElementById("pcRqBox") && !document.getElementById("pcSheetHost")?.children.length) pcRqDraw();
@@ -6467,7 +6471,7 @@ function openSettingsTab(tab){
   if(!pcSetCan(tab)){ showToast("ليس لديك صلاحية لهذا الجزء","error"); tab = "overview"; }
   setSettingsTab(tab);
   const map = {branches:renderSettingsBranches, overview:renderSettingsOverview, chefs:renderSettingsChefs, sections:renderSettingsSections, warehouse:renderSettingsWarehouseItems, menu:renderSettingsMenuItems, excel:renderSettingsExcel, cleaning:renderSettingsCleaning, operations:renderSettingsOperations, internal:renderSettingsInternalIssue, home:renderSettingsHome, passwords:renderSettingsPasswords, about:renderSettingsAbout,
-    secItems:renderSettingsSecItems, hrEmp:renderSettingsHrEmployees, chefs:()=>{ pcHrRole = "شيف"; renderSettingsHrEmployees(); }, hrAtt:renderSettingsHrAttendance, hrReport:renderSettingsHrReport, hrLeave:renderSettingsHrLeaves, hrDocs:renderSettingsHrDocs};
+    secItems:renderSettingsSecItems, hrEmp:renderSettingsHrEmployees, chefs:()=>{ pcHrRole = "شيف"; renderSettingsHrEmployees(); }, hrAtt:renderSettingsHrAttendance, hrReport:renderSettingsHrReport, hrPayroll:renderSettingsHrPayroll, hrLeave:renderSettingsHrLeaves, hrDocs:renderSettingsHrDocs};
   (map[tab] || renderSettingsOverview)();
 }
 
@@ -6572,7 +6576,7 @@ var PC84_GROUPS = [
   {title:"الفريق والتشغيل", rows:[
     {key:"branches", ico:"fa-building",   color:"#0A84FF", name:"الفروع",          sub:"إضافة الفروع وتعطيلها",          tabs:["branches"]},
     {key:"team",  ico:"fa-layer-group", color:"#4C920E", name:"الأقسام", sub:"الأقسام، أصناف كل قسم، الصرف الداخلي", tabs:["sections","secItems","internal"]},
-    {key:"hr",    ico:"fa-id-card",     color:"#E5484D", name:"الموارد البشرية", sub:"الموظفون والشيفات، الحضور، الإجازات، المستندات", tabs:["hrEmp","hrAtt","hrReport","hrLeave","hrDocs"]},
+    {key:"hr",    ico:"fa-id-card",     color:"#E5484D", name:"الموارد البشرية", sub:"الموظفون والشيفات، الحضور، الإجازات، المستندات", tabs:["hrEmp","hrAtt","hrReport","hrPayroll","hrLeave","hrDocs"]},
     {key:"tasks", ico:"fa-clipboard-check", color:"#AF52DE", name:"المهام",       sub:"النظافة والتشغيل",              tabs:["cleaning","operations"]}]},
   {title:"المحتوى", rows:[
     {key:"items", ico:"fa-box",         color:"#FF9500", name:"الأصناف",         sub:"المستودع، المنيو، Excel",        tabs:["warehouse","menu","excel"]},
@@ -6581,7 +6585,7 @@ var PC84_GROUPS = [
     {key:"sys",   ico:"fa-shield-halved", color:"#8E8E93", name:"النظام",        sub:"كلمات المرور، حول البرنامج",     tabs:["passwords","about"]}]}
 ];
 var PC84_TAB_NAMES = {branches:"الفروع", sections:"الأقسام", chefs:"الشيفات", internal:"الصرف الداخلي", cleaning:"النظافة", operations:"التشغيل",
-  secItems:"أصناف الأقسام", hrEmp:"الموظفون", hrAtt:"الحضور", hrReport:"تقرير الحضور والجزاءات", hrLeave:"الطلبات والإجازات", hrDocs:"المستندات",
+  secItems:"أصناف الأقسام", hrEmp:"الموظفون", hrAtt:"الحضور", hrReport:"تقرير الحضور والجزاءات", hrPayroll:"كشف المرتبات", hrLeave:"الطلبات والإجازات", hrDocs:"المستندات",
   warehouse:"المستودع", menu:"المنيو والإنتاج", excel:"Excel", home:"الرسالة والسلايدر", passwords:"كلمات المرور", about:"حول البرنامج"};
 
 function pc84GroupOf(tab){
@@ -8384,7 +8388,7 @@ var pcHrRole = "الكل";
 var pcHrQ = "", pcHrDay = "", pcHrAttMode = "day", pcHrLeaveFilter = "بانتظار الموارد البشرية";
 
 function pcHrList(key, fallback){ const r = pcRaw && pcRaw[key]; return Array.isArray(r) ? r : (fallback || []); }
-function pcHrEmps(){ return pcHrList("hrEmployees", hrEmployees); }
+function pcHrEmps(){ const list=pcHrList("hrEmployees", hrEmployees); return typeof pcHrMetadataApply === "function" ? pcHrMetadataApply(list) : list; }
 function pcHrEmp(id){ return pcHrEmps().find(e=>e.id===id) || null; }
 function pcHrBranchEmps(branchId){ return pcHrEmps().filter(e=>pcBranchOf(e)===branchId).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ar")); }
 /* Active = status «نشط» and the end-of-service date (if any) not passed yet. */
@@ -8480,7 +8484,7 @@ function pcHrShell(tab, body){
   pcSettingsEnter();
   settingsShell(tab, "الموارد البشرية", `${pcSettingsBar(PC_HR_TAB_FN[tab])}${body}`);
 }
-var PC_HR_TAB_FN = {hrEmp:"renderSettingsHrEmployees", hrAtt:"renderSettingsHrAttendance", hrReport:"renderSettingsHrReport", hrLeave:"renderSettingsHrLeaves", hrDocs:"renderSettingsHrDocs"};
+var PC_HR_TAB_FN = {hrEmp:"renderSettingsHrEmployees", hrAtt:"renderSettingsHrAttendance", hrReport:"renderSettingsHrReport", hrPayroll:"renderSettingsHrPayroll", hrLeave:"renderSettingsHrLeaves", hrDocs:"renderSettingsHrDocs"};
 
 /* ----- Employees ----- */
 function renderSettingsHrEmployees(){
@@ -8551,7 +8555,7 @@ async function pcHrEditEmployee(id, preset){
   const v = await pcSheet({title:id ? "ملف الموظف" : "موظف جديد", icon:"fa-id-card", body:`
     <label class="pc94-lb">الاسم</label><input id="hrName" class="pc93-name" maxlength="60" value="${escapeHtml(e.name||"")}">
     <div class="pc102-shift">
-      <div><label class="pc94-lb">الوظيفة</label><select id="hrRole" class="pc93-name" onchange="pcHrRoleChanged()">${PC_HR_ROLES.map(r=>`<option ${r===e.role?"selected":""}>${r}</option>`).join("")}</select></div>
+      <div><label class="pc94-lb">الدور في النظام</label><select id="hrRole" class="pc93-name" onchange="pcHrRoleChanged()">${PC_HR_ROLES.map(r=>`<option ${r===e.role?"selected":""}>${r}</option>`).join("")}</select></div>
       <div><label class="pc94-lb">الحالة</label><select id="hrStatus" class="pc93-name">${PC_HR_STATUS.map(s=>`<option ${s===(e.status||"نشط")?"selected":""}>${s}</option>`).join("")}</select></div>
     </div>
     <label class="pc94-lb">الفرع</label>
@@ -8562,7 +8566,9 @@ async function pcHrEditEmployee(id, preset){
       ${pcHrEmps().filter(x=>x.id!==id && pcHrActive(x)).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ar")).map(x=>`<option value="${escapeHtml(x.id)}" ${x.id===e.managerId?"selected":""}>${escapeHtml(x.name)}${x.role?` — ${escapeHtml(x.role)}`:""} · ${escapeHtml(pcBranchName(pcBranchOf(x)))}</option>`).join("")}</select>
     ${pcChefExtraFields("hr", e, true)}
     <label class="pc94-lb" for="hrSalary">المرتب الشهري (ر.س)</label>
-    <input id="hrSalary" class="pc93-name" type="number" inputmode="decimal" min="0" max="1000000000" step="0.01" dir="ltr" value="${escapeHtml(String(e.monthlySalary ?? ""))}" placeholder="اختياري — اتركه فارغًا إن لم يُحدد">
+    <input id="hrSalary" class="pc93-name" type="number" inputmode="decimal" min="0" max="1000000000" step="0.01" dir="ltr" value="${escapeHtml(String(e.monthlySalary ?? ""))}" placeholder="اختياري — اتركه فارغًا إن لم يُحدد" ${e.payrollBasicSalary!==null&&e.payrollBasicSalary!==undefined?"readonly":""}>
+    ${pcHrPayrollSalaryFields(e)}
+    ${pcHrPayrollProfileFields(e)}
     <label class="pc94-lb">أيام العمل</label>
     <div class="pc103-days">${PC_HR_DAYS.map((d,i)=>`<label><input type="checkbox" class="hrDay" value="${i}" ${days.includes(i)?"checked":""}><span>${d}</span></label>`).join("")}</div>
     <div class="pc102-shift">
@@ -8575,13 +8581,14 @@ async function pcHrEditEmployee(id, preset){
     ${id ? `<p class="pc113-sum"><i class="fa-solid fa-key"></i> <b>الصلاحيات:</b> ${escapeHtml(pcPermSummary(e))}</p>` : ""}
     ${id ? `<p class="pc85-hint">${pcHrEmpSummary(e)}</p>` : ""}`,
     actions:[
-      {label:"حفظ", kind:"btn-main", check:h=>pcHrSalaryParse(h.querySelector("#hrSalary").value).error, value:h=>({
+      {label:"حفظ", kind:"btn-main", check:h=>pcHrPayrollSalaryRead(h).error||pcHrSalaryParse(h.querySelector("#hrSalary").value).error, value:h=>({
         name:h.querySelector("#hrName").value.trim(), role:h.querySelector("#hrRole").value, status:h.querySelector("#hrStatus").value,
         branchId:h.querySelector("#hrBranch").value, section:h.querySelector("#hrSection").value,
         hireDate:h.querySelector("#hrHire").value, endDate:h.querySelector("#hrEnd").value, annualLeaveDays:Number(h.querySelector("#hrAnnual").value||0),
         workDays:[...h.querySelectorAll(".hrDay:checked")].map(x=>Number(x.value)), pin:h.querySelector("#hrPin").value.trim(),
         managerId:h.querySelector("#hrManager").value,
         monthlySalary:pcHrSalaryParse(h.querySelector("#hrSalary").value).value,
+        payrollProfile:pcHrPayrollProfileRead(h), salaryParts:pcHrPayrollSalaryRead(h).data,
         extra:pcChefExtraRead("hr")})},
       ...(id && pcPermEditor() ? [{label:"الصلاحيات", kind:"btn-light", value:"perms"}] : []),
       ...(id ? [{label:"المستندات والإجازات", kind:"btn-light", value:"docs"}] : []),
@@ -8612,7 +8619,7 @@ async function pcHrEditEmployee(id, preset){
     showToast("الرقم الوظيفي مستخدم لموظف آخر","error"); return;
   }
   const data = {name:v.name, role:v.role, status:v.status, branchId:v.branchId, section:isChef ? v.section : (v.section||""),
-    monthlySalary:v.monthlySalary,
+    monthlySalary:v.monthlySalary, ...v.payrollProfile, ...v.salaryParts,
     hireDate:v.hireDate, endDate:v.endDate||"", annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, managerId:v.managerId||"", ...v.extra.data, updatedAtMs:Date.now()};
   try{
     const {db,addDoc,collection,doc,updateDoc} = window.firebaseDB;
@@ -10772,6 +10779,7 @@ function pcEmpBranches(){
 /* Store actions in a section: always allowed in the employee's own section; elsewhere by permission. */
 function pcStoreCan(a){ return !pcEmpSessionRaw() || pcEmpIsAdmin() || !!pcEmpLocked() || pcCan("br."+a); }
 function pcSetCan(tab){
+  if(tab === "hrPayroll") return pcSetCan("hrEmp") && pcSetCan("hrAtt");
   if(tab === "chefs") tab = "hrEmp";
   if(tab === "hrReport") tab = "hrAtt";
   if(tab === "overview") return true;
