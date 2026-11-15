@@ -4909,10 +4909,11 @@ function pc60DrawList(kind){
     if(f.startsWith("cat:") && pc70Category(kind,i) !== f.slice(4)) return false;
     if(f === "unavail" && !pc90Unavailable(i)) return false;
     if(!q) return true;
-    return [pc60ItemName(kind,i), i.nameEn, i.code, i.unit, pc70Category(kind,i)].some(v=>String(v||"").toLowerCase().includes(q));
+    return pcMatchRank(q, pc60ItemName(kind,i), [i.name, i.nameEn, i.code, pc70Category(kind,i)]) >= 0;
   });
   const fk = i=>freq[String(i.id)] || freq[String(pc60ItemName(kind,i))] || 0;
-  list.sort((a,b)=>(fk(b)-fk(a)) || pc60ItemName(kind,a).localeCompare(pc60ItemName(kind,b),"ar"));
+  const rk = i=>q ? pcMatchRank(q, pc60ItemName(kind,i), [i.name, i.nameEn, i.code, pc70Category(kind,i)]) : 0;
+  list.sort((a,b)=>(rk(a)-rk(b)) || (fk(b)-fk(a)) || pc60ItemName(kind,a).localeCompare(pc60ItemName(kind,b),"ar"));
   pc60DrawChips(kind);
   pc70DrawQuick(kind);
 
@@ -5171,7 +5172,17 @@ function pc60ListPage({kind, title, placeholder, handler, tab, extra=""}){
 }
 
 /* Production home: start a new production report, or review earlier reports of this section by date and time. */
-var pc133 = {from:"", to:"", open:""};
+var pc133 = {from:"", to:"", open:"", q:""};
+/* Names offered in the report search: the section's finished products plus anything already produced. */
+function pc133Names(){
+  const seen = new Set(), out = [];
+  const add = (name, unit, code)=>{ const k = pcNorm(name); if(!k || seen.has(k)) return; seen.add(k); out.push({name, unit:unit||"", code:code||""}); };
+  pc17MenuForChef().forEach(m=>add(pc17ItemName(m), m.unit, m.code));
+  pc133Logs().forEach(l=>(l.items||[]).forEach(i=>add(i.name||i.productName, i.unit)));
+  return out;
+}
+function pc133Q(){ return String(pc133.q||"").replace(/\s+—\s+.*$/,"").trim(); }
+function pc133Hit(i){ const q = pc133Q(); return !q || pcMatchRank(q, i.name||i.productName||"", [i.code]) >= 0; }
 function pc133Day(ms){ const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function pc133Logs(){
   const sec = currentChef?.section || "";
@@ -5205,6 +5216,9 @@ function renderProduction(){
           <button type="button" onclick="pc133Quick(0)">اليوم</button><button type="button" onclick="pc133Quick(1)">أمس</button>
           <button type="button" onclick="pc133Quick(6)">آخر 7 أيام</button><button type="button" onclick="pc133Quick(29)">آخر 30 يوم</button>
         </div>
+        <div class="pc128-wrap pc133-search"><i class="fa-solid fa-magnifying-glass"></i>
+          <input type="search" id="pc133Q" data-ac="prodHist" placeholder="ابحث بالصنف — اكتب أي حروف من اسمه" value="${escapeHtml(pc133.q)}" autocomplete="off"
+            oninput="pc133.q=this.value;pcAc(this);pc133Draw()" onfocus="pcAc(this)" onblur="pcAcBlur(this)" onchange="pc133.q=this.value;pc133Draw()"></div>
         <div id="pc133List"></div>
       </section>
     </section>
@@ -5228,13 +5242,20 @@ function pc133Draw(){
   const box = document.getElementById("pc133List"); if(!box) return;
   let from = pc133.from, to = pc133.to;
   if(from && to && from > to){ const x = from; from = to; to = x; }
-  const list = pc133Logs().filter(l=>{ const d = pc133Day(l.timeMs||0); return (!from || d>=from) && (!to || d<=to); });
-  if(!list.length){ box.innerHTML = pc60Empty("fa-calendar-xmark","لا توجد تقارير إنتاج في هذه الفترة"); return; }
+  const q = pc133Q();
+  const list = pc133Logs().filter(l=>{ const d = pc133Day(l.timeMs||0); return (!from || d>=from) && (!to || d<=to) && (!q || (l.items||[]).some(pc133Hit)); });
+  if(!list.length){ box.innerHTML = pc60Empty("fa-calendar-xmark", q ? "لا يوجد إنتاج لهذا الصنف في الفترة المختارة" : "لا توجد تقارير إنتاج في هذه الفترة"); return; }
+  let tot = "";
+  if(q){
+    const m = {};
+    list.forEach(l=>(l.items||[]).filter(pc133Hit).forEach(i=>{ const k = (i.name||i.productName||"")+"|"+(i.unit||""); (m[k] = m[k] || {n:i.name||i.productName||"", u:i.unit||"", q:0, c:0}); m[k].q += Number(i.qty)||0; m[k].c++; }));
+    tot = `<div class="pc133-tot"><b>إجمالي الفترة</b>${Object.values(m).map(x=>`<span>${escapeHtml(x.n)} <b>${pc60Num(pc70R(x.q))} ${escapeHtml(x.u)}</b> <small>(${x.c} مرة)</small></span>`).join("")}</div>`;
+  }
   const days = {};
   list.forEach(l=>{ const k = pc133Day(l.timeMs||0); (days[k] = days[k] || []).push(l); });
   const dayName = k=>new Date(k+"T12:00:00").toLocaleDateString("ar-SA-u-ca-gregory",{weekday:"long", day:"numeric", month:"long", year:"numeric"});
   const time = ms=>new Date(ms).toLocaleTimeString("ar-SA",{hour:"numeric", minute:"2-digit"});
-  box.innerHTML = Object.keys(days).map(k=>`
+  box.innerHTML = tot + Object.keys(days).map(k=>`
     <div class="pc133-day"><b>${escapeHtml(dayName(k))}</b><small>${days[k].length} تقرير</small></div>
     ${days[k].map(l=>{
       const none = l.noProduction || !(l.items||[]).length;
@@ -5242,9 +5263,9 @@ function pc133Draw(){
       return `<details class="pc133-rep${none?" is-none":""}" ${pc133.open===l.id?"open":""} ontoggle="if(this.open)pc133.open='${escapeHtml(l.id)}'">
         <summary><span class="pc133-t"><i class="fa-regular fa-clock"></i> ${escapeHtml(time(l.timeMs||0))}</span>
           <span class="pc133-who">${escapeHtml(l.chefName||"")}</span>
-          <span class="pc133-n">${none ? "لا يوجد إنتاج" : `${its.length} صنف`}</span><i class="fa-solid fa-chevron-down"></i></summary>
+          <span class="pc133-n">${none ? "لا يوجد إنتاج" : (q ? its.filter(pc133Hit).map(i=>`${pc60Num(i.qty)} ${escapeHtml(i.unit||"")}`).join(" + ") : `${its.length} صنف`)}</span><i class="fa-solid fa-chevron-down"></i></summary>
         ${none ? "" : `<table class="pc133-tb"><thead><tr><th>الصنف</th><th>الكمية</th><th>الوحدة</th></tr></thead><tbody>
-          ${its.map(i=>`<tr><td>${escapeHtml(i.name||i.productName||"")}</td><td>${pc60Num(i.qty)}</td><td>${escapeHtml(i.unit||"")}</td></tr>`).join("")}</tbody></table>`}
+          ${its.map(i=>`<tr class="${q && pc133Hit(i) ? "is-hit" : ""}"><td>${escapeHtml(i.name||i.productName||"")}</td><td>${pc60Num(i.qty)}</td><td>${escapeHtml(i.unit||"")}</td></tr>`).join("")}</tbody></table>`}
         ${pc133Consume(l)}
         ${l.note ? `<p class="pc133-sub"><b>ملاحظة:</b> ${pcNoteHtml(l.note)}</p>` : ""}
       </details>`;}).join("")}`).join("");
@@ -8029,7 +8050,16 @@ function pcCatRead(id){
 function pcNorm(t){
   return String(t||"").toLowerCase().replace(/[ً-ْـ]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ة/g,"ه").replace(/ى/g,"ي").replace(/ؤ/g,"و").replace(/ئ/g,"ي").replace(/\s+/g," ").trim();
 }
+/* Partial-letter search: every typed word must appear somewhere in the item's names or code (Arabic letter
+   forms normalised). Returns -1 for no match, else a rank: 0 starts with the text, 1 contains it, 2 words only. */
+function pcMatchRank(q, name, extra){
+  const t = pcNorm(q); if(!t) return 2;
+  const nm = pcNorm(name), hay = pcNorm([name].concat(extra||[]).filter(Boolean).join(" "));
+  if(!t.split(" ").every(w=>hay.includes(w))) return -1;
+  return nm.startsWith(t) ? 0 : (nm.includes(t) ? 1 : 2);
+}
 var PC_AC = {
+  prodHist: ()=>pc133Names(),
   raw: ()=>pcStoreCatalog("raw"), prod: ()=>pcStoreCatalog("prod"),
   store: ()=>pcStoreCatalog(pcStoreCur),
   wh: ()=>(pcRaw.warehouseItems||warehouseItems||[]),
