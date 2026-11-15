@@ -5042,3 +5042,29 @@ div.pc112-line{cursor:default}
 .pc112-tabs[hidden]{display:none}
 
 .pc126-order-link{border:0;background:transparent;color:var(--app-brand-dark);font:inherit;text-decoration:underline;cursor:pointer;padding:3px 4px;min-height:32px}
+
+/* pc133: production home — new report + earlier reports by date and time */
+.pc133-opts{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.pc133-opts .pc60-cta{margin-bottom:0}
+.pc133-range{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.pc133-range label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--app-muted,#667085);min-width:0}
+.pc133-range input{width:100%;min-width:0;padding:9px 10px;border:1px solid var(--app-line);border-radius:10px;font:inherit;font-size:14px;background:#fff;color:inherit}
+.pc133-quick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.pc133-quick button{border:1px solid var(--app-line);background:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:inherit}
+.pc133-quick button:active{background:var(--app-brand);color:#fff}
+.pc133-day{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:14px 2px 6px;font-size:13.5px}
+.pc133-day small{color:var(--app-muted,#667085);font-weight:600}
+.pc133-rep{border:1px solid var(--app-line);border-radius:12px;background:#fff;margin-bottom:6px;overflow:hidden}
+.pc133-rep summary{list-style:none;display:flex;align-items:center;gap:10px;padding:11px 12px;cursor:pointer}
+.pc133-rep summary::-webkit-details-marker{display:none}
+.pc133-rep summary>i{margin-inline-start:auto;font-size:12px;opacity:.6;transition:transform .2s}
+.pc133-rep[open] summary>i{transform:rotate(180deg)}
+.pc133-t{font-weight:800;white-space:nowrap}
+.pc133-who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--app-muted,#667085);font-size:13px}
+.pc133-n{background:var(--app-brand);color:#fff;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700;white-space:nowrap}
+.pc133-rep.is-none .pc133-n{background:#98a2b3}
+.pc133-tb{width:100%;border-collapse:collapse;font-size:13.5px}
+.pc133-tb th,.pc133-tb td{padding:8px 12px;border-top:1px solid var(--app-line);text-align:right}
+.pc133-tb th{font-size:12px;color:var(--app-muted,#667085);background:#f8fafc}
+.pc133-tb td:nth-child(2){font-weight:800}
+.pc133-sub{margin:0;padding:8px 12px;border-top:1px solid var(--app-line);font-size:12.5px;line-height:1.7}

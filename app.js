@@ -1297,7 +1297,7 @@ function pc17SectionStats(sectionName){
 function pc17MenuForChef(){
   const section = currentChef?.section || "";
   if(typeof pcSecFilter === "function"){ const f = pcSecFilter(section, "prod", menuItems||[]); if(f) return f; }
-  return (menuItems||[]).filter(i=>!i.section || i.section===section);
+  return (menuItems||[]).filter(i=>i.section===section);   /* only the section's own finished products */
 }
 
 function pc17WarehouseForChef(){
@@ -5143,7 +5143,7 @@ function pc60ListPage({kind, title, placeholder, handler, tab, extra=""}){
   pc60Filter[kind] = "all"; pc70Show = 40;
   const section = currentChef?.section || "";
   pageLayout(title, `
-    ${pc60Bar({title, sub:`${section} • ${currentChef?.name||""}`, back:"renderChefDashboard(currentChef)", trailing:kind==="prod" ? pc60StatusChip() : ""})}
+    ${pc60Bar({title, sub:`${section} • ${currentChef?.name||""}`, back:kind==="prod" ? "renderProduction()" : "renderChefDashboard(currentChef)", trailing:kind==="prod" ? pc60StatusChip() : ""})}
     <section class="pc60-page has-bar has-tabs">
       <div class="pc60-tools">
         <div class="pc70-searchrow">
@@ -5170,11 +5170,91 @@ function pc60ListPage({kind, title, placeholder, handler, tab, extra=""}){
   pc60DrawList(kind);
 }
 
+/* Production home: start a new production report, or review earlier reports of this section by date and time. */
+var pc133 = {from:"", to:"", open:""};
+function pc133Day(ms){ const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function pc133Logs(){
+  const sec = currentChef?.section || "";
+  return (productionLogs||[]).filter(l=>l.section===sec && (!l.branchId || !currentBranch || currentBranch==="all" || pcBranchOf(l)===currentBranch))
+    .sort((a,b)=>(b.timeMs||0)-(a.timeMs||0));
+}
 function renderProduction(){
+  if(!currentChef) return renderChefs();
+  const today = pc133Day(Date.now());
+  if(!pc133.to) pc133.to = today;
+  if(!pc133.from){ const d = new Date(); d.setDate(d.getDate()-6); pc133.from = pc133Day(d.getTime()); }
+  const st = pc17ChefStatus();
+  const draft = (productionDraft||[]).length;
+  const items = pc17MenuForChef().length;
+  pageLayout("الإنتاج", `
+    ${pc60Bar({title:"الإنتاج", sub:`${currentChef.section||""} • ${currentChef.name||""}`, back:"renderChefDashboard(currentChef)", trailing:pc60StatusChip()})}
+    <section class="pc60-page has-bar has-tabs">
+      <div class="pc133-opts">
+        <button type="button" class="pc60-cta ok" onclick="renderProductionNew()">
+          <i class="fa-solid fa-plus"></i><div><b>تقرير إنتاج جديد</b>
+          <small>${draft ? `مسودة فيها ${draft} صنف — أكمل التسجيل` : `اختيار من ${items} صنف منتج تام لقسمك`}</small></div><i class="fa-solid fa-chevron-left"></i></button>
+        ${st.cls==="pending" ? `<button type="button" class="pc60-link" onclick="submitNoProductionToday()">لا يوجد إنتاج اليوم؟ سجّلها</button>` : ""}
+      </div>
+      <section class="pc60-card pc133-hist">
+        <div class="pc60-step-label"><i class="fa-solid fa-clock-rotate-left"></i> تقارير الإنتاج السابقة</div>
+        <div class="pc133-range">
+          <label>من<input type="date" id="pc133From" value="${pc133.from}" max="${today}" onchange="pc133.from=this.value;pc133Draw()"></label>
+          <label>إلى<input type="date" id="pc133To" value="${pc133.to}" max="${today}" onchange="pc133.to=this.value;pc133Draw()"></label>
+        </div>
+        <div class="pc133-quick">
+          <button type="button" onclick="pc133Quick(0)">اليوم</button><button type="button" onclick="pc133Quick(1)">أمس</button>
+          <button type="button" onclick="pc133Quick(6)">آخر 7 أيام</button><button type="button" onclick="pc133Quick(29)">آخر 30 يوم</button>
+        </div>
+        <div id="pc133List"></div>
+      </section>
+    </section>
+    ${pc60Tabs("production")}`, "renderChefDashboard(currentChef)");
+  pc133Draw();
+}
+function pc133Consume(l){
+  const m = {};
+  (l.consume||[]).forEach(c=>{ const k = (c.itemId||c.name||"")+"|"+(c.unit||""); (m[k] = m[k] || {name:c.name||"", unit:c.unit||"", qty:0}).qty += Number(c.qty)||0; });
+  const v = Object.values(m);
+  return v.length ? `<p class="pc133-sub"><b>الخامات المسحوبة:</b> ${v.map(c=>`${escapeHtml(c.name)} ${pc60Num(pc70R(c.qty))} ${escapeHtml(c.unit)}`).join("، ")}</p>` : "";
+}
+function pc133Quick(n){
+  const t = new Date(), f = new Date(); f.setDate(f.getDate()-n);
+  pc133.to = pc133Day(n===1 ? f.getTime() : t.getTime()); pc133.from = pc133Day(f.getTime());
+  const a = document.getElementById("pc133From"), b = document.getElementById("pc133To");
+  if(a) a.value = pc133.from; if(b) b.value = pc133.to;
+  pc133Draw();
+}
+function pc133Draw(){
+  const box = document.getElementById("pc133List"); if(!box) return;
+  let from = pc133.from, to = pc133.to;
+  if(from && to && from > to){ const x = from; from = to; to = x; }
+  const list = pc133Logs().filter(l=>{ const d = pc133Day(l.timeMs||0); return (!from || d>=from) && (!to || d<=to); });
+  if(!list.length){ box.innerHTML = pc60Empty("fa-calendar-xmark","لا توجد تقارير إنتاج في هذه الفترة"); return; }
+  const days = {};
+  list.forEach(l=>{ const k = pc133Day(l.timeMs||0); (days[k] = days[k] || []).push(l); });
+  const dayName = k=>new Date(k+"T12:00:00").toLocaleDateString("ar-SA-u-ca-gregory",{weekday:"long", day:"numeric", month:"long", year:"numeric"});
+  const time = ms=>new Date(ms).toLocaleTimeString("ar-SA",{hour:"numeric", minute:"2-digit"});
+  box.innerHTML = Object.keys(days).map(k=>`
+    <div class="pc133-day"><b>${escapeHtml(dayName(k))}</b><small>${days[k].length} تقرير</small></div>
+    ${days[k].map(l=>{
+      const none = l.noProduction || !(l.items||[]).length;
+      const its = l.items||[];
+      return `<details class="pc133-rep${none?" is-none":""}" ${pc133.open===l.id?"open":""} ontoggle="if(this.open)pc133.open='${escapeHtml(l.id)}'">
+        <summary><span class="pc133-t"><i class="fa-regular fa-clock"></i> ${escapeHtml(time(l.timeMs||0))}</span>
+          <span class="pc133-who">${escapeHtml(l.chefName||"")}</span>
+          <span class="pc133-n">${none ? "لا يوجد إنتاج" : `${its.length} صنف`}</span><i class="fa-solid fa-chevron-down"></i></summary>
+        ${none ? "" : `<table class="pc133-tb"><thead><tr><th>الصنف</th><th>الكمية</th><th>الوحدة</th></tr></thead><tbody>
+          ${its.map(i=>`<tr><td>${escapeHtml(i.name||i.productName||"")}</td><td>${pc60Num(i.qty)}</td><td>${escapeHtml(i.unit||"")}</td></tr>`).join("")}</tbody></table>`}
+        ${pc133Consume(l)}
+        ${l.note ? `<p class="pc133-sub"><b>ملاحظة:</b> ${pcNoteHtml(l.note)}</p>` : ""}
+      </details>`;}).join("")}`).join("");
+}
+
+function renderProductionNew(){
   if(!currentChef) return renderChefs();
   const st = pc17ChefStatus();
   pc60ListPage({
-    kind:"prod", title:"الإنتاج", placeholder:"ابحث عن صنف أو كود",
+    kind:"prod", title:"تقرير إنتاج جديد", placeholder:"ابحث عن صنف أو كود",
     handler:"submitProduction", tab:"production",
     extra:`<div id="lastProductionBox"></div>${st.cls==="pending" ? `<button type="button" class="pc60-link" onclick="submitNoProductionToday()">لا يوجد إنتاج اليوم؟ سجّلها</button>` : ""}`
   });
