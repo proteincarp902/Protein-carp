@@ -5074,3 +5074,10 @@ div.pc112-line{cursor:default}
 .pc133-tot{display:flex;flex-direction:column;gap:4px;background:#f0f7ec;border:1px solid #cfe5c4;border-radius:12px;padding:10px 12px;margin-top:6px;font-size:13px}
 .pc133-tot small{color:var(--app-muted,#667085)}
 .pc133-tb tr.is-hit td{background:#fff8db}
+
+/* pc134: warehouse item flags — finished product / raw for another section */
+.pc134-tag{display:inline-block;margin-inline-start:6px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;vertical-align:middle}
+.pc134-tag.fg{background:#e3f2dc;color:#2f6b1a}
+.pc134-tag.raw{background:#e6eefb;color:#2a4f8f}
+.pc131-card .pc127-bom{margin:10px 0 0;padding:10px;box-shadow:none}
+.pc131-card .pc131-chk + div{margin-bottom:10px}
