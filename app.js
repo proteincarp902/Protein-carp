@@ -7770,9 +7770,8 @@ function pcDrawStore(){
 }
 
 function pcStoreFilterRows(all){
-  const q = pcStoreQ.trim().toLowerCase();
-  return all.filter(r=>(r.qty !== 0 || r.inQ || r.outQ) &&
-    (!q || String(r.name).toLowerCase().includes(q) || String(r.code).toLowerCase().includes(q)));
+  const q = pcStoreQ.trim();
+  return all.filter(r=>(r.qty !== 0 || r.inQ || r.outQ) && (!q || pcMatchRank(q, r.name, [r.code]) >= 0));
 }
 function pcStoreBalHtml(){
   const all = pcStoreBalances(pcStoreCur, pcStoreSec);
@@ -9656,7 +9655,7 @@ function renderStoreCount(){
     ${pc60Bar({title:`جرد ${S.name}`, sub:`${pcStoreSec} · ${pcBranchName(currentBranch)}`, back:pcCnt.back.replace(/"/g,"&quot;")})}
     <section class="pc60-page has-bar pc107-page">
       <p class="pc85-hint">اكتب الكمية الموجودة فعليًا أمام كل صنف جردته. الأصناف الفارغة لا تدخل في الجرد. المسودة محفوظة على هذا الجهاز حتى الاعتماد.</p>
-      ${pcSecIds(pcStoreSec, pcStoreCur) ? "" : `<div class="pc103-note"><span>لم تُحدد أصناف ${escapeHtml(pcStoreSec)} بعد، لذلك تظهر فقط الأصناف التي لها حركة. حدّدها من الإعدادات ← الأقسام ← أصناف الأقسام.</span></div>`}
+      ${pcSecIds(pcStoreSec, pcStoreCur) || (pcStoreCur==="prod" && (menuItems||[]).some(m=>String(m.section||"").trim()===String(pcStoreSec||"").trim())) ? "" : `<div class="pc103-note"><span>لم تُحدد أصناف ${escapeHtml(pcStoreSec)} بعد، لذلك تظهر فقط الأصناف التي لها حركة. حدّدها من الإعدادات ← الأقسام ← أصناف الأقسام.</span></div>`}
       <div class="pc107-tools">
         <label class="pc60-search"><i class="fa-solid fa-magnifying-glass"></i><input id="pcCntQ" type="search" placeholder="ابحث عن صنف أو كود" oninput="pcCnt.q=this.value;pcCntDraw()" autocomplete="off"></label>
       </div>
@@ -9679,8 +9678,11 @@ function pcCntRows(){
   const byKey = new Map(bal.map(r=>[r.key, r]));
   const rows = new Map();
   bal.forEach(r=>rows.set(r.key, {key:r.key, cat:null, name:r.name, code:r.code, unit:r.unit, book:r.qty, itemId:r.itemId}));
-  if(pcSecIds(pcStoreSec, store)){
-    pcStoreCatalog(store).forEach(c=>{
+  /* Finished-products store without section links: offer the menu items tagged with this section. */
+  const cat = pcSecIds(pcStoreSec, store) ? pcStoreCatalog(store)
+    : (store === "prod" ? (menuItems||[]).filter(m=>String(m.section||"").trim()===String(pcStoreSec||"").trim()) : null);
+  if(cat){
+    cat.forEach(c=>{
       const l = pcStoreLineFor(store, c, 0);
       if(rows.has(l.key)) { rows.get(l.key).cat = c; return; }
       rows.set(l.key, {key:l.key, cat:c, name:l.name, code:l.code, unit:l.unit, book:(byKey.get(l.key)||{qty:0}).qty, itemId:l.itemId});
@@ -9691,8 +9693,10 @@ function pcCntRows(){
 function pcCntDraw(){
   const box = document.getElementById("pcCntBox");
   if(!box) return;
-  const q = pcCnt.q.trim().toLowerCase();
-  const rows = pcCntRows().filter(r=>!q || String(r.name).toLowerCase().includes(q) || String(r.code).toLowerCase().includes(q));
+  const q = pcCnt.q.trim();
+  const rk = r=>pcMatchRank(q, r.name, [r.code, r.cat && r.cat.nameEn, r.cat && r.cat.name]);
+  const rows = pcCntRows().filter(r=>!q || rk(r) >= 0);
+  if(q) rows.sort((a,b)=>rk(a)-rk(b));
   box.innerHTML = rows.length ? `<div class="pc107-list">
     <div class="pc107-row head"><span>الصنف</span><span>الدفتري</span><span>الفعلي</span><span>الفرق</span></div>
     ${rows.map(r=>{
