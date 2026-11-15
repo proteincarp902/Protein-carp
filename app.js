@@ -10628,10 +10628,17 @@ var PC_PERM_TPL = [
 function pcPermsOf(e){
   if(!e) return [];
   if(Array.isArray(e.perms)) return e.perms.filter(k=>PC_PERM_ALL.includes(k));
+  if(pcIsWhStaff(e)) return PC_PERM_TPL.find(t=>t[0]==="wh")[2].slice();   /* warehouse staff: storekeeper by default */
   return e.isAccountant ? PC_PERM_ACC.slice() : [];   /* files saved before the permission list */
 }
+/* Warehouse staff by job or department, used as the default when no permissions were saved for them. */
+function pcIsWhStaff(e){
+  const t = v=>String(v||"").trim();
+  return t(e.role)==="مستودع" || t(e.section)==="المستودع" || t(e.department)==="المستودع";
+}
+function pcPermTplOf(e){ return e.permTpl || (!Array.isArray(e.perms) && pcIsWhStaff(e) ? "wh" : "custom"); }
 function pcPermTplName(e){
-  const t = PC_PERM_TPL.find(x=>x[0]===e.permTpl);
+  const t = PC_PERM_TPL.find(x=>x[0]===pcPermTplOf(e));
   return t && t[0] !== "custom" ? t[1] : "صلاحيات مخصصة";
 }
 function pcPermSummary(e){
@@ -10668,7 +10675,7 @@ async function pcPermEdit(id){
       <span><b>مدير النظام</b><small>كل الصلاحيات، ومنح الصلاحيات وسحبها، وكلمات المرور.</small></span></label>
     <div id="pmBody" ${e.isAdmin?"hidden":""}>
       <label class="pc94-lb">القالب</label>
-      <select id="pmTpl" class="pc93-name" onchange="pcPermApplyTpl()">${PC_PERM_TPL.map(t=>`<option value="${t[0]}" ${t[0]===(e.permTpl||"custom")?"selected":""}>${t[1]}</option>`).join("")}</select>
+      <select id="pmTpl" class="pc93-name" onchange="pcPermApplyTpl()">${PC_PERM_TPL.map(t=>`<option value="${t[0]}" ${t[0]===pcPermTplOf(e)?"selected":""}>${t[1]}</option>`).join("")}</select>
       <p class="pc85-hint">اختر قالبًا ثم عدّل عليه. أي تعديل يدوي يحوّل القالب إلى «مخصص».${e.section ? ` قسمه (${escapeHtml(e.section)}) مفتوح له دائمًا.` : ""}</p>
       ${PC_PERMS.map(g=>`<fieldset class="pc113-g">
         <legend><i class="fa-solid ${g.ico}"></i> ${g.name}
