@@ -1,0 +1,11 @@
+{
+  "name": "protein-carb-operations",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "exceljs": "4.4.0",
+    "jsdom": "26.1.0"
+  }
+}

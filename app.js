@@ -321,6 +321,9 @@ function pcQueueRefresh(){
 async function initCloud(){
   const { db, doc, getDoc, setDoc, collection, onSnapshot } = await waitForFirebase();
 
+  onSnapshot(doc(db,"settings","payrollEmployeeMetadata"),snap=>{
+    pcHrPayrollMetadata=snap.exists()?snap.data():{rows:[],importedAtMs:0}; pcQueueRefresh();
+  },err=>console.warn("Payroll metadata could not load",err.code));
   const settingsRef = doc(db,"settings","system");
   getDoc(settingsRef).then(snap=>{ if(!snap.exists()) return setDoc(settingsRef,systemSettings); }).catch(()=>{});
   onSnapshot(settingsRef,s=>{
@@ -369,6 +372,9 @@ async function initCloud(){
   listen("acc_suppliers", plain("accSuppliers", v=>accSuppliers=v));
   listen("acc_supplier_tx", plain("accSupplierTx", v=>accSupplierTx=v));
   listen("acc_sales", plain("accSales", v=>accSales=v));
+  listen("acc_expenses", plain("accExpenses", v=>accExpenses=v));
+  listen("acc_accounts", plain("accAccounts", v=>accAccounts=v));
+  listen("acc_accounts_v2", plain("accAccountsV2", v=>accAccountsV2=v));
 }
 
 function pcBaseRefreshViews(){
@@ -390,6 +396,8 @@ function pcBaseRefreshViews(){
   if(document.getElementById("wasteAdminBox")) drawWasteAdmin();
   if(document.getElementById("pcStoreSecBox")) pcDrawStoreSections();
   if(document.getElementById("pcHrEmpBox") && document.activeElement?.id !== "pcHrSearch") pcHrDrawEmployees();
+  if(document.getElementById("pcHrReportBox")) pcHrDrawReport();
+  if(document.getElementById("pcPayrollBox")) pcPayrollDraw();
   { const hb = document.getElementById("pcHrAttBox"); if(hb){ if(document.getElementById("pcHrScopeBox")) hb.innerHTML = pcHrBodyHtml(); else pcHrDrawAttendance(); } }
   if(document.getElementById("pcHrLeaveBox")) pcHrDrawLeaves();
   if(document.getElementById("pcRqBox") && !document.getElementById("pcSheetHost")?.children.length) pcRqDraw();
@@ -1370,7 +1378,7 @@ async function submitWarehouseOrderCore(){
 
 const pc18OldRenderAdmin = typeof renderAdmin === "function" ? renderAdmin : null;
 
-let pc19WarehouseTab = "new";
+let pc19WarehouseTab = "sum";
 let pc19OpenWarehouseOrderId = null;
 let pc19IssueDraft = {};
 
@@ -1405,6 +1413,8 @@ function pc19FilteredOrders(){
 }
 
 function renderWarehouse(){
+  if(!pc126Can()) return renderWarehouseGate();
+  pcSetScope("all");
   pc19OpenWarehouseOrderId = null;
   const c = pc19WarehouseCounts();
 
@@ -1438,7 +1448,7 @@ function renderWarehouse(){
         <button class="${pc19WarehouseTab==="new"?"active":""}" onclick="pc19WarehouseTab='new';drawWarehouseOrders()">جديد</button>
         <button class="${pc19WarehouseTab==="progress"?"active":""}" onclick="pc19WarehouseTab='progress';drawWarehouseOrders()">قيد الصرف</button>
         <button class="${pc19WarehouseTab==="done"?"active":""}" onclick="pc19WarehouseTab='done';drawWarehouseOrders()">تم التسليم</button>
-        <button class="${pc19WarehouseTab==="sum"?"active":""}" onclick="pc19WarehouseTab='sum';drawWarehouseOrders()"><i class="fa-solid fa-layer-group"></i> المجمّع</button>
+        <button class="${pc19WarehouseTab==="sum"?"active":""}" onclick="pc19WarehouseTab='sum';drawWarehouseOrders()"><i class="fa-solid fa-layer-group"></i> الطلب المجمّع</button>
         <button onclick="renderInternalIssue()">صرف داخلي</button>
       </section>
 
@@ -6463,7 +6473,7 @@ function openSettingsTab(tab){
   if(!pcSetCan(tab)){ showToast("ليس لديك صلاحية لهذا الجزء","error"); tab = "overview"; }
   setSettingsTab(tab);
   const map = {branches:renderSettingsBranches, overview:renderSettingsOverview, chefs:renderSettingsChefs, sections:renderSettingsSections, warehouse:renderSettingsWarehouseItems, menu:renderSettingsMenuItems, excel:renderSettingsExcel, cleaning:renderSettingsCleaning, operations:renderSettingsOperations, internal:renderSettingsInternalIssue, home:renderSettingsHome, passwords:renderSettingsPasswords, about:renderSettingsAbout,
-    secItems:renderSettingsSecItems, hrEmp:renderSettingsHrEmployees, chefs:()=>{ pcHrRole = "شيف"; renderSettingsHrEmployees(); }, hrAtt:renderSettingsHrAttendance, hrLeave:renderSettingsHrLeaves, hrDocs:renderSettingsHrDocs};
+    secItems:renderSettingsSecItems, hrEmp:renderSettingsHrEmployees, chefs:()=>{ pcHrRole = "شيف"; renderSettingsHrEmployees(); }, hrAtt:renderSettingsHrAttendance, hrReport:renderSettingsHrReport, hrPayroll:renderSettingsHrPayroll, hrLeave:renderSettingsHrLeaves, hrDocs:renderSettingsHrDocs};
   (map[tab] || renderSettingsOverview)();
 }
 
@@ -6568,7 +6578,7 @@ var PC84_GROUPS = [
   {title:"الفريق والتشغيل", rows:[
     {key:"branches", ico:"fa-building",   color:"#0A84FF", name:"الفروع",          sub:"إضافة الفروع وتعطيلها",          tabs:["branches"]},
     {key:"team",  ico:"fa-layer-group", color:"#4C920E", name:"الأقسام", sub:"الأقسام، أصناف كل قسم، الصرف الداخلي", tabs:["sections","secItems","internal"]},
-    {key:"hr",    ico:"fa-id-card",     color:"#E5484D", name:"الموارد البشرية", sub:"الموظفون والشيفات، الحضور، الإجازات، المستندات", tabs:["hrEmp","hrAtt","hrLeave","hrDocs"]},
+    {key:"hr",    ico:"fa-id-card",     color:"#E5484D", name:"الموارد البشرية", sub:"الموظفون والشيفات، الحضور، الإجازات، المستندات", tabs:["hrEmp","hrAtt","hrReport","hrPayroll","hrLeave","hrDocs"]},
     {key:"tasks", ico:"fa-clipboard-check", color:"#AF52DE", name:"المهام",       sub:"النظافة والتشغيل",              tabs:["cleaning","operations"]}]},
   {title:"المحتوى", rows:[
     {key:"items", ico:"fa-box",         color:"#FF9500", name:"الأصناف",         sub:"المستودع، المنيو، Excel",        tabs:["warehouse","menu","excel"]},
@@ -6577,7 +6587,7 @@ var PC84_GROUPS = [
     {key:"sys",   ico:"fa-shield-halved", color:"#8E8E93", name:"النظام",        sub:"كلمات المرور، حول البرنامج",     tabs:["passwords","about"]}]}
 ];
 var PC84_TAB_NAMES = {branches:"الفروع", sections:"الأقسام", chefs:"الشيفات", internal:"الصرف الداخلي", cleaning:"النظافة", operations:"التشغيل",
-  secItems:"أصناف الأقسام", hrEmp:"الموظفون", hrAtt:"الحضور", hrLeave:"الطلبات والإجازات", hrDocs:"المستندات",
+  secItems:"أصناف الأقسام", hrEmp:"الموظفون", hrAtt:"الحضور", hrReport:"تقرير الحضور والجزاءات", hrPayroll:"كشف المرتبات", hrLeave:"الطلبات والإجازات", hrDocs:"المستندات",
   warehouse:"المستودع", menu:"المنيو والإنتاج", excel:"Excel", home:"الرسالة والسلايدر", passwords:"كلمات المرور", about:"حول البرنامج"};
 
 function pc84GroupOf(tab){
@@ -6703,16 +6713,21 @@ function pc86StockLine(orderItem){
 }
 async function pc86Deduct(items){
   try{
-    const {db,doc,updateDoc} = window.firebaseDB;
-    const sums = {};
+    const {db,doc,runTransaction} = window.firebaseDB;
+    const sums = new Map();
     (items||[]).forEach(oi=>{
-      const w = pc86Find(oi); if(!w || pc86Stock(w) === null) return;
-      sums[w.id] = (sums[w.id]||0) + pc86Issued(oi,w);
+      const w=pc86Find(oi); if(!w) return;
+      sums.set(w.id,(sums.get(w.id)||0)+pc86Issued(oi,w));
     });
-    for(const id of Object.keys(sums)){
-      const w = warehouseItems.find(x=>x.id===id);
-      await updateDoc(doc(db,"warehouse_items",id),{stockQty:Math.max(0, pc70R(pc86Stock(w)-sums[id]))});
-    }
+    await runTransaction(db,async tx=>{
+      const refs=[...sums.keys()].map(id=>doc(db,"warehouse_items",id));
+      const snapshots=await Promise.all(refs.map(ref=>tx.get(ref)));
+      snapshots.forEach((snap,i)=>{
+        if(!snap.exists()) return;
+        const stock=pc86Stock(snap.data()); if(stock===null) return;
+        tx.update(refs[i],{stockQty:Math.max(0,pc70R(stock-sums.get(snap.id)))});
+      });
+    });
   }catch(e){ console.error(e); showToast("تم الصرف لكن تعذر تحديث الكمية المتاحة","warn"); }
 }
 
@@ -6737,95 +6752,94 @@ function pc90OutSummary(orders){
  * Each section's order stays a separate order. This view adds up every open order item by item
  * (in the warehouse item's unit) so the warehouse sees, e.g., meat: 10 kg + 5 kg = 15 kg, with the
  * breakdown per section and order. Lines whose unit cannot be converted stay on their own row. */
-var pc126Scope = "open", pc126BuyOnly = false;   /* open = new + in progress; new = new only */
+var pc126Scope = "open", pc126BuyOnly = false;
+function pc126Can(){return !pcEmpSessionRaw()||pcEmpIsAdmin()||pcCan("wh.open");}
+function pc126SyncNote(){return typeof pcLoaded!=="undefined"&&(!pcLoaded.has("warehouse_orders")||!pcLoaded.has("warehouse_items"))?"بيانات مبدئية: لم يكتمل تحميل الطلبات أو أرصدة المستودع؛ قد تتغير الإجماليات.":"";}
 function pc126Open(o){
-  if(o.status === "محذوف") return false;
-  const isNew = o.status === "جديد" || !o.status;
-  const prog = String(o.issueStatus||"").includes("قيد") || o.status === "قيد الصرف";
-  return pc126Scope === "new" ? isNew && !prog : (isNew || prog);
+  const status=String(o.status||"").trim(),issue=String(o.issueStatus||"").trim();
+  if(["محذوف","ملغي","ملغى","مرفوض","تم الإلغاء","تم الاستلام","تم الصرف","تم التسليم","جاهز","مكتمل"].includes(status)||["تم الصرف","صرف جزئي","لم يصرف","تم التسليم"].includes(issue)||Number(o.issuedAtMs||0)>0)return false;
+  const fresh=!status||status==="جديد",progress=issue.includes("قيد")||["قيد الصرف","قيد التجهيز"].includes(status);
+  return pc126Scope==="new"?fresh&&!progress:fresh||progress;
+}
+function pc126Item(it){
+  const all=warehouseItems||[],id=String(it.itemId||it.id||""),code=String(it.code||it.itemCode||"").trim(),name=String(it.name||it.productName||"").trim();
+  const matches=id?all.filter(w=>String(w.id)===id):code?all.filter(w=>String(w.code||"").trim()===code):all.filter(w=>String(w.nameAr||w.name||"").trim()===name);
+  return {item:matches.length===1?matches[0]:null,ambiguous:matches.length>1,id,code,name};
 }
 function pc126Rows(){
-  const orders = (warehouseOrders||[]).filter(o=>pc126Open(o) && (pc19Branch==="all" || pcBranchOf(o)===pc19Branch));
-  const map = {};
-  orders.forEach(o=>(o.items||[]).forEach(it=>{
-    const q0 = Number(it.qty||0); if(!(q0 > 0)) return;
-    const w = pc86Find(it);
-    const u0 = pc70Unit(it.unit||"");
-    let key, unit = u0, q = q0;
-    if(w){
-      const wu = pc70Unit(w.unit||"") || u0;
-      const c = pcStoreConv(q0, u0 || wu, wu);
-      if(c.ok){ key = "w:"+w.id; unit = wu; q = c.q; } else key = "w:"+w.id+"|"+u0;
-    }else key = "n:"+String(it.name||"").trim()+"|"+u0;
-    const r = map[key] || (map[key] = {key, w, name:w ? (w.nameAr||w.name||it.name) : (it.name||""), code:(w&&w.code)||it.code||"", unit, total:0, by:[], cat:w ? pc70Category("req", w) : "أخرى", out:w ? pc90Unavailable(w) : false});
-    r.total = pc70R(r.total + q);
-    r.by.push({sec:o.section||"قسم غير محدد", br:pcBranchName(pcBranchOf(o)), no:pc19OrderNo(o), q, id:o.id});
-  }));
-  const rows = Object.values(map);
-  rows.forEach(r=>{ const st = r.w ? pc86Stock(r.w) : null; r.stock = (st !== null && !r.key.includes("|")) ? st : null; r.short = r.stock !== null ? Math.max(0, pc70R(r.total - r.stock)) : 0; });
-  return {orders, rows:rows.sort((a,b)=>String(a.cat).localeCompare(String(b.cat),"ar") || String(a.name).localeCompare(String(b.name),"ar"))};
+  if(!pc126Can())return {orders:[],rows:[],skipped:0};
+  const source=Array.isArray(pcRaw.warehouseOrders)?pcRaw.warehouseOrders:(warehouseOrders||[]),map=new Map(),seen=new Set(),orders=[];
+  let skipped=0;
+  source.forEach((o,oi)=>{
+    const orderKey=o.id||`row-${oi}`;
+    if(seen.has(orderKey)||!pc126Open(o)||(pc19Branch!=="all"&&pcBranchOf(o)!==pc19Branch))return;
+    seen.add(orderKey);let kept=false;
+    (o.items||[]).forEach((it,ii)=>{
+      const qty=Number(it.qty),resolved=pc126Item(it),w=resolved.item;
+      if(!Number.isFinite(qty)||qty<=0||(!w&&!resolved.name&&!resolved.id&&!resolved.code)){skipped++;return;}
+      const originalUnit=pc70Unit(it.unit||""),catalogUnit=pc70Unit(w?.unit||""),conversion=w&&catalogUnit?pcStoreConv(qty,originalUnit||catalogUnit,catalogUnit):{ok:false,q:qty};
+      const unit=conversion.ok?catalogUnit:originalUnit,q=pc70R(conversion.q);
+      if(!Number.isFinite(q)||q<=0){skipped++;return;}
+      const identity=w?["catalog",String(w.id)]:resolved.ambiguous?["unresolved",orderKey,ii]:resolved.id?["id",resolved.id]:resolved.code?["code",resolved.code]:["name",resolved.name];
+      const key=JSON.stringify([...identity,unit]);
+      if(!map.has(key))map.set(key,{key,w,name:w?(w.nameAr||w.name||resolved.name):resolved.name,code:w?.code||resolved.code,unit,total:0,by:[],cat:w?pc70Category("req",w):"أخرى",out:w?pc90Unavailable(w):false,compatible:!!conversion.ok,unresolved:resolved.ambiguous});
+      const r=map.get(key);r.total=pc70R(r.total+q);kept=true;
+      r.by.push({sec:o.section||"قسم غير محدد",branchId:pcBranchOf(o),br:pcBranchName(pcBranchOf(o)),no:pc19OrderNo(o),q,id:o.id||"",orderKey,sourceQty:qty,sourceUnit:originalUnit||catalogUnit});
+    });
+    if(kept)orders.push(o);
+  });
+  const rows=[...map.values()];
+  rows.forEach(r=>{r.stock=r.w&&r.compatible?pc86Stock(r.w):null;r.short=r.stock===null?null:Math.max(0,pc70R(r.total-r.stock));});
+  return {orders,rows:rows.sort((a,b)=>String(a.cat).localeCompare(String(b.cat),"ar")||String(a.name).localeCompare(String(b.name),"ar")||String(a.unit).localeCompare(String(b.unit),"ar")),skipped};
+}
+function pc126Shown(rows){return pc126BuyOnly?rows.filter(r=>r.stock===null||r.short>0):rows;}
+function pc126BySec(r){
+  const groups=new Map();
+  r.by.forEach(x=>{
+    const key=JSON.stringify([x.branchId,x.sec]);
+    if(!groups.has(key))groups.set(key,{label:x.sec+(pc19Branch==="all"?" · "+x.br:""),q:0,nos:[],orders:[]});
+    const g=groups.get(key);g.q=pc70R(g.q+x.q);
+    const existing=g.orders.find(y=>y.key===x.orderKey);
+    if(existing)existing.q=pc70R(existing.q+x.q);else{g.orders.push({key:x.orderKey,id:x.id,no:x.no,q:x.q});g.nos.push(x.no);}
+  });return [...groups.values()];
 }
 function pc126Html(){
-  const {orders, rows} = pc126Rows();
-  const secs = {}; orders.forEach(o=>{ const k = (o.section||"قسم غير محدد") + (pcMulti() && pc19Branch==="all" ? " · "+pcBranchName(pcBranchOf(o)) : ""); secs[k] = (secs[k]||0)+1; });
-  const short = rows.filter(r=>r.short > 0).length, noStock = rows.filter(r=>r.stock === null).length;
-  const head = `
-    <div class="pc126-bar">
-      <div class="pc60-chips">
-        <button type="button" class="pc60-fchip ${pc126Scope==="open"?"active":""}" onclick="pc126Scope='open';drawWarehouseOrders()">الجديدة وقيد الصرف</button>
-        <button type="button" class="pc60-fchip ${pc126Scope==="new"?"active":""}" onclick="pc126Scope='new';drawWarehouseOrders()">الجديدة فقط</button>
-      </div>
-      <div class="pc126-acts">
-        <label class="pc123-allbr"><input type="checkbox" ${pc126BuyOnly?"checked":""} onchange="pc126BuyOnly=this.checked;drawWarehouseOrders()"> ما يجب شراؤه فقط</label>
-        <button type="button" class="btn btn-light" onclick="pc126Excel()" ${rows.length?"":"disabled"}><i class="fa-solid fa-file-excel"></i> Excel</button>
-      </div>
-    </div>
-    <div class="pc126-kpis"><span><b>${orders.length}</b> طلب</span><span><b>${Object.keys(secs).length}</b> قسم</span><span><b>${rows.length}</b> صنف</span>${short?`<span class="bad"><b>${short}</b> صنف يجب شراؤه</span>`:""}${noStock?`<span class="warn"><b>${noStock}</b> صنف بدون رصيد مسجل</span>`:""}</div>
-    ${Object.keys(secs).length ? `<p class="pc126-secs">${Object.keys(secs).map(k=>`<span>${escapeHtml(k)} <b>${secs[k]}</b></span>`).join("")}</p>` : ""}`;
-  if(!rows.length) return head + `<div class="pc19-empty">لا توجد طلبات مفتوحة لتجميعها</div>`;
-  const shown = pc126BuyOnly ? rows.filter(r=>r.short > 0) : rows;
-  if(!shown.length) return head + `<div class="pc19-empty">الرصيد الفعلي يغطي كل الكميات المطلوبة — لا يوجد ما يجب شراؤه</div>`;
-  let cat = "", body = "";
-  shown.forEach(r=>{
-    if(r.cat !== cat){ cat = r.cat; body += `<tr class="pc122-grp"><td colspan="5">${escapeHtml(cat)}</td></tr>`; }
-    body += `<tr class="${r.short>0?"pc126-low":""}">
-      <td class="pc122-name"><b>${escapeHtml(r.name)}</b>${r.code?`<small>${escapeHtml(r.code)}</small>`:""}${r.out?`<small><span class="pc90-tag">غير متوفر</span></small>`:""}
-        <div class="pc126-by">${pc126BySec(r).map(x=>`<span title="طلب ${x.nos.map(n=>"#"+n).join("، ")}">${escapeHtml(x.label)}${x.nos.length>1?` <small>(${x.nos.length} طلبات)</small>`:""} <b>${pc60Num(x.q)}</b></span>`).join("")}</div></td>
-      <td class="pc122-unit">${escapeHtml(r.unit||"")}</td>
-      <td class="pc122-bal ${r.stock===null?"na":""}">${r.stock===null ? `<small>غير مسجل</small>` : pc60Num(r.stock)}</td>
-      <td class="pc126-tot">${pc60Num(r.total)}</td>
-      <td class="pc126-short">${r.stock===null ? `<small class="pc126-q">؟</small>` : (r.short>0 ? pc60Num(r.short) : `<small class="pc126-ok">0</small>`)}</td>
-    </tr>`;
-  });
-  return head + `<div class="pc122-wrap"><table class="pc122-t pc126-t">
-    <thead><tr><th>الصنف وتوزيعه على الأقسام</th><th>الوحدة</th><th>الرصيد الفعلي</th><th>إجمالي المطلوب</th><th>يجب شراؤه</th></tr></thead>
-    <tbody>${body}</tbody></table></div>
-    <p class="pc85-hint">يجب شراؤه = إجمالي المطلوب − الرصيد الفعلي في المستودع (صفر إذا كان الرصيد يكفي). الصنف بدون رصيد مسجل يظهر «؟» حتى يُسجّل رصيده. الكميات محوّلة لوحدة الصنف في المستودع، وكل قسم يظل طلبه منفصلًا في تبويب «جديد» للصرف والتسليم.</p>`;
+  if(!pc126Can())return '<div class="pc19-empty">ليس لديك صلاحية عرض طلب المستودع المجمّع</div>';
+  const {orders,rows,skipped}=pc126Rows(),sections=new Set(orders.map(o=>JSON.stringify([pcBranchOf(o),o.section||""]))),shown=pc126Shown(rows);
+  const head=`<h3>الطلب المجمّع للأقسام</h3>${pc126SyncNote()?`<p role="status">${pc126SyncNote()}</p>`:""}<p class="pc85-hint">تُجمع الأصناف تلقائيًا من الطلبات المفتوحة للتجهيز، ويظهر نصيب كل قسم وأرقام طلباته. الصرف والتسليم والاستلام على كل طلب أصلي.</p>
+    <div class="pc126-bar"><div class="pc60-chips"><button type="button" class="pc60-fchip ${pc126Scope==="open"?"active":""}" onclick="pc126Scope='open';drawWarehouseOrders()">الجديدة وقيد التجهيز</button><button type="button" class="pc60-fchip ${pc126Scope==="new"?"active":""}" onclick="pc126Scope='new';drawWarehouseOrders()">الجديدة فقط</button></div>
+    <div class="pc126-acts"><label class="pc123-allbr"><input type="checkbox" ${pc126BuyOnly?"checked":""} onchange="pc126BuyOnly=this.checked;drawWarehouseOrders()"> الناقص أو رصيده غير مسجل</label><button type="button" class="btn btn-light" onclick="pc126Print()" ${shown.length?"":"disabled"}><i class="fa-solid fa-print"></i> طباعة الطلب المجمّع</button><button type="button" class="btn btn-light" onclick="pc126Excel()" ${shown.length?"":"disabled"}><i class="fa-solid fa-file-excel"></i> Excel</button></div></div>
+    <div class="pc126-kpis"><span><b>${orders.length}</b> طلب أصلي</span><span><b>${sections.size}</b> قسم</span><span><b>${rows.length}</b> بند صنف/وحدة</span><span><b>${rows.filter(r=>pc126BySec(r).length>1).length}</b> صنف مشترك بين الأقسام</span></div>
+    ${skipped?`<p role="alert">${skipped} بند بكمية أو بيانات غير صحيحة لم يدخل التجميع؛ راجع الطلبات الأصلية.</p>`:""}`;
+  if(!rows.length)return head+'<div class="pc19-empty">لا توجد طلبات مفتوحة لتجميعها</div>';
+  if(!shown.length)return head+'<div class="pc19-empty">الرصيد المسجل يغطي الكميات المطلوبة</div>';
+  return head+pc126Table(shown,true)+'<p class="pc85-hint">العجز = إجمالي المطلوب − رصيد المستودع. الوحدات التي لا يمكن تحويلها تبقى في صفوف منفصلة برصيد «غير معروف». الطلبات المسلّمة أو الملغاة تخرج من التجميع تلقائيًا.</p>';
 }
-function pc126BySec(r){
-  const m = {};
-  r.by.forEach(x=>{ const k = x.sec + (pcMulti() && pc19Branch==="all" ? " · "+x.br : ""); const g = m[k] || (m[k] = {label:k, q:0, nos:[]}); g.q = pc70R(g.q + x.q); g.nos.push(x.no); });
-  return Object.values(m);
+function pc126Table(rows,links){
+  return `<div class="pc122-wrap"><table class="pc122-t pc126-t"><thead><tr><th>الصنف وتوزيعه على الأقسام</th><th>الوحدة</th><th>الرصيد الفعلي</th><th>إجمالي المطلوب</th><th>العجز</th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.short>0?"pc126-low":""}"><td class="pc122-name"><b>${escapeHtml(r.name||"صنف غير معروف")}</b>${r.code?`<small>${escapeHtml(r.code)}</small>`:""}${r.unresolved?'<small>الصنف ملتبس — راجع الطلب الأصلي</small>':""}<div class="pc126-by">${pc126BySec(r).map(g=>`<span><b>${escapeHtml(g.label)}: ${pc60Num(g.q)} ${escapeHtml(r.unit)}</b><br>${g.orders.map(o=>links&&o.id?`<button type="button" class="pc126-order-link" data-id="${escapeHtml(o.id)}" onclick="pc126OpenOriginal(this.dataset.id)">طلب #${escapeHtml(o.no)} (${pc60Num(o.q)})</button>`:`طلب #${escapeHtml(o.no)} (${pc60Num(o.q)})`).join("، ")}</span>`).join("")}</div></td><td>${escapeHtml(r.unit)}</td><td>${r.stock===null?"غير معروف":pc60Num(r.stock)}</td><td class="pc126-tot">${pc60Num(r.total)}</td><td>${r.stock===null?"راجع الرصيد":pc60Num(r.short)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function pc126OpenOriginal(id){
+  if(!pc126Can())return;
+  const o=pcOrdFind(id);if(!o)return showToast("الطلب لم يعد موجودًا","error");
+  pc19WarehouseTab="sum";renderOrder(id,"warehouse");
+}
+function pc126Print(){
+  if(!pc126Can())return;
+  const {orders,rows}=pc126Rows(),shown=pc126Shown(rows);if(!shown.length)return showToast("لا توجد أصناف ضمن الاختيار","warn");
+  const ids=new Set(shown.flatMap(r=>r.by.map(x=>x.orderKey))),selected=orders.filter(o=>ids.has(o.id));
+  const header=`${pc126SyncNote()?`<p><b>${pc126SyncNote()}</b></p>`:""}<p>التاريخ: ${escapeHtml(pcHrToday())} — ${pc19Branch==="all"?"كل الفروع":escapeHtml(pcBranchName(pc19Branch))} — ${pc126Scope==="new"?"الجديدة فقط":"الجديدة وقيد التجهيز"}${pc126BuyOnly?" — الناقص أو غير مسجل الرصيد":""}</p>`;
+  const original=`<h3>طلبات الأقسام الأصلية</h3><table><thead><tr><th>رقم الطلب</th><th>الفرع</th><th>القسم</th><th>صاحب الطلب</th></tr></thead><tbody>${selected.map(o=>`<tr><td>${escapeHtml(pc19OrderNo(o))}</td><td>${escapeHtml(pcBranchName(pcBranchOf(o)))}</td><td>${escapeHtml(o.section||"قسم غير محدد")}</td><td>${escapeHtml(o.chefName||"")}</td></tr>`).join("")}</tbody></table>`;
+  openPrintReport("الطلب المجمّع للمستودع",header+pc126Table(shown,false)+original+'<p>الكميات للتجهيز، وتسجيل الصرف والتسليم يتم لكل طلب أصلي على حدة. هذه القائمة تعكس حالة الطلبات وقت الطباعة.</p>');
 }
 function pc126Excel(){
-  if(typeof XLSX === "undefined"){ showToast("مكتبة Excel غير متاحة الآن","error"); return; }
-  const {orders, rows} = pc126Rows();
-  if(!rows.length){ showToast("لا توجد بيانات","warn"); return; }
-  const secs = [...new Set(orders.map(o=>(o.section||"قسم غير محدد") + (pcMulti() && pc19Branch==="all" ? " · "+pcBranchName(pcBranchOf(o)) : "")))];
-  const sumRows = rows.map(r=>{
-    const o = {"التصنيف":r.cat, "الصنف":r.name, "الكود":r.code, "الوحدة":r.unit, "الرصيد الفعلي":r.stock===null ? "غير مسجل" : r.stock, "إجمالي المطلوب":r.total, "يجب شراؤه":r.stock===null ? "غير معروف" : (r.short || 0)};
-    secs.forEach(k=>{ o[k] = r.by.filter(x=>(x.sec + (pcMulti() && pc19Branch==="all" ? " · "+x.br : ""))===k).reduce((a,x)=>a+x.q,0) || ""; });
-    return o;
-  });
-  const det = [];
-  rows.forEach(r=>r.by.forEach(x=>det.push({"الصنف":r.name, "الوحدة":r.unit, "القسم":x.sec, "الفرع":x.br, "رقم الطلب":x.no, "الكمية":x.q})));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sumRows), "المجمّع");
-  const buy = rows.filter(r=>r.short > 0 || r.stock === null).map(r=>({"التصنيف":r.cat, "الصنف":r.name, "الكود":r.code, "الوحدة":r.unit,
-    "الرصيد الفعلي":r.stock===null ? "غير مسجل" : r.stock, "إجمالي المطلوب":r.total, "يجب شراؤه":r.stock===null ? "راجع الرصيد" : r.short}));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(buy.length ? buy : [{"ملاحظة":"لا يوجد ما يجب شراؤه"}]), "قائمة الشراء");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(det), "حسب القسم");
-  XLSX.writeFile(wb, `warehouse-pick-${pc19Branch==="all"?"all":pcBranchName(pc19Branch)}-${pcHrToday()}.xlsx`);
+  if(!pc126Can())return;
+  if(typeof XLSX==="undefined")return showToast("مكتبة Excel غير متاحة الآن","error");
+  const rows=pc126Shown(pc126Rows().rows);if(!rows.length)return showToast("لا توجد أصناف ضمن الاختيار","warn");
+  const sum=rows.map(r=>({"حالة البيانات":pc126SyncNote()||"مكتملة المزامنة وقت الاستخراج","التصنيف":r.cat,"الصنف":r.name,"الكود":r.code,"الوحدة":r.unit,"الرصيد الفعلي":r.stock??"غير معروف","إجمالي المطلوب":r.total,"العجز":r.short??"غير معروف","توزيع الأقسام":pc126BySec(r).map(g=>`${g.label}: ${pc60Num(g.q)}`).join("؛ ")}));
+  const det=rows.flatMap(r=>r.by.map(x=>({"الصنف":r.name,"الوحدة المجمعة":r.unit,"القسم":x.sec,"الفرع":x.br,"رقم الطلب":x.no,"معرف الطلب الأصلي":x.id,"الكمية بوحدة المستودع":x.q,"الكمية الأصلية":x.sourceQty,"الوحدة الأصلية":x.sourceUnit})));
+  const buy=sum.filter((_,i)=>rows[i].stock===null||rows[i].short>0),wb=XLSX.utils.book_new();
+  for(const [name,data] of [["الطلب المجمع",sum],["حسب القسم والطلب",det],["قائمة الشراء",buy.length?buy:[{"ملاحظة":"الرصيد المسجل يغطي المطلوب"}]]]){const sheet=XLSX.utils.json_to_sheet(data);sheet["!views"]=[{RTL:true}];XLSX.utils.book_append_sheet(wb,sheet,name);}
+  XLSX.writeFile(wb,`warehouse-consolidated-${pcHrToday()}.xlsx`);
 }
 
 /* ===== Start (must stay last: all state above is initialised first) ===== */
@@ -7526,7 +7540,9 @@ function pcStoreMoves(store, sec){
     const ms = pcStoreMs(m);
     if(!keep(ms, m)) return;
     const lines = (m.lines||[]).map(x=>({...x, qty:Number(x.qty||0)}));
-    if(m.type === "count") out.push({ms, sign:1, type:"count", icon:"fa-clipboard-list", tone:"info", section:pcStoreSecOf(m),
+    if(m.type === "purchase") out.push({ms, sign:1, type:"purchase", icon:"fa-file-invoice", tone:"ok", section:pcStoreSecOf(m),
+      title:`فاتورة مشتريات #${m.invoiceRef||""}`, by:m.by||"", note:m.note||"", lines});
+    else if(m.type === "count") out.push({ms, sign:1, type:"count", icon:"fa-clipboard-list", tone:"info", section:pcStoreSecOf(m),
       title:"جرد فعلي", by:m.by||"", note:m.note||"", lines, geo:m.geo});
     else out.push({ms, sign:-1, type:"issue", icon:"fa-right-from-bracket", tone:"info", section:pcStoreSecOf(m),
       title:m.reason || "صرف", by:m.by||"", note:m.note||"", lines, geo:m.geo});
@@ -8373,7 +8389,7 @@ var pcHrRole = "الكل";
 var pcHrQ = "", pcHrDay = "", pcHrAttMode = "day", pcHrLeaveFilter = "بانتظار الموارد البشرية";
 
 function pcHrList(key, fallback){ const r = pcRaw && pcRaw[key]; return Array.isArray(r) ? r : (fallback || []); }
-function pcHrEmps(){ return pcHrList("hrEmployees", hrEmployees); }
+function pcHrEmps(){ const list=pcHrList("hrEmployees", hrEmployees); return typeof pcHrMetadataApply === "function" ? pcHrMetadataApply(list) : list; }
 function pcHrEmp(id){ return pcHrEmps().find(e=>e.id===id) || null; }
 function pcHrBranchEmps(branchId){ return pcHrEmps().filter(e=>pcBranchOf(e)===branchId).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ar")); }
 /* Active = status «نشط» and the end-of-service date (if any) not passed yet. */
@@ -8469,7 +8485,7 @@ function pcHrShell(tab, body){
   pcSettingsEnter();
   settingsShell(tab, "الموارد البشرية", `${pcSettingsBar(PC_HR_TAB_FN[tab])}${body}`);
 }
-var PC_HR_TAB_FN = {hrEmp:"renderSettingsHrEmployees", hrAtt:"renderSettingsHrAttendance", hrLeave:"renderSettingsHrLeaves", hrDocs:"renderSettingsHrDocs"};
+var PC_HR_TAB_FN = {hrEmp:"renderSettingsHrEmployees", hrAtt:"renderSettingsHrAttendance", hrReport:"renderSettingsHrReport", hrPayroll:"renderSettingsHrPayroll", hrLeave:"renderSettingsHrLeaves", hrDocs:"renderSettingsHrDocs"};
 
 /* ----- Employees ----- */
 function renderSettingsHrEmployees(){
@@ -8531,6 +8547,7 @@ async function pcHrImportChefs(){
 }
 
 async function pcHrEditEmployee(id, preset){
+  if(!pcSetCan("hrEmp")){ showToast("ليس لديك صلاحية تعديل ملفات الموظفين","error"); return; }
   const e = id ? pcHrEmp(id) : {role:(preset&&preset.role)||"شيف", branchId:(preset&&preset.branchId)||settingsBranch, status:"نشط", workDays:[0,1,2,3,4,6], annualLeaveDays:21};
   if(!e) return;
   const curB = pcBranchOf(e);
@@ -8539,7 +8556,7 @@ async function pcHrEditEmployee(id, preset){
   const v = await pcSheet({title:id ? "ملف الموظف" : "موظف جديد", icon:"fa-id-card", body:`
     <label class="pc94-lb">الاسم</label><input id="hrName" class="pc93-name" maxlength="60" value="${escapeHtml(e.name||"")}">
     <div class="pc102-shift">
-      <div><label class="pc94-lb">الوظيفة</label><select id="hrRole" class="pc93-name" onchange="pcHrRoleChanged()">${PC_HR_ROLES.map(r=>`<option ${r===e.role?"selected":""}>${r}</option>`).join("")}</select></div>
+      <div><label class="pc94-lb">الدور في النظام</label><select id="hrRole" class="pc93-name" onchange="pcHrRoleChanged()">${PC_HR_ROLES.map(r=>`<option ${r===e.role?"selected":""}>${r}</option>`).join("")}</select></div>
       <div><label class="pc94-lb">الحالة</label><select id="hrStatus" class="pc93-name">${PC_HR_STATUS.map(s=>`<option ${s===(e.status||"نشط")?"selected":""}>${s}</option>`).join("")}</select></div>
     </div>
     <label class="pc94-lb">الفرع</label>
@@ -8549,6 +8566,10 @@ async function pcHrEditEmployee(id, preset){
     <select id="hrManager" class="pc93-name"><option value="">بدون — الطلبات تذهب للموارد البشرية مباشرة</option>
       ${pcHrEmps().filter(x=>x.id!==id && pcHrActive(x)).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ar")).map(x=>`<option value="${escapeHtml(x.id)}" ${x.id===e.managerId?"selected":""}>${escapeHtml(x.name)}${x.role?` — ${escapeHtml(x.role)}`:""} · ${escapeHtml(pcBranchName(pcBranchOf(x)))}</option>`).join("")}</select>
     ${pcChefExtraFields("hr", e, true)}
+    <label class="pc94-lb" for="hrSalary">المرتب الشهري (ر.س)</label>
+    <input id="hrSalary" class="pc93-name" type="number" inputmode="decimal" min="0" max="1000000000" step="0.01" dir="ltr" value="${escapeHtml(String(e.monthlySalary ?? ""))}" placeholder="اختياري — اتركه فارغًا إن لم يُحدد" ${e.payrollBasicSalary!==null&&e.payrollBasicSalary!==undefined?"readonly":""}>
+    ${pcHrPayrollSalaryFields(e)}
+    ${pcHrPayrollProfileFields(e)}
     <label class="pc94-lb">أيام العمل</label>
     <div class="pc103-days">${PC_HR_DAYS.map((d,i)=>`<label><input type="checkbox" class="hrDay" value="${i}" ${days.includes(i)?"checked":""}><span>${d}</span></label>`).join("")}</div>
     <div class="pc102-shift">
@@ -8561,12 +8582,14 @@ async function pcHrEditEmployee(id, preset){
     ${id ? `<p class="pc113-sum"><i class="fa-solid fa-key"></i> <b>الصلاحيات:</b> ${escapeHtml(pcPermSummary(e))}</p>` : ""}
     ${id ? `<p class="pc85-hint">${pcHrEmpSummary(e)}</p>` : ""}`,
     actions:[
-      {label:"حفظ", kind:"btn-main", value:h=>({
+      {label:"حفظ", kind:"btn-main", check:h=>pcHrPayrollSalaryRead(h).error||pcHrSalaryParse(h.querySelector("#hrSalary").value).error, value:h=>({
         name:h.querySelector("#hrName").value.trim(), role:h.querySelector("#hrRole").value, status:h.querySelector("#hrStatus").value,
         branchId:h.querySelector("#hrBranch").value, section:h.querySelector("#hrSection").value,
         hireDate:h.querySelector("#hrHire").value, endDate:h.querySelector("#hrEnd").value, annualLeaveDays:Number(h.querySelector("#hrAnnual").value||0),
         workDays:[...h.querySelectorAll(".hrDay:checked")].map(x=>Number(x.value)), pin:h.querySelector("#hrPin").value.trim(),
         managerId:h.querySelector("#hrManager").value,
+        monthlySalary:pcHrSalaryParse(h.querySelector("#hrSalary").value).value,
+        payrollProfile:pcHrPayrollProfileRead(h), salaryParts:pcHrPayrollSalaryRead(h).data,
         extra:pcChefExtraRead("hr")})},
       ...(id && pcPermEditor() ? [{label:"الصلاحيات", kind:"btn-light", value:"perms"}] : []),
       ...(id ? [{label:"المستندات والإجازات", kind:"btn-light", value:"docs"}] : []),
@@ -8597,6 +8620,7 @@ async function pcHrEditEmployee(id, preset){
     showToast("الرقم الوظيفي مستخدم لموظف آخر","error"); return;
   }
   const data = {name:v.name, role:v.role, status:v.status, branchId:v.branchId, section:isChef ? v.section : (v.section||""),
+    monthlySalary:v.monthlySalary, ...v.payrollProfile, ...v.salaryParts,
     hireDate:v.hireDate, endDate:v.endDate||"", annualLeaveDays:v.annualLeaveDays, workDays:v.workDays, managerId:v.managerId||"", ...v.extra.data, updatedAtMs:Date.now()};
   try{
     const {db,addDoc,collection,doc,updateDoc} = window.firebaseDB;
@@ -8736,6 +8760,7 @@ function renderSettingsHrAttendance(){
         <button type="button" class="pc60-fchip ${m==="range"?"active":""}" onclick="pcHrAttMode='range';renderSettingsHrAttendance()">تفصيلي لفترة</button>
       </div>
       ${dateIn}
+      <button type="button" class="btn btn-light" onclick="openSettingsTab('hrReport')"><i class="fa-solid fa-file-lines"></i> تقرير الحضور والجزاءات</button>
       ${m==="day" ? `<button type="button" class="btn btn-light" onclick="pcHrExportDay()"><i class="fa-solid fa-file-excel"></i> Excel</button><button type="button" class="btn btn-light" onclick="pcHrManualAtt()">تسجيل يدوي</button>` : `<button type="button" class="btn btn-light" onclick="${m==="month"?"pcHrExportMonth()":"pcHrExportRange()"}"><i class="fa-solid fa-file-excel"></i> Excel</button>`}
     </div>
     <div id="pcHrScopeBox"></div>
@@ -10607,6 +10632,10 @@ var PC_PERMS = [
     ["acc.supEdit","إضافة الموردين وتعديل بياناتهم"],
     ["acc.bill","تسجيل فواتير المشتريات"],
     ["acc.pay","تسجيل السداد للموردين"],
+    ["acc.vouchers","سندات الصرف: عرض وطباعة"],
+    ["acc.expense","تسجيل المصروفات العامة"],
+    ["acc.accounts","شجرة الحسابات: عرض الأرصدة"],
+    ["acc.accountsEdit","إضافة حسابات وتعديلها"],
     ["acc.credit","تسجيل المرتجعات والإشعارات الدائنة"],
     ["acc.sales","المبيعات: عرض"],
     ["acc.salesAdd","تسجيل المبيعات اليومية"],
@@ -10758,7 +10787,9 @@ function pcEmpBranches(){
 /* Store actions in a section: always allowed in the employee's own section; elsewhere by permission. */
 function pcStoreCan(a){ return !pcEmpSessionRaw() || pcEmpIsAdmin() || !!pcEmpLocked() || pcCan("br."+a); }
 function pcSetCan(tab){
+  if(tab === "hrPayroll") return pcSetCan("hrEmp") && pcSetCan("hrAtt");
   if(tab === "chefs") tab = "hrEmp";
+  if(tab === "hrReport") tab = "hrAtt";
   if(tab === "overview") return true;
   if(!pcEmpSessionRaw() || pcEmpIsAdmin()) return true;
   if(tab === "passwords") return false;
@@ -10771,7 +10802,7 @@ function pcSetCan(tab){
  * Supplier balance (payable) = opening + bills − payments − credit notes. Aging allocates payments
  * and credit notes to the oldest open amounts first (FIFO) and ages what is left by due date.
  * Access: system admin, employees with the accounting permission, or the admin password. */
-var accSuppliers = [], accSupplierTx = [], accSales = [];
+var accSuppliers = [], accSupplierTx = [], accSales = [], accExpenses = [];
 var pcAcc = {tab:"", q:"", sup:null, month:"", branch:""};
 var PC_ACC_CHANNELS = ["نقاط البيع","تطبيقات التوصيل","الاشتراكات","الطلبات أونلاين","أخرى"];
 var PC_ACC_METHODS = ["نقدي","تحويل بنكي","شيك","أخرى"];
@@ -10782,9 +10813,9 @@ function accR(n){ return Math.round((Number(n)||0)*100)/100; }
 function accTxt(n){ return accR(n).toLocaleString("en-US",{minimumFractionDigits:2, maximumFractionDigits:2}); }
 function accFmt(n){ return `<span class="pc112-n">${accTxt(n)}</span>`; }
 function accNum(v){ const s = String(v ?? "").replace(/,/g,"").trim(); if(s === "") return NaN; const n = Number(s); return isFinite(n) ? n : NaN; }
-function accCan(k){ return pcCan("acc."+k); }
+function accCan(k){ return pcCan("acc."+k) || (k === "vouchers" && (pcCan("acc.pay") || pcCan("acc.expense"))); }
 function accCanOpen(){ return pcCanAny("acc."); }
-var PC_ACC_TABS = [["sum","الملخص","fa-chart-pie"],["sup","الموردين","fa-truck-field"],["sales","المبيعات","fa-cash-register"]];
+var PC_ACC_TABS = [["sum","الملخص","fa-chart-pie"],["sup","الموردين","fa-truck-field"],["sales","المبيعات","fa-cash-register"],["vouchers","سندات الصرف","fa-money-bill-transfer"],["accounts","شجرة الحسابات","fa-sitemap"]];
 function accBranchOptions(sel, withGeneral){
   return `${withGeneral ? `<option value="" ${!sel?"selected":""}>عام / الإدارة</option>` : ""}${pcActiveBranches().map(b=>`<option value="${escapeHtml(b.id)}" ${b.id===sel?"selected":""}>${escapeHtml(b.name||"")}</option>`).join("")}`;
 }
@@ -10830,7 +10861,7 @@ function pcAccDraw(force){
   if(!force && a && box.contains(a) && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) return;   /* never wipe what the user is typing */
   const y = window.scrollY;
   if(!accCanOpen()){ box.innerHTML = ""; return renderAccountingGate(); }
-  box.innerHTML = pcAcc.tab === "sup" ? (pcAcc.sup ? accSupPageHtml(pcAcc.sup) : accSupListHtml())
+  box.innerHTML = pcAcc.tab === "accounts" ? accChartHtml() : pcAcc.tab === "vouchers" ? accVoucherHtml() : pcAcc.tab === "sup" ? (pcAcc.sup ? accSupPageHtml(pcAcc.sup) : accSupListHtml())
                 : pcAcc.tab === "sales" ? accSalesHtml() : pcAcc.tab === "sum" ? accSumHtml() : "";
   if(!force) window.scrollTo(0, y);
 }
@@ -10867,10 +10898,11 @@ function accSumHtml(){
   const over = accR(st.reduce((a,x)=>a + x.overdue, 0));
   const m = pcAcc.month;
   const sales = accList("accSales", accSales).filter(x=>!x.voided && String(x.date).startsWith(m));
+  const expenses = accList("accExpenses", accExpenses).filter(x=>!x.voided && String(x.date).startsWith(m));
   const tot = accR(sales.reduce((a,x)=>a + accR(x.total), 0)), net = accR(sales.reduce((a,x)=>a + accR(x.net), 0));
   const byB = {}; sales.forEach(x=>{ const k = accBranchLabel(x.branchId); byB[k] = accR((byB[k]||0) + accR(x.total)); });
   const top = st.filter(x=>x.balance > 0).sort((a,b)=>b.balance - a.balance).slice(0,6);
-  if(!sups.length && !accList("accSales", accSales).length) return `
+  if(!sups.length && !accList("accSales", accSales).length && !expenses.length) return `
     <div class="pc100-intro">
       <span class="pc100-intro-ic"><i class="fa-solid fa-calculator"></i></span>
       <b>قسم المحاسبة جاهز ولا توجد بيانات بعد</b>
@@ -10883,6 +10915,7 @@ function accSumHtml(){
       <div><span>مستحق للموردين</span><b>${accFmt(pay)}</b><small>${st.filter(x=>x.balance>0).length} مورد برصيد</small></div>
       <div class="${over>0?"bad":""}"><span>متأخر عن الاستحقاق</span><b>${accFmt(over)}</b><small>${st.filter(x=>x.overdue>0).length} مورد</small></div>
       <div><span>مبيعات ${escapeHtml(m)} (شامل الضريبة)</span><b>${accFmt(tot)}</b><small>قبل الضريبة ${accTxt(net)}</small></div>
+      <div><span>المصروفات العامة ${escapeHtml(m)}</span><b>${accFmt(expenses.reduce((n,x)=>n+Number(x.amount||0),0))}</b><small>${expenses.length} سند صرف</small></div>
     </div>
     <label class="pc112-month">الشهر <input type="month" value="${escapeHtml(m)}" onchange="pcAcc.month=this.value||pcAcc.month;pcAccDraw(true)"></label>
     <div class="pc112-two">
@@ -10938,7 +10971,7 @@ function accSupPageHtml(id){
       ${rows.map(r=>`<tr class="${r.voided?"void":""}">
         <td>${escapeHtml(r.date||"")}</td>
         <td>${escapeHtml(r.label)}${r.branch?`<br><small>${escapeHtml(r.branch)}</small>`:""}${r.voided?`<br><small class="pc112-vr">ملغي: ${pcNoteHtml(r.voidReason||"")} — ${escapeHtml(r.voidBy||"")}</small>`:""}${r.by?`<br><small>${escapeHtml(r.by)}</small>`:""}</td>
-        <td>${escapeHtml(r.ref||"")}</td>
+        <td>${escapeHtml(r.ref||"")}${r.itemized ? `<br><button type="button" class="mini-btn" data-id="${escapeHtml(r.id)}" onclick="accPurchaseView(this.dataset.id)">عرض الفاتورة</button>` : ""}${r.voucherNo ? `<br><button type="button" class="mini-btn" data-id="${escapeHtml(r.id)}" onclick="accVoucherPrint('supplier',this.dataset.id)">${escapeHtml(r.voucherNo)}</button>` : ""}</td>
         <td>${r.debit ? accFmt(r.debit) : ""}</td><td>${r.credit ? accFmt(r.credit) : ""}</td>
         <td>${r.voided ? "" : accFmt(r.bal)}</td>
         <td>${r.id && !r.voided && accCan("void") ? `<button class="mini-danger" data-id="${escapeHtml(r.id)}" onclick="accVoid('acc_supplier_tx',this.dataset.id)">إلغاء</button>` : ""}</td>
@@ -10957,7 +10990,7 @@ function accStatement(s){
     if(!t.voided) bal = accR(bal + (isCr ? amt : -amt));
     out.push({id:t.id, date:t.date, label:`${T[t.type]||t.type}${t.type==="payment"&&t.method?` — ${t.method}`:""}${t.type!=="payment"&&t.vat?` (ضريبة ${accTxt(t.vat)})`:""}`,
       ref:t.ref||"", debit:isCr ? 0 : amt, credit:isCr ? amt : 0, bal, voided:!!t.voided, voidReason:t.voidReason, voidBy:t.voidBy,
-      branch:accBranchLabel(t.branchId), by:t.by||""});
+      branch:t.inventoryTarget?.label || accBranchLabel(t.branchId), by:t.by||"", itemized:!!t.inventoryVersion, voucherNo:t.voucherNo||""});
   });
   return out;
 }
@@ -11021,6 +11054,8 @@ function accTxCalc(){
   if(tot) tot.textContent = isFinite(base) ? accTxt(base + (isFinite(vat) ? vat : 0)) : "—";
 }
 async function accTxEdit(type, supId){
+  if(type === "bill") return accPurchaseEdit(supId);
+  if(type === "payment") return accVoucherEdit("supplier", supId);
   if(!accCan({bill:"bill", payment:"pay", credit:"credit"}[type])){ showToast("ليس لديك صلاحية لهذا القيد","error"); return; }
   const s = accList("accSuppliers", accSuppliers).find(x=>x.id===supId);
   if(!s) return;
@@ -11093,11 +11128,10 @@ async function accVoid(col, id){
   if(!v) return;
   if(!v.why || !v.by){ showToast("السبب واسم المسؤول مطلوبان","error"); return; }
   try{
-    const {db,doc,updateDoc} = window.firebaseDB;
-    await updateDoc(doc(db,col,id), {voided:true, voidReason:v.why, voidBy:v.by, voidAtMs:Date.now()});
+    await accPurchaseVoid(col, id, v);
     showToast("تم إلغاء القيد");
     pcAccDraw(true);
-  }catch(err){ console.error(err); showToast("تعذر الإلغاء","error"); }
+  }catch(err){ console.error(err); showToast(err.message || "تعذر الإلغاء","error"); }
 }
 
 /* ----- sales ----- */
